@@ -1,0 +1,10 @@
+
+[package]
+name = "rust-test"
+version = "0.1.0"
+authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
+
+[dependencies]
+nalgebra = "*"
+glutin = "*"
+gl = "*"
