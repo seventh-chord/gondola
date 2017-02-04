@@ -3,6 +3,7 @@ use gl;
 use std;
 use gl::types::*;
 use texture::TextureFormat;
+use color::Color;
 
 pub struct FramebufferProperties {
     pub width: u32,
@@ -152,9 +153,9 @@ fn get_status_message(message: GLenum) -> String {
 
 /// Clears the currently bound framebuffer to the given color. The color should
 /// be in the format (R, G, B, A)
-pub fn clear(color: (f32, f32, f32, f32)) {
+pub fn clear(color: &Color) {
     unsafe {
-        gl::ClearColor(color.0, color.1, color.2, color.3);
+        gl::ClearColor(color.r, color.g, color.b, color.a);
         gl::Clear(gl::COLOR_BUFFER_BIT);
     }
 }
