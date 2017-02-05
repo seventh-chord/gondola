@@ -8,16 +8,21 @@ mod framebuffer;
 mod color;
 mod texture;
 mod shader;
+mod graphics_buffer;
+mod vertex_array;
 
 use glutin::*;
 use framebuffer::*;
 use color::*;
 use shader::*;
+use graphics_buffer::*;
+use vertex_array::*;
 
 const VERTEX_SOURCE: &'static str = "
     #version 330 core\n
 
-    in vec2 position;
+    layout(location = 0) in vec2 position;
+
     void main() {
         gl_Position = vec4(position, 0.0, 1.0);
     }
@@ -50,9 +55,20 @@ fn main() {
     let shader = Shader::new(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
     shader.bind();
 
+    let data = vec![
+        0.0, 0.0,
+        1.0, 0.0,
+        1.0, 1.0
+    ];
+    let vbo = GraphicsBuffer::from_floats(BufferTarget::ArrayBuffer, data);
+    let vao = VertexArray::new();
+    vao.add_data_source(&vbo, 0, 2, 2, 0);
+
     for event in window.wait_events() {
         framebuffer.bind();
         framebuffer::clear(&clear_color);
+
+        vao.draw(PrimitiveMode::Triangles, 0..3);
 
         framebuffer.blit();
 
