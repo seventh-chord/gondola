@@ -4,7 +4,6 @@ extern crate glutin;
 
 mod framebuffer;
 mod texture;
-#[macro_use]
 mod color;
 
 use framebuffer::*;
@@ -12,7 +11,8 @@ use color::*;
 
 
 fn main() {
-    let clear_color = hex!("ff34aa");
+    let clear_color = Color::hex("ff34aa");
+    let clear_color = clear_color.with_lightness(4.0);
 
     let window = glutin::Window::new().unwrap();
 
