@@ -9,6 +9,7 @@ mod color;
 mod texture;
 mod shader;
 
+use glutin::*;
 use framebuffer::*;
 use color::*;
 use shader::*;
@@ -42,9 +43,9 @@ fn main() {
     }
 
     let window_size = window.get_inner_size_points().unwrap();
-    let framebuffer_properties = FramebufferProperties::new(window_size.0, window_size.1);
-    let framebuffer = framebuffer_properties.build().unwrap();
-    //TODO: Framebuffer resizing
+    let mut framebuffer =
+        FramebufferProperties::new(window_size.0, window_size.1)
+        .build().unwrap();
 
     let shader = Shader::new(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
     shader.bind();
@@ -58,8 +59,14 @@ fn main() {
         window.swap_buffers().unwrap();
 
         match event {
-            glutin::Event::Closed => break,
+            Event::Closed => break,
+            Event::Resized(width, height) => {
+                framebuffer =
+                    FramebufferProperties::new(width, height)
+                    .build().unwrap();
+            }
             e => println!("{:?}", e)
         }
     }
 }
+
