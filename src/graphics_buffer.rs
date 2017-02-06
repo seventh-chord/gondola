@@ -7,8 +7,9 @@ const DEFAULT_SIZE: usize = 100;
 pub struct GraphicsBuffer {
     buffer: GLuint,
     target: BufferTarget,
+    usage: BufferUsage,
     allocated: usize,
-    size: usize,
+    primitives: usize,
     data_type: DataType,
 }
 
@@ -26,8 +27,9 @@ impl GraphicsBuffer {
         GraphicsBuffer {
             buffer: buffer,
             target: target,
+            usage: usage,
             allocated: DEFAULT_SIZE,
-            size: 0,
+            primitives: 0,
             data_type: DataType::Byte,
         }
     }
@@ -35,14 +37,14 @@ impl GraphicsBuffer {
     /// Stores the given vector in a new buffer. This assumes usage to be BufferUsage::StaticDraw
     pub fn from_floats(target: BufferTarget, data: Vec<f32>) -> GraphicsBuffer {
         let mut buffer = 0;
-        let size = data.len() * std::mem::size_of::<f32>(); // We assume f32 to be equal to GLfloat, which it is
+        let byte_count = data.len() * DataType::Float.size(); // We assume f32 to be equal to GLfloat, which it is
 
         unsafe {
             gl::GenBuffers(1, &mut buffer);
             gl::BindBuffer(target as GLenum, buffer);
             gl::BufferData(
                 target as GLenum,
-                size as GLsizeiptr,
+                byte_count as GLsizeiptr,
                 std::mem::transmute(&data[0]),
                 BufferUsage::StaticDraw as GLenum
             );
@@ -51,19 +53,48 @@ impl GraphicsBuffer {
         GraphicsBuffer {
             buffer: buffer,
             target: target,
-            allocated: size,
-            size: size,
+            usage: BufferUsage::StaticDraw,
+            allocated: byte_count,
+            primitives: data.len(),
             data_type: DataType::Float
         }
     }
 
-    /// The number of bytes that are stored in GPU memory
+    /// Stores the given vector into this buffer
+    pub fn put_floats(&mut self, data: Vec<f32>) {
+        self.data_type = DataType::Float;
+        self.primitives = data.len();
+        let byte_count = data.len() * DataType::Float.size(); 
+
+        unsafe {
+            gl::BindBuffer(self.target as GLenum, self.buffer);
+
+            //Resize if necesarry
+            if self.allocated < byte_count {
+                gl::BufferData(
+                    self.target as GLenum,
+                    byte_count as GLsizeiptr,
+                    std::mem::transmute(&data[0]),
+                    self.usage as GLenum
+                );
+            } else {
+                gl::BufferSubData(
+                    self.target as GLenum,
+                    0 as GLintptr, byte_count as GLsizeiptr,
+                    std::mem::transmute(&data[0])
+                );
+            }
+        }
+    }
+
+    /// The number of primitives that are stored in GPU memory. Note that this is
+    /// *different* from the number of bytes stored.
     pub fn len(&self) -> usize {
-        self.size
+        self.primitives
     }
 
     /// The number of bytes that are internally allocated in GPU memory
-    pub fn allocated(&self) -> usize {
+    pub fn bytes_allocated(&self) -> usize {
         self.allocated
     }
 

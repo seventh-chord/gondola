@@ -47,7 +47,9 @@ fn main() {
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
 
-    let window_size = window.get_inner_size_points().unwrap();
+    let mut mouse_pos: (i32, i32) = (0, 0);
+    let mut window_size = window.get_inner_size_points().unwrap();
+
     let mut framebuffer =
         FramebufferProperties::new(window_size.0, window_size.1)
         .build().unwrap();
@@ -60,11 +62,19 @@ fn main() {
         1.0, 0.0,
         1.0, 1.0
     ];
-    let vbo = GraphicsBuffer::from_floats(BufferTarget::ArrayBuffer, data);
+    let mut vbo = GraphicsBuffer::from_floats(BufferTarget::ArrayBuffer, data);
     let vao = VertexArray::new();
     vao.add_data_source(&vbo, 0, 2, 2, 0);
 
     for event in window.wait_events() {
+        let new_data = vec![
+            0.0, 0.0,
+            1.0, 0.0,
+            (mouse_pos.0 as f32 / window_size.0 as f32)*2.0 - 1.0,
+            1.0 - (mouse_pos.1 as f32 / window_size.1 as f32)*2.0,
+        ];
+        vbo.put_floats(new_data);
+
         framebuffer.bind();
         framebuffer::clear(&clear_color);
 
@@ -77,10 +87,14 @@ fn main() {
         match event {
             Event::Closed => break,
             Event::Resized(width, height) => {
+                window_size = (width, height);
                 framebuffer =
                     FramebufferProperties::new(width, height)
                     .build().unwrap();
-            }
+            },
+            Event::MouseMoved(x, y) => {
+                mouse_pos = (x, y);
+            },
             e => println!("{:?}", e)
         }
     }
