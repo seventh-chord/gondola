@@ -18,6 +18,8 @@ use shader::*;
 use graphics_buffer::*;
 use vertex_array::*;
 
+use std::time::{Instant, Duration};
+
 const VERTEX_SOURCE: &'static str = "
     #version 330 core\n
 
@@ -66,7 +68,31 @@ fn main() {
     let vao = VertexArray::new();
     vao.add_data_source(&vbo, 0, 2, 2, 0);
 
-    for event in window.wait_events() {
+    let mut delta: u64 = 16;
+    let target_delta = Duration::from_millis(14);
+
+    'main_loop:
+    loop {
+        println!("{}", delta);
+
+        let start_time = Instant::now();
+
+        for event in window.poll_events() {
+            match event {
+                Event::Closed => break 'main_loop,
+                Event::Resized(width, height) => {
+                    window_size = (width, height);
+                    framebuffer =
+                        FramebufferProperties::new(width, height)
+                        .build().unwrap();
+                },
+                Event::MouseMoved(x, y) => {
+                    mouse_pos = (x, y);
+                },
+                e => println!("{:?}", e)
+            }
+        }
+
         let new_data = vec![
             0.0, 0.0,
             1.0, 0.0,
@@ -77,26 +103,17 @@ fn main() {
 
         framebuffer.bind();
         framebuffer::clear(&clear_color);
-
         vao.draw(PrimitiveMode::Triangles, 0..3);
-
         framebuffer.blit();
 
         window.swap_buffers().unwrap();
 
-        match event {
-            Event::Closed => break,
-            Event::Resized(width, height) => {
-                window_size = (width, height);
-                framebuffer =
-                    FramebufferProperties::new(width, height)
-                    .build().unwrap();
-            },
-            Event::MouseMoved(x, y) => {
-                mouse_pos = (x, y);
-            },
-            e => println!("{:?}", e)
+        // Ensure loop runs at aprox. target delta
+        if start_time.elapsed() < target_delta {
+            std::thread::sleep(target_delta - start_time.elapsed()); // This is not very precice :/
         }
+        let delta_dur = start_time.elapsed();
+        delta = delta_dur.as_secs()*1000 + (delta_dur.subsec_nanos() as u64)/1000000;
     }
 }
 
