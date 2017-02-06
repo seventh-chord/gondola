@@ -4,7 +4,7 @@ use gl::types::*;
 use std;
 
 const DEFAULT_SIZE: usize = 100;
-pub struct GraphicsBuffer {
+pub struct PrimitiveBuffer {
     buffer: GLuint,
     target: BufferTarget,
     usage: BufferUsage,
@@ -13,9 +13,9 @@ pub struct GraphicsBuffer {
     data_type: DataType,
 }
 
-impl GraphicsBuffer {
+impl PrimitiveBuffer {
     /// Initializes a new, empty, buffer
-    pub fn new(target: BufferTarget, usage: BufferUsage, data_type: DataType) -> GraphicsBuffer {
+    pub fn new(target: BufferTarget, usage: BufferUsage, data_type: DataType) -> PrimitiveBuffer {
         let mut buffer = 0;
 
         unsafe {
@@ -24,7 +24,7 @@ impl GraphicsBuffer {
             gl::BufferData(target as GLenum, DEFAULT_SIZE as GLsizeiptr, std::ptr::null(), usage as GLenum);
         }
 
-        GraphicsBuffer {
+        PrimitiveBuffer {
             buffer: buffer,
             target: target,
             usage: usage,
@@ -35,7 +35,7 @@ impl GraphicsBuffer {
     }
 
     /// Stores the given vector in a new buffer. This assumes usage to be BufferUsage::StaticDraw
-    pub fn from_floats(target: BufferTarget, data: Vec<f32>) -> GraphicsBuffer {
+    pub fn from_floats(target: BufferTarget, data: Vec<f32>) -> PrimitiveBuffer {
         let mut buffer = 0;
         let byte_count = data.len() * DataType::Float.size(); // We assume f32 to be equal to GLfloat, which it is
 
@@ -50,7 +50,7 @@ impl GraphicsBuffer {
             );
         }
 
-        GraphicsBuffer {
+        PrimitiveBuffer {
             buffer: buffer,
             target: target,
             usage: BufferUsage::StaticDraw,
@@ -111,7 +111,7 @@ impl GraphicsBuffer {
     }
 }
 
-impl Drop for GraphicsBuffer {
+impl Drop for PrimitiveBuffer {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteBuffers(1, &mut self.buffer);

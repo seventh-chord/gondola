@@ -1,7 +1,7 @@
 
 use gl;
 use gl::types::*;
-use graphics_buffer::GraphicsBuffer;
+use primitive_buffer::PrimitiveBuffer;
 use std::ops::Range;
 
 pub struct VertexArray {
@@ -20,7 +20,7 @@ impl VertexArray {
     }
 
     /// Adds a graphic buffer from which this vertex array will pull data when drawing
-    pub fn add_data_source(&self, source: &GraphicsBuffer, index: usize, size: usize, stride: usize, offset: usize) {
+    pub fn add_data_source(&self, source: &PrimitiveBuffer, index: usize, size: usize, stride: usize, offset: usize) {
         source.bind();
 
         unsafe {
