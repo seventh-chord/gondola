@@ -19,8 +19,8 @@ impl GraphicsBuffer {
 
         unsafe {
             gl::GenBuffers(1, &mut buffer);
-            gl::BindBuffer(target.get_gl_enum(), buffer);
-            gl::BufferData(target.get_gl_enum(), DEFAULT_SIZE as GLsizeiptr, std::ptr::null(), usage.get_gl_enum());
+            gl::BindBuffer(target as GLenum, buffer);
+            gl::BufferData(target as GLenum, DEFAULT_SIZE as GLsizeiptr, std::ptr::null(), usage as GLenum);
         }
 
         GraphicsBuffer {
@@ -39,12 +39,12 @@ impl GraphicsBuffer {
 
         unsafe {
             gl::GenBuffers(1, &mut buffer);
-            gl::BindBuffer(target.get_gl_enum(), buffer);
+            gl::BindBuffer(target as GLenum, buffer);
             gl::BufferData(
-                target.get_gl_enum(),
+                target as GLenum,
                 size as GLsizeiptr,
                 std::mem::transmute(&data[0]),
-                BufferUsage::StaticDraw.get_gl_enum()
+                BufferUsage::StaticDraw as GLenum
             );
         }
 
@@ -75,7 +75,7 @@ impl GraphicsBuffer {
     /// Binds this buffer to the target specified in the constructor
     pub fn bind(&self) {
         unsafe {
-            gl::BindBuffer(self.target.get_gl_enum(), self.buffer);
+            gl::BindBuffer(self.target as GLenum, self.buffer);
         }
     }
 }
@@ -103,78 +103,44 @@ impl Drop for GraphicsBuffer {
 /// * Copy - Data is set and read by the GPU
 #[derive(Copy, Clone)]
 pub enum BufferUsage {
-    StaticDraw, DynamicDraw, StreamDraw,
-    StaticRead, DynamicRead, StreamRead,
-    StaticCopy, DynamicCopy, StreamCopy,
-}
-
-impl BufferUsage {
-    pub fn get_gl_enum(&self) -> GLenum {
-        match *self {
-            BufferUsage::StaticDraw  => gl::STATIC_DRAW,
-            BufferUsage::DynamicDraw => gl::DYNAMIC_DRAW,
-            BufferUsage::StreamDraw  => gl::STREAM_DRAW,
-            BufferUsage::StaticRead  => gl::STATIC_READ,
-            BufferUsage::DynamicRead => gl::DYNAMIC_READ,
-            BufferUsage::StreamRead  => gl::STREAM_READ,
-            BufferUsage::StaticCopy  => gl::STATIC_COPY,
-            BufferUsage::DynamicCopy => gl::DYNAMIC_COPY,
-            BufferUsage::StreamCopy  => gl::STREAM_COPY,
-        }
-    }
+    StaticDraw  = gl::STATIC_DRAW as isize,
+    DynamicDraw = gl::DYNAMIC_DRAW as isize,
+    StreamDraw  = gl::STREAM_DRAW as isize,
+    StaticRead  = gl::STATIC_READ as isize,
+    DynamicRead = gl::DYNAMIC_READ as isize,
+    StreamRead  = gl::STREAM_READ as isize,
+    StaticCopy  = gl::STATIC_COPY as isize,
+    DynamicCopy = gl::DYNAMIC_COPY as isize,
+    StreamCopy  = gl::STREAM_COPY as isize,
 }
 
 /// Reperesents a target to which a buffer can be bound
 #[derive(Copy, Clone)]
 pub enum BufferTarget {
-    ArrayBuffer,
-    ElementArrayBuffer,
-    PixelPackBuffer,
-    PixelUnpackBuffer,
-    TransformFeedbackBuffer,
-    UniformBuffer,
-    TextureBuffer,
-    CopyReadBuffer,
-    CopyWriteBuffer,
-    DrawIndirectBuffer,
-    AtomicCounterBuffer,
-    DispatchIndirectBuffer,
-}
-
-impl BufferTarget {
-    pub fn get_gl_enum(&self) -> GLenum {
-        match *self {
-            BufferTarget::ArrayBuffer             => gl::ARRAY_BUFFER,
-            BufferTarget::ElementArrayBuffer      => gl::ELEMENT_ARRAY_BUFFER,
-            BufferTarget::PixelPackBuffer         => gl::PIXEL_PACK_BUFFER,
-            BufferTarget::PixelUnpackBuffer       => gl::PIXEL_UNPACK_BUFFER,
-            BufferTarget::TransformFeedbackBuffer => gl::TRANSFORM_FEEDBACK_BUFFER,
-            BufferTarget::UniformBuffer           => gl::UNIFORM_BUFFER,
-            BufferTarget::TextureBuffer           => gl::TEXTURE_BUFFER,
-            BufferTarget::CopyReadBuffer          => gl::COPY_READ_BUFFER,
-            BufferTarget::CopyWriteBuffer         => gl::COPY_WRITE_BUFFER,
-            BufferTarget::DrawIndirectBuffer      => gl::DRAW_INDIRECT_BUFFER,
-            BufferTarget::AtomicCounterBuffer     => gl::ATOMIC_COUNTER_BUFFER,
-            BufferTarget::DispatchIndirectBuffer  => gl::DISPATCH_INDIRECT_BUFFER,
-        }
-    }
+    ArrayBuffer             = gl::ARRAY_BUFFER as isize,
+    ElementArrayBuffer      = gl::ELEMENT_ARRAY_BUFFER as isize,
+    PixelPackBuffer         = gl::PIXEL_PACK_BUFFER as isize,
+    PixelUnpackBuffer       = gl::PIXEL_UNPACK_BUFFER as isize,
+    TransformFeedbackBuffer = gl::TRANSFORM_FEEDBACK_BUFFER as isize,
+    UniformBuffer           = gl::UNIFORM_BUFFER as isize,
+    TextureBuffer           = gl::TEXTURE_BUFFER as isize,
+    CopyReadBuffer          = gl::COPY_READ_BUFFER as isize,
+    CopyWriteBuffer         = gl::COPY_WRITE_BUFFER as isize,
+    DrawIndirectBuffer      = gl::DRAW_INDIRECT_BUFFER as isize,
+    AtomicCounterBuffer     = gl::ATOMIC_COUNTER_BUFFER as isize,
+    DispatchIndirectBuffer  = gl::DISPATCH_INDIRECT_BUFFER as isize,
 }
 
 /// Represents different types of data which may be stored in a buffer
 #[derive(Copy, Clone)]
 pub enum DataType {
-    Float, Int, Byte, //There are more valid types in gl, but I rarely use those
+    Float = gl::FLOAT as isize,
+    Int   = gl::INT as isize,
+    Byte  = gl::BYTE as isize,
+    //There are more valid types in gl, but I rarely use those
 }
 
 impl DataType {
-    pub fn get_gl_enum(&self) -> GLenum {
-        match *self {
-            DataType::Float => gl::FLOAT,
-            DataType::Int   => gl::INT,
-            DataType::Byte  => gl::BYTE, 
-        }
-    }
-
     pub fn size(&self) -> usize {
         match *self {
             DataType::Float => std::mem::size_of::<f32>(),

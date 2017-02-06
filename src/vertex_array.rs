@@ -30,7 +30,7 @@ impl VertexArray {
             let data_type = source.data_type();
             gl::VertexAttribPointer(
                 index as GLuint, size as GLint,
-                data_type.get_gl_enum(), false as GLboolean,
+                data_type as GLenum, false as GLboolean,
                 (stride * data_type.size()) as GLsizei, (offset * data_type.size()) as *const GLvoid
             );
         }
@@ -40,7 +40,7 @@ impl VertexArray {
     pub fn draw(&self, mode: PrimitiveMode, range: Range<usize>) {
         unsafe {
             gl::BindVertexArray(self.array);
-            gl::DrawArrays(mode.get_gl_enum(), range.start as GLint, (range.end - range.start) as GLsizei);
+            gl::DrawArrays(mode as GLenum, range.start as GLint, (range.end - range.start) as GLsizei);
         }
     }
 }
@@ -55,25 +55,15 @@ impl Drop for VertexArray {
 
 #[derive(Copy, Clone)]
 pub enum PrimitiveMode {
-    Points, LineStrip, LineLoop, Lines, LineStripAdjacency, LinesAdjacency,
-    TriangleStrip, TriangleFan, Triangles, TriangleStripAdjacency, TrianglesAdjacency,
+    Points                      = gl::POINTS as isize,
+    LineStrip                   = gl::LINE_STRIP as isize,
+    LineLoop                    = gl::LINE_LOOP as isize,
+    Lines                       = gl::LINES as isize,
+    LineStripAdjacency          = gl::LINE_STRIP_ADJACENCY as isize,
+    LinesAdjacency              = gl::LINES_ADJACENCY as isize,
+    TriangleStrip               = gl::TRIANGLE_STRIP as isize,
+    TriangleFan                 = gl::TRIANGLE_FAN as isize,
+    Triangles                   = gl::TRIANGLES as isize,
+    TriangleStripAdjacency      = gl::TRIANGLE_STRIP_ADJACENCY as isize,
+    TrianglesAdjacency          = gl::TRIANGLES_ADJACENCY as isize,
 } 
-
-impl PrimitiveMode {
-    fn get_gl_enum(&self) -> GLenum {
-        match *self {
-            PrimitiveMode::Points                  => gl::POINTS,
-            PrimitiveMode::LineStrip               => gl::LINE_STRIP,
-            PrimitiveMode::LineLoop                => gl::LINE_LOOP,
-            PrimitiveMode::Lines                   => gl::LINES,
-            PrimitiveMode::LineStripAdjacency      => gl::LINE_STRIP_ADJACENCY,
-            PrimitiveMode::LinesAdjacency          => gl::LINES_ADJACENCY,
-            PrimitiveMode::TriangleStrip           => gl::TRIANGLE_STRIP,
-            PrimitiveMode::TriangleFan             => gl::TRIANGLE_FAN,
-            PrimitiveMode::Triangles               => gl::TRIANGLES,
-            PrimitiveMode::TriangleStripAdjacency  => gl::TRIANGLE_STRIP_ADJACENCY,
-            PrimitiveMode::TrianglesAdjacency      => gl::TRIANGLES_ADJACENCY,
-        }
-    }
-}
-

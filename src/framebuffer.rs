@@ -48,7 +48,7 @@ impl Framebuffer {
             gl::TexImage2D(
                 gl::TEXTURE_2D,
                 0, // Level
-                properties.internal_format.get_gl_enum() as GLint,
+                properties.internal_format as GLint,
                 properties.width as GLint, properties.height as GLint, 0, //Size and border
                 gl::RGBA, gl::UNSIGNED_BYTE, std::ptr::null() // Data for texture
             );
