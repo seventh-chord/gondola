@@ -59,12 +59,7 @@ fn main() {
     let shader = Shader::new(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
     shader.bind();
 
-    let data = vec![
-        0.0, 0.0,
-        1.0, 0.0,
-        1.0, 1.0
-    ];
-    let mut vbo = GraphicsBuffer::from_floats(BufferTarget::ArrayBuffer, data);
+    let mut vbo = GraphicsBuffer::new(BufferTarget::ArrayBuffer, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
     vao.add_data_source(&vbo, 0, 2, 2, 0);
 
@@ -73,8 +68,6 @@ fn main() {
 
     'main_loop:
     loop {
-        println!("{}", delta);
-
         let start_time = Instant::now();
 
         for event in window.poll_events() {

@@ -15,7 +15,7 @@ pub struct GraphicsBuffer {
 
 impl GraphicsBuffer {
     /// Initializes a new, empty, buffer
-    pub fn new(target: BufferTarget, usage: BufferUsage) -> GraphicsBuffer {
+    pub fn new(target: BufferTarget, usage: BufferUsage, data_type: DataType) -> GraphicsBuffer {
         let mut buffer = 0;
 
         unsafe {
@@ -30,7 +30,7 @@ impl GraphicsBuffer {
             usage: usage,
             allocated: DEFAULT_SIZE,
             primitives: 0,
-            data_type: DataType::Byte,
+            data_type: data_type,
         }
     }
 
