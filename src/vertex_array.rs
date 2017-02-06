@@ -2,7 +2,6 @@
 use gl;
 use gl::types::*;
 use graphics_buffer::GraphicsBuffer;
-use std;
 use std::ops::Range;
 
 pub struct VertexArray {
@@ -32,7 +31,7 @@ impl VertexArray {
             gl::VertexAttribPointer(
                 index as GLuint, size as GLint,
                 data_type.get_gl_enum(), false as GLboolean,
-                (stride * data_type.size()) as GLsizei, std::mem::transmute(offset * data_type.size())
+                (stride * data_type.size()) as GLsizei, (offset * data_type.size()) as *const GLvoid
             );
         }
     }
