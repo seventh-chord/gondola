@@ -150,18 +150,18 @@ pub enum BufferUsage {
 /// Reperesents a target to which a buffer can be bound
 #[derive(Copy, Clone)]
 pub enum BufferTarget {
-    ArrayBuffer             = gl::ARRAY_BUFFER as isize,
-    ElementArrayBuffer      = gl::ELEMENT_ARRAY_BUFFER as isize,
-    PixelPackBuffer         = gl::PIXEL_PACK_BUFFER as isize,
-    PixelUnpackBuffer       = gl::PIXEL_UNPACK_BUFFER as isize,
-    TransformFeedbackBuffer = gl::TRANSFORM_FEEDBACK_BUFFER as isize,
-    UniformBuffer           = gl::UNIFORM_BUFFER as isize,
-    TextureBuffer           = gl::TEXTURE_BUFFER as isize,
-    CopyReadBuffer          = gl::COPY_READ_BUFFER as isize,
-    CopyWriteBuffer         = gl::COPY_WRITE_BUFFER as isize,
-    DrawIndirectBuffer      = gl::DRAW_INDIRECT_BUFFER as isize,
-    AtomicCounterBuffer     = gl::ATOMIC_COUNTER_BUFFER as isize,
-    DispatchIndirectBuffer  = gl::DISPATCH_INDIRECT_BUFFER as isize,
+    Array               = gl::ARRAY_BUFFER as isize,
+    ElementArray        = gl::ELEMENT_ARRAY_BUFFER as isize,
+    PixelPack           = gl::PIXEL_PACK_BUFFER as isize,
+    PixelUnpack         = gl::PIXEL_UNPACK_BUFFER as isize,
+    TransformFeedback   = gl::TRANSFORM_FEEDBACK_BUFFER as isize,
+    Uniform             = gl::UNIFORM_BUFFER as isize,
+    Texture             = gl::TEXTURE_BUFFER as isize,
+    CopyRead            = gl::COPY_READ_BUFFER as isize,
+    CopyWrite           = gl::COPY_WRITE_BUFFER as isize,
+    DrawIndirect        = gl::DRAW_INDIRECT_BUFFER as isize,
+    AtomicCounter       = gl::ATOMIC_COUNTER_BUFFER as isize,
+    DispatchIndirect    = gl::DISPATCH_INDIRECT_BUFFER as isize,
 }
 
 /// Represents different types of data which may be stored in a buffer

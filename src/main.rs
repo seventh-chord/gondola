@@ -104,7 +104,7 @@ fn main() {
     let shader = Shader::new(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
     shader.bind();
 
-    let mut vbo = PrimitiveBuffer::new(BufferTarget::ArrayBuffer, BufferUsage::StaticDraw, DataType::Float);
+    let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
     vao.add_data_source(&vbo, 0, 2, 2, 0);
 

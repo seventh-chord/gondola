@@ -13,9 +13,9 @@ pub trait Vertex {
 }
 
 /// A GPU buffer which holds a list of verticies for rendering.
-pub struct VertexBuffer<A: Vertex> {
+pub struct VertexBuffer<T: Vertex> {
     // We are generic over the vertex type, but dont actually store any vertices
-    phantom: std::marker::PhantomData<A>,
+    phantom: std::marker::PhantomData<T>,
 
     vertex_count: usize,
     allocated: usize,
@@ -27,24 +27,24 @@ pub struct VertexBuffer<A: Vertex> {
     vao: GLuint
 }
 
-impl <A: Vertex> VertexBuffer<A> {
+impl <T: Vertex> VertexBuffer<T> {
     /// Creates a new vertex buffer, prealocating space for 100 vertices.
-    pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> VertexBuffer<A> {
+    pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> VertexBuffer<T> {
         let vertices = DEFAULT_SIZE;
-        let bytes = A::bytes_per_vertex() * vertices;
+        let bytes = T::bytes_per_vertex() * vertices;
 
         let mut vbo = 0;
         let mut vao = 0;
 
         unsafe {
             gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(BufferTarget::ArrayBuffer as GLenum, vbo);
-            gl::BufferData(BufferTarget::ArrayBuffer as GLenum, bytes as GLsizeiptr, std::ptr::null(), usage as GLenum);
+            gl::BindBuffer(BufferTarget::Array as GLenum, vbo);
+            gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), usage as GLenum);
 
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
 
-            A::setup_attrib_pointers();
+            T::setup_attrib_pointers();
         }
 
         VertexBuffer {
@@ -62,18 +62,18 @@ impl <A: Vertex> VertexBuffer<A> {
     }
 
     /// Creates a new vertex buffer, storing the given vertices on the GPU.
-    pub fn from_data(primitive_mode: PrimitiveMode, data: &[A]) -> VertexBuffer<A> {
+    pub fn from_data(primitive_mode: PrimitiveMode, data: &[T]) -> VertexBuffer<T> {
         let vertices = data.len();
-        let bytes = A::bytes_per_vertex() * vertices;
+        let bytes = T::bytes_per_vertex() * vertices;
 
         let mut vbo = 0;
         let mut vao = 0;
 
         unsafe {
             gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(BufferTarget::ArrayBuffer as GLenum, vbo);
+            gl::BindBuffer(BufferTarget::Array as GLenum, vbo);
             gl::BufferData(
-                BufferTarget::ArrayBuffer as GLenum,
+                BufferTarget::Array as GLenum,
                 bytes as GLsizeiptr,
                 std::mem::transmute(&data[0]),
                 BufferUsage::StaticDraw as GLenum
@@ -82,7 +82,7 @@ impl <A: Vertex> VertexBuffer<A> {
             gl::GenVertexArrays(1, &mut vao);
             gl::BindVertexArray(vao);
 
-            A::setup_attrib_pointers();
+            T::setup_attrib_pointers();
         }
 
         VertexBuffer {
@@ -102,36 +102,38 @@ impl <A: Vertex> VertexBuffer<A> {
     /// Puts the given vertices at the start of this buffer, replacing any vertices
     /// which where previously in that location. This resizes the underlying buffer
     /// if more space is needed to store the new data.
-    pub fn put_at_start(&mut self, data: &[A]) {
+    pub fn put_at_start(&mut self, data: &[T]) {
         self.put(0, data);
     }
     /// Puts the given vertices at the end of this buffer, behind any data which is
     /// allready in it. This resizes the underlying buffer if more space is needed
     /// to store the new data.
-    pub fn put_at_end(&mut self, data: &[A]) {
+    pub fn put_at_end(&mut self, data: &[T]) {
         let vertex_count = self.vertex_count;
         self.put(vertex_count, data);
     }
     /// Puts the given vertices at the given index in this buffer, overwriting any
     /// vertices which where previously in that location. This resizes the underlying
     /// buffer if more space is needed to store the new data.
-    pub fn put(&mut self, index: usize, data: &[A]) {
+    pub fn put(&mut self, index: usize, data: &[T]) {
         let start = index;
         let end = index + data.len();
-        let bytes = data.len() * A::bytes_per_vertex();
+        let bytes = data.len() * T::bytes_per_vertex();
 
         if end > self.allocated {
             self.allocate(end); // Maybe we should allocate some extra space
         }
 
-        self.vertex_count = end;
+        if end > self.vertex_count {
+            self.vertex_count = end;
+        }
 
         unsafe {
-            gl::BindBuffer(BufferTarget::ArrayBuffer as GLenum, self.vbo);
+            gl::BindBuffer(BufferTarget::Array as GLenum, self.vbo);
             gl::BufferSubData(
-                BufferTarget::ArrayBuffer as GLenum,
-                (start * A::bytes_per_vertex()) as GLintptr,
-                (data.len() * A::bytes_per_vertex()) as GLsizeiptr,
+                BufferTarget::Array as GLenum,
+                (start * T::bytes_per_vertex()) as GLintptr,
+                (data.len() * T::bytes_per_vertex()) as GLsizeiptr,
                 std::mem::transmute(&data[0])
             );
         }
@@ -154,23 +156,23 @@ impl <A: Vertex> VertexBuffer<A> {
         // Only realocate if necessary
         if new_size > self.allocated {
             let mut new_vbo = 0;
-            let bytes = new_size * A::bytes_per_vertex();
+            let bytes = new_size * T::bytes_per_vertex();
 
             unsafe {
                 gl::GenBuffers(1, &mut new_vbo);
-                gl::BindBuffer(BufferTarget::ArrayBuffer as GLenum, new_vbo);
-                gl::BufferData(BufferTarget::ArrayBuffer as GLenum, bytes as GLsizeiptr, std::ptr::null(), self.usage as GLenum);
+                gl::BindBuffer(BufferTarget::Array as GLenum, new_vbo);
+                gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), self.usage as GLenum);
 
                 gl::BindVertexArray(self.vao);
-                A::setup_attrib_pointers();
+                T::setup_attrib_pointers();
 
                 // Copy old data
-                gl::BindBuffer(BufferTarget::CopyReadBuffer as GLenum, self.vbo);
+                gl::BindBuffer(BufferTarget::CopyRead as GLenum, self.vbo);
                 gl::CopyBufferSubData(
-                    BufferTarget::CopyReadBuffer as GLenum,
-                    BufferTarget::ArrayBuffer as GLenum,
+                    BufferTarget::CopyRead as GLenum,
+                    BufferTarget::Array as GLenum,
                     0, 0,
-                    (self.vertex_count * A::bytes_per_vertex()) as GLsizeiptr
+                    (self.vertex_count * T::bytes_per_vertex()) as GLsizeiptr
                 );
                 gl::DeleteBuffers(1, &mut self.vbo);
             }
@@ -190,7 +192,7 @@ impl <A: Vertex> VertexBuffer<A> {
     }
 }
 
-impl <A: Vertex> Drop for VertexBuffer<A> {
+impl <T: Vertex> Drop for VertexBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteBuffers(1, &mut self.vbo);
