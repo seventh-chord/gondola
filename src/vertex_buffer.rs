@@ -124,6 +124,8 @@ impl <A: Vertex> VertexBuffer<A> {
             self.allocate(end); // Maybe we should allocate some extra space
         }
 
+        self.vertex_count = end;
+
         unsafe {
             gl::BindBuffer(BufferTarget::ArrayBuffer as GLenum, self.vbo);
             gl::BufferSubData(

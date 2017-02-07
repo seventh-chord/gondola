@@ -115,12 +115,19 @@ fn main() {
     ];
     let mut vertex_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &test_data);
 
+    let mut line_buffer = VertexBuffer::new(PrimitiveMode::LineStrip, BufferUsage::StaticDraw);
+
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
 
     'main_loop:
     loop {
         let start_time = Instant::now();
+
+        let screen_pos = (
+            (mouse_pos.0 as f32 / window_size.0 as f32)*2.0 - 1.0,
+            1.0 - (mouse_pos.1 as f32 / window_size.1 as f32)*2.0,
+        );
 
         for event in window.poll_events() {
             match event {
@@ -134,14 +141,13 @@ fn main() {
                 Event::MouseMoved(x, y) => {
                     mouse_pos = (x, y);
                 },
+                Event::MouseInput(ElementState::Pressed, MouseButton::Left) => {
+                    println!("Mouse pressed");
+                    line_buffer.put_at_end(&[TestVertex::new(screen_pos.0, screen_pos.1)]);
+                },
                 e => println!("{:?}", e)
             }
         }
-
-        let screen_pos = (
-            (mouse_pos.0 as f32 / window_size.0 as f32)*2.0 - 1.0,
-            1.0 - (mouse_pos.1 as f32 / window_size.1 as f32)*2.0,
-        );
 
         let new_data = vec![
             0.0, 0.0,
@@ -155,6 +161,7 @@ fn main() {
         framebuffer.bind();
         framebuffer::clear(&clear_color);
         vertex_buffer.draw();
+        line_buffer.draw();
         vao.draw(PrimitiveMode::Triangles, 0..3);
         framebuffer.blit();
 
