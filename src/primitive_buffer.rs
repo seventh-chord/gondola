@@ -61,7 +61,8 @@ impl PrimitiveBuffer {
         }
     }
 
-    /// Stores the given vector into this buffer
+    /// Stores the given vector into this buffer, overwriting any data that was 
+    /// previously in the buffer
     pub fn put_floats(&mut self, data: Vec<f32>) {
         self.data_type = DataType::Float;
         self.primitives = data.len();

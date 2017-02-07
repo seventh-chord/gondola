@@ -138,13 +138,19 @@ fn main() {
             }
         }
 
+        let screen_pos = (
+            (mouse_pos.0 as f32 / window_size.0 as f32)*2.0 - 1.0,
+            1.0 - (mouse_pos.1 as f32 / window_size.1 as f32)*2.0,
+        );
+
         let new_data = vec![
             0.0, 0.0,
             1.0, 0.0,
-            (mouse_pos.0 as f32 / window_size.0 as f32)*2.0 - 1.0,
-            1.0 - (mouse_pos.1 as f32 / window_size.1 as f32)*2.0,
+            screen_pos.0, screen_pos.1
         ];
         vbo.put_floats(new_data);
+
+        vertex_buffer.put(0, &[TestVertex::new(screen_pos.0, screen_pos.1)]);
 
         framebuffer.bind();
         framebuffer::clear(&clear_color);
