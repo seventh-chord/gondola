@@ -4,6 +4,7 @@ use gl::types::*;
 use std;
 
 const DEFAULT_SIZE: usize = 100;
+
 pub struct PrimitiveBuffer {
     buffer: GLuint,
     target: BufferTarget,

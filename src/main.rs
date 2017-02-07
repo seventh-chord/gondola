@@ -9,6 +9,7 @@ mod color;
 mod texture;
 mod shader;
 mod primitive_buffer;
+mod vertex_buffer;
 mod vertex_array;
 
 use glutin::*;
@@ -17,26 +18,70 @@ use color::*;
 use shader::*;
 use primitive_buffer::*;
 use vertex_array::*;
+use vertex_buffer::*;
 
+use gl::types::*;
 use std::time::{Instant, Duration};
 
 const VERTEX_SOURCE: &'static str = "
     #version 330 core\n
 
-    layout(location = 0) in vec2 position;
+    layout(location = 0) in vec2 in_pos;
+    layout(location = 1) in vec4 in_color;
+
+    out vec4 vert_color;
 
     void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
+        gl_Position = vec4(in_pos, 0.0, 1.0);
+        vert_color = in_color;
     }
 ";
 const FRAGMENT_SOURCE: &'static str = "
     #version 330 core\n
 
+    in vec4 vert_color;
     out vec4 out_color;
+
     void main() {
-        out_color = vec4(0.6, 0.6, 1.0, 1.0);
+        out_color = vert_color;
     }
 ";
+
+struct TestVertex {
+    position: (f32, f32),
+    color: Color
+}
+impl TestVertex {
+    fn new(x: f32, y: f32) -> TestVertex {
+        TestVertex {
+            position: (x, y),
+            color: Color::hex("ff00aa")
+        }
+    }
+}
+impl Vertex for TestVertex {
+    fn bytes_per_vertex() -> usize {
+        (2 + 4) * std::mem::size_of::<f32>()
+    }
+    fn setup_attrib_pointers() {
+        unsafe {
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(
+                0 as GLuint,
+                2 as GLint, gl::FLOAT, false as GLboolean,
+                (6*std::mem::size_of::<f32>()) as GLsizei,
+                (0*std::mem::size_of::<f32>()) as *const GLvoid
+            );
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribPointer(
+                1 as GLuint,
+                3 as GLint, gl::FLOAT, false as GLboolean,
+                (6*std::mem::size_of::<f32>()) as GLsizei,
+                (2*std::mem::size_of::<f32>()) as *const GLvoid
+            );
+        }
+    }
+}
 
 fn main() {
     let clear_color = Color::hex("ff34aa");
@@ -62,6 +107,13 @@ fn main() {
     let mut vbo = PrimitiveBuffer::new(BufferTarget::ArrayBuffer, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
     vao.add_data_source(&vbo, 0, 2, 2, 0);
+
+    let test_data = vec![
+        TestVertex::new(0.0, 0.0),
+        TestVertex::new(1.0, 0.0),
+        TestVertex::new(0.0, 1.0),
+    ];
+    let mut vertex_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &test_data);
 
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
@@ -96,6 +148,7 @@ fn main() {
 
         framebuffer.bind();
         framebuffer::clear(&clear_color);
+        vertex_buffer.draw();
         vao.draw(PrimitiveMode::Triangles, 0..3);
         framebuffer.blit();
 
