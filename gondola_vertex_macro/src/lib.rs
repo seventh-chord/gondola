@@ -27,9 +27,6 @@ pub fn vertex(input: TokenStream) -> TokenStream {
 fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
     match variant_data {
         VariantData::Struct(..) => {
-            // Retrives the names (Will be needed later)
-//            let identifiers = variant_data.fields().iter().map(|field| field.ident.clone());
-
             // Generate setup_attrib_pointers for individual fields
             // Note that the code in the quote! macro has access to local variables from
             // the next quote! macro, as it is interpolated into that one
@@ -39,9 +36,6 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                     quote! {
                         let primitives = <#ty as VertexComponent>::primitives();
                         let data_type = <#ty as VertexComponent>::data_type();
-
-                        println!("Implementing for {}", stringify!(#ty));
-                        println!("Index: {}, offset: {}", index, offset);
 
                         unsafe {
                             gl::EnableVertexAttribArray(index);
@@ -75,16 +69,48 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 0 #( + <#types as VertexComponent>::bytes())*
             };
 
+            // Generate gen_shader_input_decl code
+            let shader_input_impl = variant_data.fields().iter()
+                .map(|field| (field.ident.clone(), field.ty.clone()))
+                .map(|(ident, ty)| {
+                    quote! {
+                        let line = format!(
+                            "layout(location = {index}) in {glsl_type} {name}",
+                            name = stringify!(#ident),
+                            index = index,
+                            glsl_type = <#ty as VertexComponent>::get_glsl_type(),
+                        );
+                        result.push_str(&line);
+                        result.push('\n');
+
+                        index += 1;
+                    }
+                });
+            // Join all the shader input setup code
+            let field_count = variant_data.fields().len();
+            let shader_input_impl = quote! {
+                let mut result = String::with_capacity(#field_count * 50); // Approx. 50 chars per primitive
+                let mut index = 0; // Used in the above quote! block, which is inserted bellow
+                result.push('\n');
+                #( #shader_input_impl )*
+                result
+            };
+
+
             // Join all the code into a single implementation
             quote! {
+                #[allow(unused_assignments)] // We create some unused asignments in setup_attrib_pointers_impl
                 impl Vertex for #ident {
                     fn bytes_per_vertex() -> usize {
                         #bytes_per_vertex_impl
                     }
 
-                    #[allow(unused_assignments)]
                     fn setup_attrib_pointers() {
                         #setup_attrib_pointers_impl
+                    }
+
+                    fn gen_shader_input_decl() -> String {
+                        #shader_input_impl
                     }
                 }
             }

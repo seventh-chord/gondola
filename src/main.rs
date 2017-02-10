@@ -58,12 +58,13 @@ impl TestVertex {
     fn new(x: f32, y: f32) -> TestVertex {
         TestVertex {
             position: (x, y),
-            color: Color::hex("ff00aa")
+            color: Color::hex("ff00aa"),
         }
     }
 }
 
 fn main() {
+    println!("{}", TestVertex::gen_shader_input_decl());
     let clear_color = Color::hex("ff34aa");
     let clear_color = clear_color.with_lightness(4.0);
 

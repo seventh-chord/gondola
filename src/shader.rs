@@ -45,8 +45,8 @@ impl Shader {
     /// Constructs a glsl shader from source. Note that the geometry and fragment shaders are
     /// optional
     pub fn new(vertex_source: &str,
-           geometry_source: Option<&str>,
-           fragment_source: Option<&str>)
+               geometry_source: Option<&str>,
+               fragment_source: Option<&str>)
            -> Result<Shader, String> {
         let program;
         let vertex_shader = 0;

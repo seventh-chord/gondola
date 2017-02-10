@@ -7,11 +7,6 @@ use vertex_array::PrimitiveMode;
 
 const DEFAULT_SIZE: usize = 100;
 
-pub trait Vertex {
-    fn bytes_per_vertex() -> usize;
-    fn setup_attrib_pointers();
-}
-
 /// A GPU buffer which holds a list of verticies for rendering.
 pub struct VertexBuffer<T: Vertex> {
     // We are generic over the vertex type, but dont actually store any vertices
@@ -200,10 +195,53 @@ impl <T: Vertex> Drop for VertexBuffer<T> {
     }
 }
 
+/// Verterx buffers store a list of `Vertex`es (called vertices in proper
+/// english) on the GPU
+pub trait Vertex {
+    fn bytes_per_vertex() -> usize;
+    fn setup_attrib_pointers();
+    fn gen_shader_input_decl() -> String;
+}
+
+/// All fields of a struct need to implement this in order for #[derive(Vertex)]
+/// to work. Implemented for single fields and up to four length touples of the
+/// types `f32`, `i32`, `u32`
 pub trait VertexComponent {
     fn bytes() -> usize;
     fn primitives() -> usize;
     fn data_type() -> GLenum;
+
+    /// Generates the type that would be used to represent this component in a
+    /// glsl shader
+    fn get_glsl_type() -> String {
+        let primitives = <Self as VertexComponent>::primitives();
+        let data_type = <Self as VertexComponent>::data_type();
+
+        let mut result = String::with_capacity(4);
+
+        if primitives == 1 {
+            match data_type {
+                gl::FLOAT => result.push_str("float"),
+                gl::INT => result.push_str("int"),
+                gl::UNSIGNED_INT => result.push_str("uint"),
+                _ => ()
+            }
+        } else if primitives > 1 && primitives <= 4 {
+            match data_type {
+                gl::FLOAT => result.push_str("vec"),
+                gl::INT => result.push_str("ivec"),
+                gl::UNSIGNED_INT => result.push_str("uvec"),
+                _ => ()
+            }
+            result.push_str(&primitives.to_string());
+        }
+
+        if result.is_empty() {
+            panic!("Invalid VertexComponent: {} primitives of type {}", primitives, data_type);
+        }
+
+        result
+    }
 }
 
 // Implementations for primitives and tuples (Maybe use generics here)
@@ -268,47 +306,5 @@ impl VertexComponent for (i32, i32, i32, i32) {
     fn bytes() -> usize { std::mem::size_of::<i32>() * 4 }
     fn primitives() -> usize { 4 }
     fn data_type() -> GLenum { gl::INT }
-}
-
-impl VertexComponent for u8 {
-    fn bytes() -> usize { std::mem::size_of::<u8>() * 1 }
-    fn primitives() -> usize { 1 }
-    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
-}
-impl VertexComponent for (u8, u8) {
-    fn bytes() -> usize { std::mem::size_of::<u8>() * 2 }
-    fn primitives() -> usize { 2 }
-    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
-}
-impl VertexComponent for (u8, u8, u8) {
-    fn bytes() -> usize { std::mem::size_of::<u8>() * 3 }
-    fn primitives() -> usize { 3 }
-    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
-}
-impl VertexComponent for (u8, u8, u8, u8) {
-    fn bytes() -> usize { std::mem::size_of::<u8>() * 4 }
-    fn primitives() -> usize { 4 }
-    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
-}
-
-impl VertexComponent for i8 {
-    fn bytes() -> usize { std::mem::size_of::<i8>() * 1 }
-    fn primitives() -> usize { 1 }
-    fn data_type() -> GLenum { gl::BYTE }
-}
-impl VertexComponent for (i8, i8) {
-    fn bytes() -> usize { std::mem::size_of::<i8>() * 2 }
-    fn primitives() -> usize { 2 }
-    fn data_type() -> GLenum { gl::BYTE }
-}
-impl VertexComponent for (i8, i8, i8) {
-    fn bytes() -> usize { std::mem::size_of::<i8>() * 3 }
-    fn primitives() -> usize { 3 }
-    fn data_type() -> GLenum { gl::BYTE }
-}
-impl VertexComponent for (i8, i8, i8, i8) {
-    fn bytes() -> usize { std::mem::size_of::<i8>() * 4 }
-    fn primitives() -> usize { 4 }
-    fn data_type() -> GLenum { gl::BYTE }
 }
 
