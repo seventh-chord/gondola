@@ -78,11 +78,7 @@ fn main() {
         FramebufferProperties::new(window_size.0, window_size.1)
         .build().unwrap();
 
-    let shader = Shader::new(
-        &shader::prepend_code(VERTEX_SOURCE, &TestVertex::gen_shader_input_decl()),
-        None,
-        Some(FRAGMENT_SOURCE)
-    ).unwrap();
+    let shader = Shader::with_vertex::<TestVertex>(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
     shader.bind();
 
     let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);
@@ -149,8 +145,9 @@ fn main() {
         window.swap_buffers().unwrap();
 
         // Ensure loop runs at aprox. target delta
-        if start_time.elapsed() < target_delta {
-            std::thread::sleep(target_delta - start_time.elapsed()); // This is not very precice :/
+        let elapsed = start_time.elapsed();
+        if elapsed < target_delta {
+            std::thread::sleep(target_delta - elapsed); // This is not very precice :/
         }
         let delta_dur = start_time.elapsed();
         delta = delta_dur.as_secs()*1000 + (delta_dur.subsec_nanos() as u64)/1000000;
