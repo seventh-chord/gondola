@@ -1,12 +1,13 @@
-
 [package]
-name = "gondola"
+name = "gondola_vertex_macro"
 version = "0.1.0"
 authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 
+[lib]
+proc-macro = true
+
 [dependencies]
-gondola_vertex_macro = { path = "gondola_vertex_macro" }
-nalgebra = "0.10.1"
-glutin = "0.7.4"
+syn = "0.11.4"
+quote = "0.3.12"
 gl = "*"
 

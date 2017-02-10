@@ -201,3 +201,115 @@ impl <T: Vertex> Drop for VertexBuffer<T> {
     }
 }
 
+pub trait VertexComponent {
+    fn bytes() -> usize;
+    fn primitives() -> usize;
+    fn data_type() -> GLenum;
+}
+
+// Implementations for primitives and tuples (Maybe use generics here)
+impl VertexComponent for f32 {
+    fn bytes() -> usize { std::mem::size_of::<f32>() * 1 }
+    fn primitives() -> usize { 1 }
+    fn data_type() -> GLenum { gl::FLOAT }
+}
+impl VertexComponent for (f32, f32) {
+    fn bytes() -> usize { std::mem::size_of::<f32>() * 2 }
+    fn primitives() -> usize { 2 }
+    fn data_type() -> GLenum { gl::FLOAT }
+}
+impl VertexComponent for (f32, f32, f32) {
+    fn bytes() -> usize { std::mem::size_of::<f32>() * 3 }
+    fn primitives() -> usize { 3 }
+    fn data_type() -> GLenum { gl::FLOAT }
+}
+impl VertexComponent for (f32, f32, f32, f32) {
+    fn bytes() -> usize { std::mem::size_of::<f32>() * 4 }
+    fn primitives() -> usize { 4 }
+    fn data_type() -> GLenum { gl::FLOAT }
+}
+
+impl VertexComponent for u32 {
+    fn bytes() -> usize { std::mem::size_of::<u32>() * 1 }
+    fn primitives() -> usize { 1 }
+    fn data_type() -> GLenum { gl::UNSIGNED_INT }
+}
+impl VertexComponent for (u32, u32) {
+    fn bytes() -> usize { std::mem::size_of::<u32>() * 2 }
+    fn primitives() -> usize { 2 }
+    fn data_type() -> GLenum { gl::UNSIGNED_INT }
+}
+impl VertexComponent for (u32, u32, u32) {
+    fn bytes() -> usize { std::mem::size_of::<u32>() * 3 }
+    fn primitives() -> usize { 3 }
+    fn data_type() -> GLenum { gl::UNSIGNED_INT }
+}
+impl VertexComponent for (u32, u32, u32, u32) {
+    fn bytes() -> usize { std::mem::size_of::<u32>() * 4 }
+    fn primitives() -> usize { 4 }
+    fn data_type() -> GLenum { gl::UNSIGNED_INT }
+}
+
+impl VertexComponent for i32 {
+    fn bytes() -> usize { std::mem::size_of::<i32>() * 1 }
+    fn primitives() -> usize { 1 }
+    fn data_type() -> GLenum { gl::INT }
+}
+impl VertexComponent for (i32, i32) {
+    fn bytes() -> usize { std::mem::size_of::<i32>() * 2 }
+    fn primitives() -> usize { 2 }
+    fn data_type() -> GLenum { gl::INT }
+}
+impl VertexComponent for (i32, i32, i32) {
+    fn bytes() -> usize { std::mem::size_of::<i32>() * 3 }
+    fn primitives() -> usize { 3 }
+    fn data_type() -> GLenum { gl::INT }
+}
+impl VertexComponent for (i32, i32, i32, i32) {
+    fn bytes() -> usize { std::mem::size_of::<i32>() * 4 }
+    fn primitives() -> usize { 4 }
+    fn data_type() -> GLenum { gl::INT }
+}
+
+impl VertexComponent for u8 {
+    fn bytes() -> usize { std::mem::size_of::<u8>() * 1 }
+    fn primitives() -> usize { 1 }
+    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
+}
+impl VertexComponent for (u8, u8) {
+    fn bytes() -> usize { std::mem::size_of::<u8>() * 2 }
+    fn primitives() -> usize { 2 }
+    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
+}
+impl VertexComponent for (u8, u8, u8) {
+    fn bytes() -> usize { std::mem::size_of::<u8>() * 3 }
+    fn primitives() -> usize { 3 }
+    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
+}
+impl VertexComponent for (u8, u8, u8, u8) {
+    fn bytes() -> usize { std::mem::size_of::<u8>() * 4 }
+    fn primitives() -> usize { 4 }
+    fn data_type() -> GLenum { gl::UNSIGNED_BYTE }
+}
+
+impl VertexComponent for i8 {
+    fn bytes() -> usize { std::mem::size_of::<i8>() * 1 }
+    fn primitives() -> usize { 1 }
+    fn data_type() -> GLenum { gl::BYTE }
+}
+impl VertexComponent for (i8, i8) {
+    fn bytes() -> usize { std::mem::size_of::<i8>() * 2 }
+    fn primitives() -> usize { 2 }
+    fn data_type() -> GLenum { gl::BYTE }
+}
+impl VertexComponent for (i8, i8, i8) {
+    fn bytes() -> usize { std::mem::size_of::<i8>() * 3 }
+    fn primitives() -> usize { 3 }
+    fn data_type() -> GLenum { gl::BYTE }
+}
+impl VertexComponent for (i8, i8, i8, i8) {
+    fn bytes() -> usize { std::mem::size_of::<i8>() * 4 }
+    fn primitives() -> usize { 4 }
+    fn data_type() -> GLenum { gl::BYTE }
+}
+

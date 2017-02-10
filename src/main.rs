@@ -3,6 +3,8 @@
 
 extern crate gl;
 extern crate glutin;
+#[macro_use]
+extern crate gondola_vertex_macro;
 
 mod framebuffer;
 mod color;
@@ -47,9 +49,10 @@ const FRAGMENT_SOURCE: &'static str = "
     }
 ";
 
+#[derive(Vertex)]
 struct TestVertex {
     position: (f32, f32),
-    color: Color
+    color: Color,
 }
 impl TestVertex {
     fn new(x: f32, y: f32) -> TestVertex {
@@ -59,31 +62,10 @@ impl TestVertex {
         }
     }
 }
-impl Vertex for TestVertex {
-    fn bytes_per_vertex() -> usize {
-        (2 + 4) * std::mem::size_of::<f32>()
-    }
-    fn setup_attrib_pointers() {
-        unsafe {
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(
-                0 as GLuint,
-                2 as GLint, gl::FLOAT, false as GLboolean,
-                (6*std::mem::size_of::<f32>()) as GLsizei,
-                (0*std::mem::size_of::<f32>()) as *const GLvoid
-            );
-            gl::EnableVertexAttribArray(1);
-            gl::VertexAttribPointer(
-                1 as GLuint,
-                3 as GLint, gl::FLOAT, false as GLboolean,
-                (6*std::mem::size_of::<f32>()) as GLsizei,
-                (2*std::mem::size_of::<f32>()) as *const GLvoid
-            );
-        }
-    }
-}
 
 fn main() {
+    println!("{}", TestVertex::bytes_per_vertex());
+    
     let clear_color = Color::hex("ff34aa");
     let clear_color = clear_color.with_lightness(4.0);
 
