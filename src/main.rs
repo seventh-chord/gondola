@@ -26,20 +26,17 @@ use gl::types::*;
 use std::time::{Instant, Duration};
 
 const VERTEX_SOURCE: &'static str = "
-    #version 330 core\n
-
-    layout(location = 0) in vec2 in_pos;
-    layout(location = 1) in vec4 in_color;
+    #version 330 core
 
     out vec4 vert_color;
 
     void main() {
-        gl_Position = vec4(in_pos, 0.0, 1.0);
-        vert_color = in_color;
+        gl_Position = vec4(position, 0.0, 1.0);
+        vert_color = color;
     }
 ";
 const FRAGMENT_SOURCE: &'static str = "
-    #version 330 core\n
+    #version 330 core
 
     in vec4 vert_color;
     out vec4 out_color;
@@ -64,7 +61,6 @@ impl TestVertex {
 }
 
 fn main() {
-    println!("{}", TestVertex::gen_shader_input_decl());
     let clear_color = Color::hex("ff34aa");
     let clear_color = clear_color.with_lightness(4.0);
 
@@ -82,7 +78,11 @@ fn main() {
         FramebufferProperties::new(window_size.0, window_size.1)
         .build().unwrap();
 
-    let shader = Shader::new(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
+    let shader = Shader::new(
+        &shader::prepend_code(VERTEX_SOURCE, &TestVertex::gen_shader_input_decl()),
+        None,
+        Some(FRAGMENT_SOURCE)
+    ).unwrap();
     shader.bind();
 
     let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);

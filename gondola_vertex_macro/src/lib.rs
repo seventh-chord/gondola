@@ -75,7 +75,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|(ident, ty)| {
                     quote! {
                         let line = format!(
-                            "layout(location = {index}) in {glsl_type} {name}",
+                            "layout(location = {index}) in {glsl_type} {name};",
                             name = stringify!(#ident),
                             index = index,
                             glsl_type = <#ty as VertexComponent>::get_glsl_type(),

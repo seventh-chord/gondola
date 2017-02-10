@@ -5,7 +5,36 @@ use std::ptr;
 use std::str;
 use std::ffi::CString;
 
-pub fn compile(source: &str, shader_type: GLenum) -> Result<GLuint, String> {
+/// Prepends the given section of code to the beginning of the given piece of
+/// shader source. Note that code is inserted after the `#version ...`
+/// preprocessor, if present
+pub fn prepend_code(source: &str, code: &str) -> String {
+    let insert_index =
+        if let Some(preprocessor_index) = source.find("#version") {
+            if let Some(newline_index) = source[preprocessor_index..].find('\n') {
+                newline_index + preprocessor_index
+            } else {
+                // We might want to warn the user in this case. A shader with a
+                // #version preprocessor but no newline will (I think) never
+                // be valid, unless the code inserted here makes it valid
+                source.len() 
+            }
+        } else {
+            0
+        };
+
+    let mut result = String::with_capacity(source.len() + code.len());
+
+    result.push_str(&source[0..insert_index]);
+    result.push_str(code);
+    if !source.is_empty() && insert_index < source.len() - 1 {
+        result.push_str(&source[insert_index+1..]);
+    }
+
+    result
+}
+
+fn compile(source: &str, shader_type: GLenum) -> Result<GLuint, String> {
     unsafe {
         let shader = gl::CreateShader(shader_type);
 
