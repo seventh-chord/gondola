@@ -4,7 +4,8 @@ use gl::types::*;
 use std::ptr;
 use std::str;
 use std::ffi::CString;
-use vertex_buffer::Vertex;
+use buffer::Vertex;
+use nalgebra::{Vector2, Vector3, Vector4};
 
 pub struct Shader {
     program: GLuint,
@@ -101,6 +102,19 @@ impl Shader {
     pub fn bind(&self) {
         unsafe {
             gl::UseProgram(self.program);
+        }
+    }
+
+    fn get_uniform_binding(&self, uniform_name: &str) -> Option<GLint> {
+        unsafe {
+            let c_str = CString::new(uniform_name.as_bytes()).unwrap();
+            let location = gl::GetUniformLocation(self.program, c_str.as_ptr()); 
+            if location == -1 {
+                println!("Invalid uniform name: {}", uniform_name); // Maybe panic
+                None
+            } else {
+                Some(location)
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 
-use vertex_buffer::VertexComponent;
+use buffer::VertexComponent;
 use gl;
 use std;
 

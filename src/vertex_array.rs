@@ -1,7 +1,7 @@
 
 use gl;
 use gl::types::*;
-use primitive_buffer::PrimitiveBuffer;
+use buffer::PrimitiveBuffer;
 use std::ops::Range;
 
 pub struct VertexArray {

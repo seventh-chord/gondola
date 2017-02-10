@@ -3,6 +3,7 @@
 
 extern crate gl;
 extern crate glutin;
+extern crate nalgebra;
 #[macro_use]
 extern crate gondola_vertex_macro;
 
@@ -10,28 +11,32 @@ mod framebuffer;
 mod color;
 mod texture;
 mod shader;
-mod primitive_buffer;
-mod vertex_buffer;
+mod buffer;
 mod vertex_array;
+mod matrix_stack;
 
 use glutin::*;
 use framebuffer::*;
 use color::*;
 use shader::*;
-use primitive_buffer::*;
+use buffer::*;
 use vertex_array::*;
-use vertex_buffer::*;
+use matrix_stack::*;
 
 use gl::types::*;
 use std::time::{Instant, Duration};
 
 const VERTEX_SOURCE: &'static str = "
     #version 330 core
-
+    
+    // Inputs are automatically inserted
+    
     out vec4 vert_color;
 
+    uniform mat4 mvp = mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1); // Identity matrix
+
     void main() {
-        gl_Position = vec4(position, 0.0, 1.0);
+        gl_Position = mvp * vec4(position, 0.0, 1.0);
         vert_color = color;
     }
 ";
@@ -74,9 +79,7 @@ fn main() {
     let mut mouse_pos: (i32, i32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
 
-    let mut framebuffer =
-        FramebufferProperties::new(window_size.0, window_size.1)
-        .build().unwrap();
+    let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
     let shader = Shader::with_vertex::<TestVertex>(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
     shader.bind();
@@ -93,6 +96,9 @@ fn main() {
     let mut vertex_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &test_data);
 
     let mut line_buffer = VertexBuffer::new(PrimitiveMode::LineStrip, BufferUsage::StaticDraw);
+
+    let mut matrix_stack = MatrixStack::new();
+    matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
 
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
@@ -111,9 +117,8 @@ fn main() {
                 Event::Closed => break 'main_loop,
                 Event::Resized(width, height) => {
                     window_size = (width, height);
-                    framebuffer =
-                        FramebufferProperties::new(width, height)
-                        .build().unwrap();
+                    framebuffer = FramebufferProperties::new(window_size.0, window_size.1).build().unwrap();
+                    matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
                 },
                 Event::MouseMoved(x, y) => {
                     mouse_pos = (x, y);
