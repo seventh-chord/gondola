@@ -9,7 +9,6 @@ extern crate quote;
 
 use syn::*;
 use proc_macro::TokenStream;
-use gl::types::*;
 
 #[proc_macro_derive(Vertex)]
 pub fn vertex(input: TokenStream) -> TokenStream {
@@ -83,13 +82,14 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                         #bytes_per_vertex_impl
                     }
 
+                    #[allow(unused_assignments)]
                     fn setup_attrib_pointers() {
                         #setup_attrib_pointers_impl
                     }
                 }
             }
         },
-        VariantData::Tuple(fields) => {
+        VariantData::Tuple(..) => {
             panic!("#[derive(Vertex)] is not defined for tupple structs");
         },
         VariantData::Unit => {

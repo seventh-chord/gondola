@@ -64,8 +64,6 @@ impl TestVertex {
 }
 
 fn main() {
-    println!("{}", TestVertex::bytes_per_vertex());
-    
     let clear_color = Color::hex("ff34aa");
     let clear_color = clear_color.with_lightness(4.0);
 

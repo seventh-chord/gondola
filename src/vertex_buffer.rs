@@ -118,7 +118,6 @@ impl <T: Vertex> VertexBuffer<T> {
     pub fn put(&mut self, index: usize, data: &[T]) {
         let start = index;
         let end = index + data.len();
-        let bytes = data.len() * T::bytes_per_vertex();
 
         if end > self.allocated {
             self.allocate(end); // Maybe we should allocate some extra space
