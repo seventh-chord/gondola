@@ -47,4 +47,8 @@ impl MatrixStack {
 
         self.model_stack_pointer -= 1;
     }
+
+    pub fn peek(&self) -> Matrix4<f32> {
+        self.model_stack[self.model_stack_pointer]
+    }
 }

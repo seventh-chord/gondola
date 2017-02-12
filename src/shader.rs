@@ -5,7 +5,7 @@ use std::ptr;
 use std::str;
 use std::ffi::CString;
 use buffer::Vertex;
-use nalgebra::{Vector2, Vector3, Vector4};
+use nalgebra::{Vector2, Vector3, Vector4, Matrix4};
 
 pub struct Shader {
     program: GLuint,
@@ -105,16 +105,25 @@ impl Shader {
         }
     }
 
-    fn get_uniform_binding(&self, uniform_name: &str) -> Option<GLint> {
+    /// Note: Shader needs to be bound before call to this! 
+    fn get_uniform_location(&self, uniform_name: &str) -> Option<GLint> {
         unsafe {
             let c_str = CString::new(uniform_name.as_bytes()).unwrap();
             let location = gl::GetUniformLocation(self.program, c_str.as_ptr()); 
             if location == -1 {
-                println!("Invalid uniform name: {}", uniform_name); // Maybe panic
                 None
             } else {
                 Some(location)
             }
+        }
+    }
+
+    pub fn set_uniform<T: UniformValue>(&self, uniform_name: &str, value: T) {
+        if let Some(location) = self.get_uniform_location(uniform_name) {
+            self.bind();
+            unsafe { value.set_uniform(location); }
+        } else {
+            println!("Invalid uniform name: {}", uniform_name); // Maybe panic
         }
     }
 }
@@ -190,4 +199,82 @@ fn compile(source: &str, shader_type: GLenum) -> Result<GLuint, String> {
             return Ok(shader);
         }
     }
+}
+
+/// Everything which implements this trait can be stured into the uniform value
+/// of a shader, assuming its implementation is valid
+pub trait UniformValue {
+    unsafe fn set_uniform(&self, location: GLint); 
+}
+
+// Implementations for vectors and matricies
+impl UniformValue for Vector2<f32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, self.x, self.y); }
+}
+impl UniformValue for Vector2<i32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2i(location, self.x, self.y); }
+}
+impl UniformValue for Vector2<u32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, self.x, self.y); }
+}
+impl UniformValue for Vector3<f32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, self.x, self.y, self.z); }
+}
+impl UniformValue for Vector3<i32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3i(location, self.x, self.y, self.z); }
+}
+impl UniformValue for Vector3<u32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, self.x, self.y, self.z); }
+}
+impl UniformValue for Vector4<f32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, self.x, self.y, self.z, self.w); }
+}
+impl UniformValue for Vector4<i32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4i(location, self.x, self.y, self.z, self.w); }
+}
+impl UniformValue for Vector4<u32> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, self.x, self.y, self.z, self.w); }
+}
+impl UniformValue for Matrix4<f32> {
+    unsafe fn set_uniform(&self, location: GLint) {
+        gl::UniformMatrix4fv(location, 1, false as GLboolean, &(self.m11) as *const GLfloat);
+    }
+}
+
+// Implementations for f32, i32 and u32 single values and tuples.
+impl UniformValue for f32 {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1f(location, *self as GLfloat); }
+}
+impl UniformValue for (f32, f32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, (*self).0 as GLfloat, (*self).1 as GLfloat); }
+}
+impl UniformValue for (f32, f32, f32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, (*self).0 as GLfloat, (*self).1 as GLfloat, (*self).2 as GLfloat); }
+}
+impl UniformValue for (f32, f32, f32, f32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, (*self).0 as GLfloat, (*self).1 as GLfloat, (*self).2 as GLfloat, (*self).3 as GLfloat); }
+}
+impl UniformValue for i32 {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1i(location, *self as GLint); }
+}
+impl UniformValue for (i32, i32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2i(location, (*self).0 as GLint, (*self).1 as GLint); }
+}
+impl UniformValue for (i32, i32, i32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3i(location, (*self).0 as GLint, (*self).1 as GLint, (*self).2 as GLint); }
+}
+impl UniformValue for (i32, i32, i32, i32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4i(location, (*self).0 as GLint, (*self).1 as GLint, (*self).2 as GLint, (*self).3 as GLint); }
+}
+impl UniformValue for u32 {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1ui(location, *self as GLuint); }
+}
+impl UniformValue for (u32, u32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, (*self).0 as GLuint, (*self).1 as GLuint); }
+}
+impl UniformValue for (u32, u32, u32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint); }
+}
+impl UniformValue for (u32, u32, u32, u32) {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint, (*self).3 as GLuint); }
 }

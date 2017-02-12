@@ -1,8 +1,11 @@
 
-use buffer::VertexComponent;
 use gl;
+use gl::types::*;
 use std;
+use shader::UniformValue;
+use buffer::VertexComponent;
 
+#[derive(Debug)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -86,6 +89,11 @@ fn clamp(value: f32, min: f32, max: f32) -> f32 {
 impl VertexComponent for Color {
     fn bytes() -> usize { std::mem::size_of::<f32>() * 4 }
     fn primitives() -> usize { 4 }
-    fn data_type() -> gl::types::GLenum { gl::FLOAT }
+    fn data_type() -> GLenum { gl::FLOAT }
+}
+impl UniformValue for Color {
+    unsafe fn set_uniform(&self, location: GLint) {
+        gl::Uniform4f(location, self.r, self.g, self.b, self.a);
+    }
 }
 

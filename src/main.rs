@@ -33,7 +33,8 @@ const VERTEX_SOURCE: &'static str = "
     
     out vec4 vert_color;
 
-    uniform mat4 mvp = mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1); // Identity matrix
+//    uniform mat4 mvp = mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1); // Identity matrix
+    uniform mat4 mvp;
 
     void main() {
         gl_Position = mvp * vec4(position, 0.0, 1.0);
@@ -66,7 +67,8 @@ impl TestVertex {
 }
 
 fn main() {
-    let clear_color = Color::hex("ff34aa");
+//    let clear_color = Color::hex("ff34aa");
+    let clear_color = Color::hex("00ff00");
     let clear_color = clear_color.with_lightness(4.0);
 
     let window = glutin::Window::new().unwrap();
@@ -99,6 +101,7 @@ fn main() {
 
     let mut matrix_stack = MatrixStack::new();
     matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
+    shader.set_uniform("mvp", matrix_stack.peek());
 
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
