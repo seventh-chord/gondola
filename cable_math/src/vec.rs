@@ -219,7 +219,7 @@ impl<T: Float> Vec4<T> {
     }
 }
 
-// Addition and subtraction
+// Addition, subtraction and scaling
 impl<T: Num + Copy> Add for Vec2<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self { Vec2::new(self.x + other.x, self.y + other.y) }
@@ -285,6 +285,37 @@ impl<T: Num + Copy> SubAssign for Vec4<T> {
         self.y = self.y - other.y;
         self.z = self.z - other.z;
         self.w = self.w - other.w;
+    }
+}
+
+impl<T: Num + Copy> Mul<T> for Vec2<T> {
+    type Output = Self; 
+    fn mul(self, scalar: T) -> Self {
+        Vec2 {
+            x: self.x * scalar,
+            y: self.y * scalar
+        }
+    }
+}
+impl<T: Num + Copy> Mul<T> for Vec3<T> {
+    type Output = Self; 
+    fn mul(self, scalar: T) -> Self {
+        Vec3 {
+            x: self.x * scalar,
+            y: self.y * scalar,
+            z: self.z * scalar
+        }
+    }
+}
+impl<T: Num + Copy> Mul<T> for Vec4<T> {
+    type Output = Self; 
+    fn mul(self, scalar: T) -> Self {
+        Vec4 {
+            x: self.x * scalar,
+            y: self.y * scalar,
+            z: self.z * scalar,
+            w: self.w * scalar
+        }
     }
 }
 
@@ -367,6 +398,17 @@ mod tests {
         assert_eq!(0.0, Vec3::dot(a, b));
 
         assert_eq!(14, Vec4::dot(Vec4::new(1, 3, 2, 5), Vec4::new(-1, 3, -2, 2)));
+    }
+
+    #[test]
+    fn scale() {
+        let a = Vec3::new(1.0, 3.5, 7.3);
+        assert_eq!(a.len() * 2.0, (a*2.0).len());
+
+        let a = Vec2::polar(2.0, 3.1415) * 0.5;
+        let b = Vec2::new(-1.0, 0.0);
+        let dif = (a - b).len();
+        assert!(dif < 0.0001);
     }
 }
 
