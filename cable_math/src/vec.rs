@@ -42,6 +42,28 @@ impl<T: Num + Copy> Vec2<T> {
         a.x*b.x + a.y*b.y
     }
 
+    /// Rotates this vector 90 degrees (π/2 radians) counterclockwise
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    /// let a = Vec2::new(3, 2);
+    /// assert_eq!(Vec2::new(-2, 3), a.left());
+    /// ```
+    pub fn left(self) -> Vec2<T> {
+        Vec2::new(T::zero() - self.y, self.x)
+    }
+
+    /// Rotates this vector 90 degrees (π/2 radians) clockwise
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    /// let a = Vec2::new(3, 2);
+    /// assert_eq!(Vec2::new(2, -3), a.right());
+    /// ```
+    pub fn right(self) -> Vec2<T> {
+        Vec2::new(self.y, T::zero() - self.x)
+    }
+
 }
 impl<T: Num + Copy> Vec3<T> {
     /// Creates a new vector with the given components
