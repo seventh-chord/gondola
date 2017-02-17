@@ -3,7 +3,7 @@
 
 extern crate gl;
 extern crate glutin;
-extern crate nalgebra;
+extern crate cable_math;
 #[macro_use]
 extern crate gondola_vertex_macro;
 
@@ -33,7 +33,6 @@ const VERTEX_SOURCE: &'static str = "
     
     out vec4 vert_color;
 
-//    uniform mat4 mvp = mat4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1); // Identity matrix
     uniform mat4 mvp;
 
     void main() {
@@ -67,6 +66,11 @@ impl TestVertex {
 }
 
 fn main() {
+    use cable_math::Vec2;
+    let a = Vec2::new(0, 10);
+    let b = Vec2::new(3, 10);
+    println!("{}", a + b);
+
 //    let clear_color = Color::hex("ff34aa");
     let clear_color = Color::hex("00ff00");
     let clear_color = clear_color.with_lightness(4.0);
@@ -78,8 +82,11 @@ fn main() {
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
 
-    let mut mouse_pos: (i32, i32) = (0, 0);
+    let mut mouse_pos: (u32, u32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
+    unsafe {
+        gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
+    }
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
@@ -92,16 +99,14 @@ fn main() {
 
     let test_data = vec![
         TestVertex::new(0.0, 0.0),
-        TestVertex::new(1.0, 0.0),
-        TestVertex::new(0.0, 1.0),
+        TestVertex::new(100.0, 0.0),
+        TestVertex::new(0.0, 100.0),
     ];
     let mut vertex_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &test_data);
 
     let mut line_buffer = VertexBuffer::new(PrimitiveMode::LineStrip, BufferUsage::StaticDraw);
 
     let mut matrix_stack = MatrixStack::new();
-    matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
-    shader.set_uniform("mvp", matrix_stack.peek());
 
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
@@ -110,11 +115,6 @@ fn main() {
     loop {
         let start_time = Instant::now();
 
-        let screen_pos = (
-            (mouse_pos.0 as f32 / window_size.0 as f32)*2.0 - 1.0,
-            1.0 - (mouse_pos.1 as f32 / window_size.1 as f32)*2.0,
-        );
-
         for event in window.poll_events() {
             match event {
                 Event::Closed => break 'main_loop,
@@ -122,26 +122,32 @@ fn main() {
                     window_size = (width, height);
                     framebuffer = FramebufferProperties::new(window_size.0, window_size.1).build().unwrap();
                     matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
+                    unsafe {
+                        gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
+                    }
                 },
                 Event::MouseMoved(x, y) => {
-                    mouse_pos = (x, y);
+                    mouse_pos = (x as u32, window_size.1 - y as u32);
                 },
                 Event::MouseInput(ElementState::Pressed, MouseButton::Left) => {
                     println!("Mouse pressed");
-                    line_buffer.put_at_end(&[TestVertex::new(screen_pos.0, screen_pos.1)]);
+                    line_buffer.put_at_end(&[TestVertex::new(mouse_pos.0 as f32, mouse_pos.1 as f32)]);
                 },
                 e => println!("{:?}", e)
             }
         }
 
+        matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
+        shader.set_uniform("mvp", matrix_stack.mvp());
+
         let new_data = vec![
             0.0, 0.0,
-            1.0, 0.0,
-            screen_pos.0, screen_pos.1
+            100.0, 0.0,
+            mouse_pos.0 as f32, mouse_pos.1 as f32
         ];
         vbo.put_floats(new_data);
 
-        vertex_buffer.put(0, &[TestVertex::new(screen_pos.0, screen_pos.1)]);
+        vertex_buffer.put(0, &[TestVertex::new(mouse_pos.0 as f32, mouse_pos.1 as f32)]);
 
         framebuffer.bind();
         framebuffer::clear(&clear_color);

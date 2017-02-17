@@ -5,7 +5,7 @@ use std::ptr;
 use std::str;
 use std::ffi::CString;
 use buffer::Vertex;
-use nalgebra::{Vector2, Vector3, Vector4, Matrix4};
+use cable_math::{Mat4, Vec2, Vec3, Vec4};
 
 pub struct Shader {
     program: GLuint,
@@ -208,36 +208,45 @@ pub trait UniformValue {
 }
 
 // Implementations for vectors and matricies
-impl UniformValue for Vector2<f32> {
+impl UniformValue for Vec2<f32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, self.x, self.y); }
 }
-impl UniformValue for Vector2<i32> {
+impl UniformValue for Vec2<f64> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, self.x as f32, self.y as f32); }
+}
+impl UniformValue for Vec2<i32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2i(location, self.x, self.y); }
 }
-impl UniformValue for Vector2<u32> {
+impl UniformValue for Vec2<u32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, self.x, self.y); }
 }
-impl UniformValue for Vector3<f32> {
+impl UniformValue for Vec3<f32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, self.x, self.y, self.z); }
 }
-impl UniformValue for Vector3<i32> {
+impl UniformValue for Vec3<f64> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, self.x as f32, self.y as f32, self.z as f32); }
+}
+impl UniformValue for Vec3<i32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3i(location, self.x, self.y, self.z); }
 }
-impl UniformValue for Vector3<u32> {
+impl UniformValue for Vec3<u32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, self.x, self.y, self.z); }
 }
-impl UniformValue for Vector4<f32> {
+impl UniformValue for Vec4<f32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, self.x, self.y, self.z, self.w); }
 }
-impl UniformValue for Vector4<i32> {
+impl UniformValue for Vec4<f64> {
+    unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, self.x as f32, self.y as f32, self.z as f32, self.w as f32); }
+}
+impl UniformValue for Vec4<i32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4i(location, self.x, self.y, self.z, self.w); }
 }
-impl UniformValue for Vector4<u32> {
+impl UniformValue for Vec4<u32> {
     unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, self.x, self.y, self.z, self.w); }
 }
-impl UniformValue for Matrix4<f32> {
+impl UniformValue for Mat4<f32> {
     unsafe fn set_uniform(&self, location: GLint) {
-        gl::UniformMatrix4fv(location, 1, false as GLboolean, &(self.m11) as *const GLfloat);
+        gl::UniformMatrix4fv(location, 1, false as GLboolean, &(self.a11) as *const GLfloat);
     }
 }
 
