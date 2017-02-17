@@ -41,6 +41,7 @@ impl<T: Num + Copy> Vec2<T> {
     pub fn dot(a: Vec2<T>, b: Vec2<T>) -> T {
         a.x*b.x + a.y*b.y
     }
+
 }
 impl<T: Num + Copy> Vec3<T> {
     /// Creates a new vector with the given components
@@ -78,7 +79,80 @@ impl<T: Num + Copy> Vec4<T> {
     }
 }
 
+impl <T: Num + Copy + Signed> Vec2<T> {
+    /// Makes all components positive
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    /// let a = Vec2::new(-3, 2);
+    /// assert_eq!(Vec2::new(3, 2), a.abs());
+    /// ```
+    pub fn abs(self) -> Self {
+        Vec2 { x: self.x.abs(), y: self.y.abs() }
+    }
+}
+impl <T: Num + Copy + Signed> Vec3<T> {
+    /// Makes all components positive
+    /// # Example
+    /// ```
+    /// use cable_math::Vec3;
+    /// let a = Vec3::new(-3, 2, -1);
+    /// assert_eq!(Vec3::new(3, 2, 1), a.abs());
+    /// ```
+    pub fn abs(self) -> Self {
+        Vec3 { x: self.x.abs(), y: self.y.abs(), z: self.z.abs() }
+    }
+}
+impl <T: Num + Copy + Signed> Vec4<T> {
+    /// Makes all components positive
+    /// # Example
+    /// ```
+    /// use cable_math::Vec4;
+    /// let a = Vec4::new(-3, 2, -1, 7);
+    /// assert_eq!(Vec4::new(3, 2, 1, 7), a.abs());
+    /// ```
+    pub fn abs(self) -> Self {
+        Vec4 { x: self.x.abs(), y: self.y.abs(), z: self.z.abs(), w: self.w.abs() }
+    }
+}
+
 impl<T: Float> Vec2<T> {
+    /// Constructs a vector from polar format. Takes a length and an angle
+    /// in radians.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    ///
+    /// let a = Vec2::polar(1.0, 3.1415 / 4.0); // π/4 = 45°
+    /// let b = Vec2::new(0.707, 0.707); // 0.707 is approx. 2.0.sqrt() / 2.0 
+    /// let dif = (a - b).len();
+    ///
+    /// assert!(dif < 0.0002);
+    /// ```
+    pub fn polar(radius: T, angle: T) -> Vec2<T> {
+        Vec2 {
+            x: radius * angle.cos(),
+            y: radius * angle.sin()
+        }
+    }
+
+    /// Finds the direction in which this direction is pointing. Returns a
+    /// angle in radians.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    ///
+    /// let a = Vec2::new(1.0f32, 1.0);
+    /// let angle = 3.1315 / 4.0; // π/4 = 45°
+    ///
+    /// let epsilon = (a.angle() - angle).abs();
+    ///
+    /// assert!(epsilon < 0.003);
+    /// ```
+    pub fn angle(&self) -> T {
+        (self.y / self.x).atan()
+    }
+
     /// Calculates the length of this vector
     pub fn len(&self) -> T {
         (self.x*self.x + self.y*self.y).sqrt()
