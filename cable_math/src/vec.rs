@@ -183,4 +183,68 @@ impl<T: fmt::Display + Num + Copy> fmt::Display for Vec4<T> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn addition() {
+        let a = Vec2::new(1, 2);
+        let b = Vec2::new(4, -3);
+
+        assert_eq!(a, a + Vec2::zero());
+        assert_eq!(b, b + Vec2::zero());
+
+        assert_eq!(Vec2::new(5, -1), a + b);
+
+        let mut c = a;
+        c += Vec2::new(1, 1);
+        assert_eq!(Vec2::new(2, 3), c);
+
+        c += c;
+        assert_eq!(Vec2::new(4, 6), c);
+    }
+
+    #[test]
+    fn subtraction() {
+        let a = Vec2::new(1, 2);
+        let b = Vec2::new(4, -3);
+
+        assert_eq!(a, a - Vec2::zero());
+        assert_eq!(b, b - Vec2::zero());
+
+        assert_eq!(Vec2::new(-3, 5), a - b);
+
+        let mut c = a;
+        c -= Vec2::new(2, 1);
+        assert_eq!(Vec2::new(-1, 1), c);
+
+        c -= c;
+        assert_eq!(Vec2::new(0, 0), c);
+    }
+
+    #[test]
+    fn len() {
+        assert_eq!(0.0, Vec2::<f32>::zero().len());
+
+        let a = Vec2::new(4, 4);
+        let b = Vec2::new(4.0, -3.0);
+
+        assert_eq!(32, a.len_sqr());
+        assert_eq!(5.0, b.len());
+    }
+
+    #[test]
+    fn dot() {
+        assert_eq!(0.0, Vec2::dot(Vec2::zero(), Vec2::zero()));
+        assert_eq!(0.0, Vec3::dot(Vec3::zero(), Vec3::zero()));
+        assert_eq!(0.0, Vec4::dot(Vec4::zero(), Vec4::zero()));
+
+        let a = Vec3::new(0.0, 1.0, 1.0);
+        let b = Vec3::new(1.0, 0.0, 0.0);
+        assert_eq!(0.0, Vec3::dot(a, b));
+
+        assert_eq!(14, Vec4::dot(Vec4::new(1, 3, 2, 5), Vec4::new(-1, 3, -2, 2)));
+    }
+}
 
