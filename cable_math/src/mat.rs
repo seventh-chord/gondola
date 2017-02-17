@@ -17,7 +17,7 @@ pub struct Mat4<T: Num + Copy> {
 
 impl<T: Num + Copy> Mat4<T> {
     /// Creates a new Mat4 with all values set to 0
-    pub fn new() -> Mat4<T> {
+    pub fn zero() -> Mat4<T> {
         Mat4 {
             a11: T::zero(), a12: T::zero(), a13: T::zero(), a14: T::zero(),
             a21: T::zero(), a22: T::zero(), a23: T::zero(), a24: T::zero(),
@@ -33,6 +33,21 @@ impl<T: Num + Copy> Mat4<T> {
             a21: T::zero(), a22: T::one(),  a23: T::zero(), a24: T::zero(),
             a31: T::zero(), a32: T::zero(), a33: T::one(),  a34: T::zero(),
             a41: T::zero(), a42: T::zero(), a43: T::zero(), a44: T::one(),
+        }
+    }
+
+    /// Creates a new matrix with the given values. The values are specified
+    /// row by row.
+    pub fn with_values(a11: T, a12: T, a13: T, a14: T,
+                       a21: T, a22: T, a23: T, a24: T,
+                       a31: T, a32: T, a33: T, a34: T,
+                       a41: T, a42: T, a43: T, a44: T)
+                       -> Mat4<T> {
+        Mat4 {
+            a11: a11, a12: a12, a13: a13, a14: a14,
+            a21: a21, a22: a22, a23: a23, a24: a24,
+            a31: a31, a32: a32, a33: a33, a34: a34,
+            a41: a41, a42: a42, a43: a43, a44: a44
         }
     }
 
@@ -64,7 +79,7 @@ impl<T: Num + Copy> Mat4<T> {
     }
 }
 
-// Multiplication (Ugly code)
+// Multiplication
 impl<T: Num + Copy> Mul for Mat4<T> {
     type Output = Self;
 
@@ -100,3 +115,90 @@ impl<T: Num + Copy> MulAssign for Mat4<T> {
         *self = *self * other;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Function for generating random testing matrices
+    fn mat_a() -> Mat4<f32> {
+        Mat4::with_values(1.0, 7.0, 4.0, 3.0,
+                          5.0, 6.0, 7.0, 8.0,
+                          9.0, 2.0, 3.0, 1.0,
+                          6.0, 6.0, 2.0, 7.0)
+    }
+    fn mat_b() -> Mat4<f32> {
+        Mat4::with_values(7.0, 8.0, 2.0, 9.0,
+                          1.0, 3.0, 5.0, 2.0,
+                          3.0, 6.0, 3.0, 7.0,
+                          2.0, 7.0, 3.0, 8.0)
+    }
+    fn mat_c() -> Mat4<f32> {
+        Mat4::with_values(5.0, 7.0, 1.0, 2.0,
+                          3.0, 1.0, 8.0, 4.0,
+                          9.0, 2.0, 0.0, 1.0,
+                          3.0, 7.0, 1.0, 8.0)
+    }
+
+    #[test]
+    fn identity() {
+        let a = mat_a();
+        let b = mat_b();
+        let c = mat_c();
+        let identity = Mat4::identity();
+
+        assert_eq!(a, a * identity);
+        assert_eq!(b, b * identity);
+        assert_eq!(c, c * identity);
+
+        assert_eq!(a, identity * a);
+        assert_eq!(b, identity * b);
+        assert_eq!(c, identity * c);
+
+        assert_ne!(identity * a, identity * b);
+        assert_ne!(identity * b, identity * c);
+        assert_ne!(identity * a, identity * c);
+
+    }
+
+    #[test]
+    fn zero() {
+        let a = mat_a();
+        let b = mat_b();
+        let c = mat_c();
+        let identity = Mat4::identity();
+        let zero = Mat4::zero();
+
+        assert_eq!(identity * zero, zero);
+
+        assert_eq!(zero, a * zero);
+        assert_eq!(zero, b * zero);
+        assert_eq!(zero, c * zero);
+    }
+
+    #[test]
+    fn mul() {
+        let a = mat_a();
+        let b = mat_b();
+        let ab = Mat4::with_values(32.0, 74.0, 58.0, 75.0,
+                                   78.0, 156.0, 85.0, 170.0,
+                                   76.0, 103.0, 40.0, 114.0,
+                                   68.0, 127.0, 69.0, 136.0);
+
+        assert_eq!(ab, a * b);
+
+        let mut c = a;
+        c *= b;
+
+        assert_eq!(ab, c);
+
+        let ba = Mat4::with_values(119.0, 155.0, 108.0, 150.0,
+                                   73.0, 47.0, 44.0, 46.0,
+                                   102.0, 105.0, 77.0, 109.0,
+                                   112.0, 110.0, 82.0, 121.0);
+        assert_eq!(ba, b * a);
+
+        assert_ne!(b * a, a * b);
+    }
+}
+
