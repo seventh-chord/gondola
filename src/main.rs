@@ -66,11 +66,6 @@ impl TestVertex {
 }
 
 fn main() {
-    use cable_math::Vec2;
-    let a = Vec2::new(0, 10);
-    let b = Vec2::new(3, 10);
-    println!("{}", a + b);
-
 //    let clear_color = Color::hex("ff34aa");
     let clear_color = Color::hex("00ff00");
     let clear_color = clear_color.with_lightness(4.0);
