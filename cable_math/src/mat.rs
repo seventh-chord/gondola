@@ -116,6 +116,38 @@ impl<T: Num + Copy> MulAssign for Mat4<T> {
     }
 }
 
+impl<T: Num + Copy> Mul<T> for Mat4<T> {
+    type Output = Self;
+    fn mul(self, scalar: T) -> Self {
+        Mat4 {
+            a11: self.a11 * scalar, a12: self.a12 * scalar, a13: self.a13 * scalar, a14: self.a14 * scalar,
+            a21: self.a21 * scalar, a22: self.a22 * scalar, a23: self.a23 * scalar, a24: self.a24 * scalar,
+            a31: self.a31 * scalar, a32: self.a32 * scalar, a33: self.a33 * scalar, a34: self.a34 * scalar,
+            a41: self.a41 * scalar, a42: self.a42 * scalar, a43: self.a43 * scalar, a44: self.a44 * scalar,
+        }
+    }
+}
+impl<T: Num + Copy> MulAssign<T> for Mat4<T> {
+    fn mul_assign(&mut self, scalar: T) {
+        self.a11 = self.a11 * scalar;
+        self.a12 = self.a12 * scalar;
+        self.a13 = self.a13 * scalar;
+        self.a14 = self.a14 * scalar;
+        self.a21 = self.a21 * scalar;
+        self.a22 = self.a22 * scalar;
+        self.a23 = self.a23 * scalar;
+        self.a24 = self.a24 * scalar;
+        self.a31 = self.a31 * scalar;
+        self.a32 = self.a32 * scalar;
+        self.a33 = self.a33 * scalar;
+        self.a34 = self.a34 * scalar;
+        self.a41 = self.a41 * scalar;
+        self.a42 = self.a42 * scalar;
+        self.a43 = self.a43 * scalar;
+        self.a44 = self.a44 * scalar;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,6 +231,24 @@ mod tests {
         assert_eq!(ba, b * a);
 
         assert_ne!(b * a, a * b);
+    }
+
+    #[test]
+    fn scale() {
+        let a = Mat4::with_values(1, 2, 3, 4,
+                                  5, 6, 7, 8,
+                                  1, 2, 3, 4,
+                                  5, 6, 7, 8);
+        let b = Mat4::with_values(2, 4, 6, 8,
+                                  10, 12, 14, 16,
+                                  2, 4, 6, 8,
+                                  10, 12, 14, 16);
+        let mut c = a;
+        c *= 2;
+
+        assert_eq!(b, a*2);
+        assert_eq!(c, a*2);
+        assert_eq!(c, b);
     }
 }
 
