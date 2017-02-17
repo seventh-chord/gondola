@@ -73,6 +73,41 @@ impl<T: Num + Copy> Mat4<T> {
         - self.a13*self.a21*self.a34*self.a42 - self.a13*self.a22*self.a31*self.a44 - self.a13*self.a24*self.a32*self.a41
         - self.a14*self.a21*self.a32*self.a43 - self.a14*self.a22*self.a33*self.a41 - self.a14*self.a23*self.a31*self.a42
     }
+    
+    /// Inverses this matrix, such that this matrix multiplied by its inverse will allways be the
+    /// identity matrix.
+    ///
+    /// This operation is not defined for matricies whose determinant is 0. If the determinant of
+    /// this matrix is 0 this function will panic.
+    ///
+    /// Note that due to floating point imprecissions, `A⁻¹A = I` (Where A is any matrix which can
+    /// be inversed, and I is the identity matrix) will not usually be true. However, the
+    /// difference is usually so small that it is negligible.
+    pub fn inverse(self) -> Mat4<T> {
+        let det = self.determinant();
+        if det == T::zero() {
+            panic!("Determinant of matrix is 0. Inverse is not defined");
+        }
+
+        Mat4 {
+            a11: self.a22*self.a33*self.a44 + self.a23*self.a34*self.a42 + self.a24*self.a32*self.a43 - self.a22*self.a34*self.a43 - self.a23*self.a32*self.a44 - self.a24*self.a33*self.a42,
+            a12: self.a12*self.a34*self.a43 + self.a13*self.a32*self.a44 + self.a14*self.a33*self.a42 - self.a12*self.a33*self.a44 - self.a13*self.a34*self.a42 - self.a14*self.a32*self.a43,
+            a13: self.a12*self.a23*self.a44 + self.a13*self.a24*self.a42 + self.a14*self.a22*self.a43 - self.a12*self.a24*self.a43 - self.a13*self.a22*self.a44 - self.a14*self.a23*self.a42,
+            a14: self.a12*self.a24*self.a33 + self.a13*self.a22*self.a34 + self.a14*self.a23*self.a32 - self.a12*self.a23*self.a34 - self.a13*self.a24*self.a32 - self.a14*self.a22*self.a33,
+            a21: self.a21*self.a34*self.a43 + self.a23*self.a31*self.a44 + self.a24*self.a33*self.a41 - self.a21*self.a33*self.a44 - self.a23*self.a34*self.a41 - self.a24*self.a31*self.a43,
+            a22: self.a11*self.a33*self.a44 + self.a13*self.a34*self.a41 + self.a14*self.a31*self.a43 - self.a11*self.a34*self.a43 - self.a13*self.a31*self.a44 - self.a14*self.a33*self.a41,
+            a23: self.a11*self.a24*self.a43 + self.a13*self.a21*self.a44 + self.a14*self.a23*self.a41 - self.a11*self.a23*self.a44 - self.a13*self.a24*self.a41 - self.a14*self.a21*self.a43,
+            a24: self.a11*self.a23*self.a34 + self.a13*self.a24*self.a31 + self.a14*self.a21*self.a33 - self.a11*self.a24*self.a33 - self.a13*self.a21*self.a34 - self.a14*self.a23*self.a31,
+            a31: self.a21*self.a32*self.a44 + self.a22*self.a34*self.a41 + self.a24*self.a31*self.a42 - self.a21*self.a34*self.a42 - self.a22*self.a31*self.a44 - self.a24*self.a32*self.a41,
+            a32: self.a11*self.a34*self.a42 + self.a12*self.a31*self.a44 + self.a14*self.a32*self.a41 - self.a11*self.a32*self.a44 - self.a12*self.a34*self.a41 - self.a14*self.a31*self.a42,
+            a33: self.a11*self.a22*self.a44 + self.a12*self.a24*self.a41 + self.a14*self.a21*self.a42 - self.a11*self.a24*self.a42 - self.a12*self.a21*self.a44 - self.a14*self.a22*self.a41,
+            a34: self.a11*self.a24*self.a32 + self.a12*self.a21*self.a34 + self.a14*self.a22*self.a31 - self.a11*self.a22*self.a34 - self.a12*self.a24*self.a31 - self.a14*self.a21*self.a32,
+            a41: self.a21*self.a33*self.a42 + self.a22*self.a31*self.a43 + self.a23*self.a32*self.a41 - self.a21*self.a32*self.a43 - self.a22*self.a33*self.a41 - self.a23*self.a31*self.a42,
+            a42: self.a11*self.a32*self.a43 + self.a12*self.a33*self.a41 + self.a13*self.a31*self.a42 - self.a11*self.a33*self.a42 - self.a12*self.a31*self.a43 - self.a13*self.a32*self.a41,
+            a43: self.a11*self.a23*self.a42 + self.a12*self.a21*self.a43 + self.a13*self.a22*self.a41 - self.a11*self.a22*self.a43 - self.a12*self.a23*self.a41 - self.a13*self.a21*self.a42,
+            a44: self.a11*self.a22*self.a33 + self.a12*self.a23*self.a31 + self.a13*self.a21*self.a32 - self.a11*self.a23*self.a32 - self.a12*self.a21*self.a33 - self.a13*self.a22*self.a31
+        } * (T::one() / det)
+    }
 
     /// Creates a new orthographic projection matrix
     pub fn ortho(left: T, right: T, top: T, bottom: T, near: T, far: T) -> Mat4<T> {
@@ -339,6 +374,24 @@ mod tests {
     fn determinant() {
         assert_eq!(1538.0, mat_a().determinant());
         assert_eq!(61.0, mat_b().determinant());
+    }
+
+    #[test]
+    fn inverse() {
+        let identity = Mat4::<f32>::identity();
+        let inverse = identity.inverse();
+
+        assert_eq!(identity, inverse);
+
+        let i_det = identity.determinant();
+
+        let a_det = (mat_a()*mat_a().inverse()).determinant();
+        let b_det = (mat_b()*mat_b().inverse()).determinant();
+        let c_det = (mat_c()*mat_c().inverse()).determinant();
+
+        assert!((i_det - a_det).abs() < 0.00001);
+        assert!((i_det - b_det).abs() < 0.00001);
+        assert!((i_det - c_det).abs() < 0.00001);
     }
 }
 
