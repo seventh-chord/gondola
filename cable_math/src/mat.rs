@@ -61,6 +61,19 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
+    /// Calculates the determinant of this matrix
+    pub fn determinant(&self) -> T {
+        // What a mess :/
+        self.a11*self.a22*self.a33*self.a44 + self.a11*self.a23*self.a34*self.a42 + self.a11*self.a24*self.a32*self.a43
+        + self.a12*self.a21*self.a34*self.a43 + self.a12*self.a23*self.a31*self.a44 + self.a12*self.a24*self.a33*self.a41
+        + self.a13*self.a21*self.a32*self.a44 + self.a13*self.a22*self.a34*self.a41 + self.a13*self.a24*self.a31*self.a42
+        + self.a14*self.a21*self.a33*self.a42 + self.a14*self.a22*self.a31*self.a43 + self.a14*self.a23*self.a32*self.a41
+        - self.a11*self.a22*self.a34*self.a43 - self.a11*self.a23*self.a32*self.a44 - self.a11*self.a24*self.a33*self.a42
+        - self.a12*self.a21*self.a33*self.a44 - self.a12*self.a23*self.a34*self.a41 - self.a12*self.a24*self.a31*self.a43
+        - self.a13*self.a21*self.a34*self.a42 - self.a13*self.a22*self.a31*self.a44 - self.a13*self.a24*self.a32*self.a41
+        - self.a14*self.a21*self.a32*self.a43 - self.a14*self.a22*self.a33*self.a41 - self.a14*self.a23*self.a31*self.a42
+    }
+
     /// Creates a new orthographic projection matrix
     pub fn ortho(left: T, right: T, top: T, bottom: T, near: T, far: T) -> Mat4<T> {
         let two = T::one() + T::one();
@@ -320,6 +333,12 @@ mod tests {
                                          4.0, 7.0, 3.0, 2.0,
                                          3.0, 8.0, 1.0, 7.0);
         assert_eq!(expected, a.transpose());
+    }
+
+    #[test]
+    fn determinant() {
+        assert_eq!(1538.0, mat_a().determinant());
+        assert_eq!(61.0, mat_b().determinant());
     }
 }
 
