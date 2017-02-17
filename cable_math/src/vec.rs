@@ -297,6 +297,12 @@ impl<T: Num + Copy> Mul<T> for Vec2<T> {
         }
     }
 }
+impl<T: Num + Copy> MulAssign<T> for Vec2<T> {
+    fn mul_assign(&mut self, scalar: T) {
+        self.x = self.x * scalar;
+        self.y = self.y * scalar;
+    }
+}
 impl<T: Num + Copy> Mul<T> for Vec3<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
@@ -305,6 +311,13 @@ impl<T: Num + Copy> Mul<T> for Vec3<T> {
             y: self.y * scalar,
             z: self.z * scalar
         }
+    }
+}
+impl<T: Num + Copy> MulAssign<T> for Vec3<T> {
+    fn mul_assign(&mut self, scalar: T) {
+        self.x = self.x * scalar;
+        self.y = self.y * scalar;
+        self.z = self.z * scalar;
     }
 }
 impl<T: Num + Copy> Mul<T> for Vec4<T> {
@@ -316,6 +329,14 @@ impl<T: Num + Copy> Mul<T> for Vec4<T> {
             z: self.z * scalar,
             w: self.w * scalar
         }
+    }
+}
+impl<T: Num + Copy> MulAssign<T> for Vec4<T> {
+    fn mul_assign(&mut self, scalar: T) {
+        self.x = self.x * scalar;
+        self.y = self.y * scalar;
+        self.z = self.z * scalar;
+        self.w = self.w * scalar;
     }
 }
 
@@ -409,6 +430,10 @@ mod tests {
         let b = Vec2::new(-1.0, 0.0);
         let dif = (a - b).len();
         assert!(dif < 0.0001);
+
+        let mut a = Vec4::new(3, 4, 1, 2);
+        a *= 2;
+        assert_eq!(Vec4::new(6, 8, 2, 4), a);
     }
 }
 
