@@ -110,12 +110,13 @@ impl<T: Num + Copy> Mul for Mat4<T> {
         }
     }
 }
+
+// Scaling
 impl<T: Num + Copy> MulAssign for Mat4<T> {
     fn mul_assign(&mut self, other: Self) {
         *self = *self * other;
     }
 }
-
 impl<T: Num + Copy> Mul<T> for Mat4<T> {
     type Output = Self;
     fn mul(self, scalar: T) -> Self {
@@ -129,22 +130,50 @@ impl<T: Num + Copy> Mul<T> for Mat4<T> {
 }
 impl<T: Num + Copy> MulAssign<T> for Mat4<T> {
     fn mul_assign(&mut self, scalar: T) {
-        self.a11 = self.a11 * scalar;
-        self.a12 = self.a12 * scalar;
-        self.a13 = self.a13 * scalar;
-        self.a14 = self.a14 * scalar;
-        self.a21 = self.a21 * scalar;
-        self.a22 = self.a22 * scalar;
-        self.a23 = self.a23 * scalar;
-        self.a24 = self.a24 * scalar;
-        self.a31 = self.a31 * scalar;
-        self.a32 = self.a32 * scalar;
-        self.a33 = self.a33 * scalar;
-        self.a34 = self.a34 * scalar;
-        self.a41 = self.a41 * scalar;
-        self.a42 = self.a42 * scalar;
-        self.a43 = self.a43 * scalar;
-        self.a44 = self.a44 * scalar;
+        self.a11 = self.a11 * scalar; self.a12 = self.a12 * scalar; self.a13 = self.a13 * scalar; self.a14 = self.a14 * scalar;
+        self.a21 = self.a21 * scalar; self.a22 = self.a22 * scalar; self.a23 = self.a23 * scalar; self.a24 = self.a24 * scalar;
+        self.a31 = self.a31 * scalar; self.a32 = self.a32 * scalar; self.a33 = self.a33 * scalar; self.a34 = self.a34 * scalar;
+        self.a41 = self.a41 * scalar; self.a42 = self.a42 * scalar; self.a43 = self.a43 * scalar; self.a44 = self.a44 * scalar;
+    }
+}
+
+// Addition and subtraction
+impl<T: Num + Copy> Add for Mat4<T> {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Mat4 {
+            a11: self.a11 + other.a11, a12: self.a12 + other.a12, a13: self.a13 + other.a13, a14: self.a14 + other.a14,
+            a21: self.a21 + other.a21, a22: self.a22 + other.a22, a23: self.a23 + other.a23, a24: self.a24 + other.a24,
+            a31: self.a31 + other.a31, a32: self.a32 + other.a32, a33: self.a33 + other.a33, a34: self.a34 + other.a34,
+            a41: self.a41 + other.a41, a42: self.a42 + other.a42, a43: self.a43 + other.a43, a44: self.a44 + other.a44,
+        }
+    }
+}
+impl<T: Num + Copy> AddAssign for Mat4<T> {
+    fn add_assign(&mut self, other: Self) {
+        self.a11 = self.a11 + other.a11; self.a12 = self.a12 + other.a12; self.a13 = self.a13 + other.a13; self.a14 = self.a14 + other.a14;
+        self.a21 = self.a21 + other.a21; self.a22 = self.a22 + other.a22; self.a23 = self.a23 + other.a23; self.a24 = self.a24 + other.a24;
+        self.a31 = self.a31 + other.a31; self.a32 = self.a32 + other.a32; self.a33 = self.a33 + other.a33; self.a34 = self.a34 + other.a34;
+        self.a41 = self.a41 + other.a41; self.a42 = self.a42 + other.a42; self.a43 = self.a43 + other.a43; self.a44 = self.a44 + other.a44;
+    }
+}
+impl<T: Num + Copy> Sub for Mat4<T> {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Mat4 {
+            a11: self.a11 - other.a11, a12: self.a12 - other.a12, a13: self.a13 - other.a13, a14: self.a14 - other.a14,
+            a21: self.a21 - other.a21, a22: self.a22 - other.a22, a23: self.a23 - other.a23, a24: self.a24 - other.a24,
+            a31: self.a31 - other.a31, a32: self.a32 - other.a32, a33: self.a33 - other.a33, a34: self.a34 - other.a34,
+            a41: self.a41 - other.a41, a42: self.a42 - other.a42, a43: self.a43 - other.a43, a44: self.a44 - other.a44,
+        }
+    }
+}
+impl<T: Num + Copy> SubAssign for Mat4<T> {
+    fn sub_assign(&mut self, other: Self) {
+        self.a11 = self.a11 - other.a11; self.a12 = self.a12 - other.a12; self.a13 = self.a13 - other.a13; self.a14 = self.a14 - other.a14;
+        self.a21 = self.a21 - other.a21; self.a22 = self.a22 - other.a22; self.a23 = self.a23 - other.a23; self.a24 = self.a24 - other.a24;
+        self.a31 = self.a31 - other.a31; self.a32 = self.a32 - other.a32; self.a33 = self.a33 - other.a33; self.a34 = self.a34 - other.a34;
+        self.a41 = self.a41 - other.a41; self.a42 = self.a42 - other.a42; self.a43 = self.a43 - other.a43; self.a44 = self.a44 - other.a44;
     }
 }
 
@@ -249,6 +278,28 @@ mod tests {
         assert_eq!(b, a*2);
         assert_eq!(c, a*2);
         assert_eq!(c, b);
+    }
+
+    #[test]
+    fn add() {
+        let a = mat_a();
+        let b = mat_b();
+        let sum = Mat4::with_values(8.0, 15.0, 6.0, 12.0,
+                                    6.0, 9.0, 12.0, 10.0,
+                                    12.0, 8.0, 6.0, 8.0,
+                                    8.0, 13.0, 5.0, 15.0);
+        assert_eq!(sum, a + b);
+    }
+
+    #[test]
+    fn sub() {
+        let a = mat_a();
+        let b = mat_b();
+        let dif = Mat4::with_values(-6.0, -1.0, 2.0, -6.0,
+                                    4.0, 3.0, 2.0, 6.0,
+                                    6.0, -4.0, 0.0, -6.0,
+                                    4.0, -1.0, -1.0, -1.0);
+        assert_eq!(dif, a - b);
     }
 }
 
