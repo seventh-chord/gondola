@@ -157,17 +157,65 @@ impl<T: Float> Vec2<T> {
     pub fn len(&self) -> T {
         (self.x*self.x + self.y*self.y).sqrt()
     }
+
+    /// Normalizes this vector, returning a new vector with a length of 1
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    /// let a = Vec2::new(4.0, 9.0);
+    /// assert_eq!(1.0, a.normalize().len());
+    /// ```
+    pub fn normalize(self) -> Self {
+        let len = self.len();
+        Vec2 {
+            x: self.x / len,
+            y: self.y / len
+        }
+    }
 }
 impl<T: Float> Vec3<T> {
     /// Calculates the length of this vector
     pub fn len(&self) -> T {
         (self.x*self.x + self.y*self.y + self.z*self.z).sqrt()
     }
+
+    /// Normalizes this vector, returning a new vector with a length of 1
+    /// # Example
+    /// ```
+    /// use cable_math::Vec3;
+    /// let a = Vec3::new(4.0, 9.0, 2.0);
+    /// assert_eq!(1.0, a.normalize().len());
+    /// ```
+    pub fn normalize(self) -> Self {
+        let len = self.len();
+        Vec3 {
+            x: self.x / len,
+            y: self.y / len,
+            z: self.z / len
+        }
+    }
 }
 impl<T: Float> Vec4<T> {
     /// Calculates the length of this vector
     pub fn len(&self) -> T {
         (self.x*self.x + self.y*self.y + self.z*self.z + self.w*self.w).sqrt()
+    }
+
+    /// Normalizes this vector, returning a new vector with a length of 1
+    /// # Example
+    /// ```
+    /// use cable_math::Vec4;
+    /// let a = Vec4::new(4.0, 9.0, 2.0, 1.0);
+    /// assert_eq!(1.0, a.normalize().len());
+    /// ```
+    pub fn normalize(self) -> Self {
+        let len = self.len();
+        Vec4 {
+            x: self.x / len,
+            y: self.y / len,
+            z: self.z / len,
+            w: self.w / len
+        }
     }
 }
 
