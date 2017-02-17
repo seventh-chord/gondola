@@ -51,6 +51,16 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
+    /// Transposes this matrix, mirroring all its values along the diagonal
+    pub fn transpose(self) -> Mat4<T> {
+        Mat4 {
+            a11: self.a11, a12: self.a21, a13: self.a31, a14: self.a41,
+            a21: self.a12, a22: self.a22, a23: self.a32, a24: self.a42,
+            a31: self.a13, a32: self.a23, a33: self.a33, a34: self.a43,
+            a41: self.a14, a42: self.a24, a43: self.a34, a44: self.a44
+        }
+    }
+
     /// Creates a new orthographic projection matrix
     pub fn ortho(left: T, right: T, top: T, bottom: T, near: T, far: T) -> Mat4<T> {
         let two = T::one() + T::one();
@@ -300,6 +310,16 @@ mod tests {
                                     6.0, -4.0, 0.0, -6.0,
                                     4.0, -1.0, -1.0, -1.0);
         assert_eq!(dif, a - b);
+    }
+
+    #[test]
+    fn transpose() {
+        let a = mat_a();
+        let expected = Mat4::with_values(1.0, 5.0, 9.0, 6.0,
+                                         7.0, 6.0, 2.0, 6.0,
+                                         4.0, 7.0, 3.0, 2.0,
+                                         3.0, 8.0, 1.0, 7.0);
+        assert_eq!(expected, a.transpose());
     }
 }
 
