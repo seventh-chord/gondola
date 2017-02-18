@@ -3,6 +3,7 @@
 
 extern crate gl;
 extern crate glutin;
+extern crate image;
 extern crate cable_math;
 #[macro_use]
 extern crate gondola_vertex_macro;
@@ -16,7 +17,6 @@ mod vertex_array;
 mod matrix_stack;
 mod util;
 
-use glutin::*;
 use framebuffer::*;
 use color::*;
 use shader::*;
@@ -24,14 +24,16 @@ use buffer::*;
 use vertex_array::*;
 use matrix_stack::*;
 
+use glutin::*;
 use gl::types::*;
 use std::time::{Instant, Duration};
+use std::path::Path;
+use cable_math::Vec2;
 
 const VERTEX_SOURCE: &'static str = "
     #version 330 core
-    
+
     // Inputs are automatically inserted
-    
     out vec4 vert_color;
 
     uniform mat4 mvp;
@@ -43,12 +45,39 @@ const VERTEX_SOURCE: &'static str = "
 ";
 const FRAGMENT_SOURCE: &'static str = "
     #version 330 core
-
+    
     in vec4 vert_color;
     out vec4 out_color;
 
     void main() {
         out_color = vert_color;
+    }
+";
+
+const TEXTURE_VERTEX_SOURCE: &'static str = "
+    #version 330 core
+
+    // Inputs are automatically inserted
+    out vec2 vert_tex;
+
+    uniform mat4 mvp;
+
+    void main() {
+        gl_Position = mvp * vec4(position, 0.0, 1.0);
+        vert_tex = tex_coord;
+    }
+";
+const TEXTURE_FRAGMENT_SOURCE: &'static str = "
+    #version 330 core
+
+    in vec2 vert_tex;
+    out vec4 out_color;
+
+    uniform sampler2D tex_sampler;
+
+    void main() {
+        out_color = texture2D(tex_sampler, vert_tex);
+//        out_color = vec4(vert_tex, 0, 1);
     }
 ";
 
@@ -62,6 +91,20 @@ impl TestVertex {
         TestVertex {
             position: (x, y),
             color: Color::hex("ff00aa"),
+        }
+    }
+}
+
+#[derive(Vertex)]
+struct TileVertex {
+    position: Vec2<f32>,
+    tex_coord: Vec2<f32>,
+}
+impl TileVertex {
+    fn new(x: f32, y: f32, s: f32, t: f32) -> TileVertex {
+        TileVertex {
+            position: Vec2::new(x, y),
+            tex_coord: Vec2::new(s, t)
         }
     }
 }
@@ -85,7 +128,7 @@ fn main() {
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
     let shader = Shader::with_vertex::<TestVertex>(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
-    shader.bind();
+    let texture_shader = Shader::with_vertex::<TileVertex>(TEXTURE_VERTEX_SOURCE, None, Some(TEXTURE_FRAGMENT_SOURCE)).unwrap();
 
     let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
@@ -97,8 +140,20 @@ fn main() {
         TestVertex::new(0.0, 100.0),
     ];
     let mut vertex_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &test_data);
-
     let mut line_buffer = VertexBuffer::new(PrimitiveMode::LineStrip, BufferUsage::StaticDraw);
+
+    let tile_data = vec![
+        TileVertex::new(0.0, 0.0, 0.0, 1.0),
+        TileVertex::new(200.0, 0.0, 1.0, 1.0),
+        TileVertex::new(200.0, 200.0, 1.0, 0.0),
+
+        TileVertex::new(0.0, 0.0, 0.0, 1.0),
+        TileVertex::new(200.0, 200.0, 1.0, 0.0),
+        TileVertex::new(0.0, 200.0, 0.0, 0.0),
+    ];
+    let tile_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &tile_data);
+
+    let texture = texture::load(Path::new("assets/tile.png")).expect("Failed to load texture");
 
     let mut matrix_stack = MatrixStack::new();
 
@@ -130,7 +185,6 @@ fn main() {
         }
 
         matrix_stack.ortho(0.0, window_size.0 as f32, window_size.1 as f32, 0.0, -1.0, 1.0);
-        shader.set_uniform("mvp", matrix_stack.mvp());
 
         let new_data = vec![
             0.0, 0.0,
@@ -143,9 +197,20 @@ fn main() {
 
         framebuffer.bind();
         framebuffer::clear(&clear_color);
-        vertex_buffer.draw();
-        line_buffer.draw();
-        vao.draw(PrimitiveMode::Triangles, 0..3);
+        {
+            shader.bind();
+            shader.set_uniform("mvp", matrix_stack.mvp());
+
+            vertex_buffer.draw();
+            line_buffer.draw();
+            vao.draw(PrimitiveMode::Triangles, 0..3);
+
+            texture_shader.bind();
+            texture_shader.set_uniform("mvp", matrix_stack.mvp());
+
+            texture.bind(0);
+            tile_buffer.draw();
+        }
         framebuffer.blit();
 
         window.swap_buffers().unwrap();

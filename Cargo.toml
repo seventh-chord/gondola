@@ -7,6 +7,7 @@ authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 [dependencies]
 gondola_vertex_macro = { path = "gondola_vertex_macro" }
 cable_math = { path = "cable_math" }
-glutin = "0.7.4"
+glutin = "0.7.*"
 gl = "*"
+image = "0.12.*"
 

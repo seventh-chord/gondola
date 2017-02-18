@@ -3,6 +3,7 @@ use gl;
 use gl::types::*;
 use std;
 use vertex_array::PrimitiveMode;
+use cable_math::{Vec2, Vec3, Vec4};
 
 const DEFAULT_SIZE: usize = 100;
 
@@ -443,6 +444,21 @@ macro_rules! impl_vertex_component {
         }
         impl VertexComponent for ($primitive, $primitive, $primitive, $primitive) {
             fn bytes() -> usize { std::mem::size_of::<$primitive>() * 4 }
+            fn primitives() -> usize { 4 }
+            fn data_type() -> GLenum { $data_type as GLenum }
+        }
+        impl VertexComponent for Vec2<$primitive> {
+            fn bytes() -> usize { std::mem::size_of::<Vec2<$primitive>>() }
+            fn primitives() -> usize { 2 }
+            fn data_type() -> GLenum { $data_type as GLenum }
+        }
+        impl VertexComponent for Vec3<$primitive> {
+            fn bytes() -> usize { std::mem::size_of::<Vec3<$primitive>>() }
+            fn primitives() -> usize { 3 }
+            fn data_type() -> GLenum { $data_type as GLenum }
+        }
+        impl VertexComponent for Vec4<$primitive> {
+            fn bytes() -> usize { std::mem::size_of::<Vec4<$primitive>>() }
             fn primitives() -> usize { 4 }
             fn data_type() -> GLenum { $data_type as GLenum }
         }
