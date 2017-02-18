@@ -23,6 +23,7 @@ use shader::*;
 use buffer::*;
 use vertex_array::*;
 use matrix_stack::*;
+use texture::*;
 
 use glutin::*;
 use gl::types::*;
@@ -77,7 +78,6 @@ const TEXTURE_FRAGMENT_SOURCE: &'static str = "
 
     void main() {
         out_color = texture2D(tex_sampler, vert_tex);
-//        out_color = vec4(vert_tex, 0, 1);
     }
 ";
 
@@ -153,7 +153,7 @@ fn main() {
     ];
     let tile_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &tile_data);
 
-    let texture = texture::load(Path::new("assets/tile.png")).expect("Failed to load texture");
+    let mut texture = texture::load(Path::new("assets/tile.png")).expect("Failed to load texture");
 
     let mut matrix_stack = MatrixStack::new();
 
