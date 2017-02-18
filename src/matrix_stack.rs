@@ -45,18 +45,24 @@ impl MatrixStack {
         self.modelview_pointer -= 1;
     }
 
-    /// Returns the top of the modelview stack
-    pub fn peek(&self) -> Mat4<f32> {
-        self.modelview_stack[self.modelview_pointer]
-    }
-
     /// Sets the top of the modelview stack to a identity matrix
     pub fn identity(&mut self) {
         self.modelview_stack[self.modelview_pointer] = Mat4::identity();
     }
 
+    /// Applies the given translation to the peek of the modelview stack
     pub fn translate(&mut self, translation: Vec3<f32>) {
         self.modelview_stack[self.modelview_pointer] *= Mat4::translation(translation)
+    }
+
+    /// Returns the top of the modelview stack
+    pub fn peek(&self) -> Mat4<f32> {
+        self.modelview_stack[self.modelview_pointer]
+    }
+
+    /// Returns the projection matrix
+    pub fn projection(&self) -> Mat4<f32> {
+        self.projection
     }
 
     /// Returns the model-view-projection matrix

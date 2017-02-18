@@ -132,7 +132,7 @@ fn main() {
             }
         }
 
-        matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
+        matrix_stack.ortho(0.0, window_size.0 as f32, window_size.1 as f32, 0.0, -1.0, 1.0);
         shader.set_uniform("mvp", matrix_stack.mvp());
 
         let new_data = vec![

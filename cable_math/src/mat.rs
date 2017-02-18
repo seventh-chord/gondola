@@ -113,7 +113,7 @@ impl<T: Num + Copy> Mat4<T> {
     pub fn ortho(left: T, right: T, top: T, bottom: T, near: T, far: T) -> Mat4<T> {
         let two = T::one() + T::one();
         let a11 = two / (right-left);
-        let a22 = two / (top-left);
+        let a22 = two / (top-bottom);
         let a33 = two / (near-far);
 
         let a14 = T::zero() - ((right+left) / (right-left));
