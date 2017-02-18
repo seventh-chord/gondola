@@ -23,7 +23,6 @@ use shader::*;
 use buffer::*;
 use vertex_array::*;
 use matrix_stack::*;
-use texture::*;
 
 use glutin::*;
 use gl::types::*;
@@ -153,7 +152,7 @@ fn main() {
     ];
     let tile_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &tile_data);
 
-    let mut texture = texture::load(Path::new("assets/tile.png")).expect("Failed to load texture");
+    let texture = texture::load(Path::new("assets/tile.png")).expect("Failed to load texture");
 
     let mut matrix_stack = MatrixStack::new();
 

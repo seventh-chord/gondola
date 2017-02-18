@@ -2,9 +2,7 @@
 use image;
 use gl;
 use gl::types::*;
-use std::fmt;
 use std::path::{ Path, PathBuf };
-use std::error::Error;
 
 /// Attempts to load a texture from the given path
 pub fn load(path: &Path) -> Result<Texture, image::ImageError> {
