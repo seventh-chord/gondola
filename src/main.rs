@@ -30,56 +30,6 @@ use std::time::{Instant, Duration};
 use std::path::Path;
 use cable_math::Vec2;
 
-const VERTEX_SOURCE: &'static str = "
-    #version 330 core
-
-    // Inputs are automatically inserted
-    out vec4 vert_color;
-
-    uniform mat4 mvp;
-
-    void main() {
-        gl_Position = mvp * vec4(position, 0.0, 1.0);
-        vert_color = color;
-    }
-";
-const FRAGMENT_SOURCE: &'static str = "
-    #version 330 core
-    
-    in vec4 vert_color;
-    out vec4 out_color;
-
-    void main() {
-        out_color = vert_color;
-    }
-";
-
-const TEXTURE_VERTEX_SOURCE: &'static str = "
-    #version 330 core
-
-    // Inputs are automatically inserted
-    out vec2 vert_tex;
-
-    uniform mat4 mvp;
-
-    void main() {
-        gl_Position = mvp * vec4(position, 0.0, 1.0);
-        vert_tex = tex_coord;
-    }
-";
-const TEXTURE_FRAGMENT_SOURCE: &'static str = "
-    #version 330 core
-
-    in vec2 vert_tex;
-    out vec4 out_color;
-
-    uniform sampler2D tex_sampler;
-
-    void main() {
-        out_color = texture2D(tex_sampler, vert_tex);
-    }
-";
-
 #[derive(Vertex)]
 struct TestVertex {
     position: (f32, f32),
@@ -109,8 +59,7 @@ impl TileVertex {
 }
 
 fn main() {
-//    let clear_color = Color::hex("ff34aa");
-    let clear_color = Color::hex("00ff00");
+    let clear_color = Color::hex("ff34aa");
     let clear_color = clear_color.with_lightness(4.0);
 
     let window = glutin::Window::new().unwrap();
@@ -126,8 +75,8 @@ fn main() {
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
-    let shader = Shader::with_vertex::<TestVertex>(VERTEX_SOURCE, None, Some(FRAGMENT_SOURCE)).unwrap();
-    let texture_shader = Shader::with_vertex::<TileVertex>(TEXTURE_VERTEX_SOURCE, None, Some(TEXTURE_FRAGMENT_SOURCE)).unwrap();
+    let shader = Shader::from_file::<TestVertex>("assets/basic.glsl").unwrap();
+    let texture_shader = Shader::from_file::<TileVertex>("assets/textured.glsl").unwrap();
 
     let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
