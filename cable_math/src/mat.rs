@@ -89,6 +89,7 @@ impl<T: Num + Copy> Mat4<T> {
             panic!("Determinant of matrix is 0. Inverse is not defined");
         }
 
+        // What a mess :/ :/ :/
         Mat4 {
             a11: self.a22*self.a33*self.a44 + self.a23*self.a34*self.a42 + self.a24*self.a32*self.a43 - self.a22*self.a34*self.a43 - self.a23*self.a32*self.a44 - self.a24*self.a33*self.a42,
             a12: self.a12*self.a34*self.a43 + self.a13*self.a32*self.a44 + self.a14*self.a33*self.a42 - self.a12*self.a33*self.a44 - self.a13*self.a34*self.a42 - self.a14*self.a32*self.a43,

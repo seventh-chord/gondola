@@ -14,6 +14,7 @@ mod shader;
 mod buffer;
 mod vertex_array;
 mod matrix_stack;
+mod util;
 
 use glutin::*;
 use framebuffer::*;
@@ -79,9 +80,7 @@ fn main() {
 
     let mut mouse_pos: (u32, u32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
-    unsafe {
-        gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
-    }
+    util::viewport(0, 0, window_size.0, window_size.1);
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
@@ -117,9 +116,7 @@ fn main() {
                     window_size = (width, height);
                     framebuffer = FramebufferProperties::new(window_size.0, window_size.1).build().unwrap();
                     matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
-                    unsafe {
-                        gl::Viewport(0, 0, window_size.0 as i32, window_size.1 as i32);
-                    }
+                    util::viewport(0, 0, window_size.0, window_size.1);
                 },
                 Event::MouseMoved(x, y) => {
                     mouse_pos = (x as u32, window_size.1 - y as u32);
@@ -152,6 +149,8 @@ fn main() {
         framebuffer.blit();
 
         window.swap_buffers().unwrap();
+
+        util::print_errors();
 
         // Ensure loop runs at aprox. target delta
         let elapsed = start_time.elapsed();
