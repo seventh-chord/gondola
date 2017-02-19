@@ -69,8 +69,7 @@ fn main() {
     }
 
     // We need to load OpenGL before loading resources, as it is needed to load textures.
-    let resource_loader = ResourceLoader::new("assets/", cfg!(debug_assertions)) // Hotload in debug mode
-        .expect("Failed to load resources"); 
+    let mut resource_loader = ResourceLoader::new("assets/").expect("Failed to load resources"); 
 
     let mut mouse_pos: (u32, u32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
@@ -110,12 +109,10 @@ fn main() {
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
 
-    let mut file_watcher = Watcher::new();
-    file_watcher.watch_path("assets/basic.glsl");
-
     'main_loop:
     loop {
-        file_watcher.poll();
+        // Hotload assets when not in release mode
+        #[cfg(debug_assertions)] resource_loader.reload_assets();
 
         let start_time = Instant::now();
 

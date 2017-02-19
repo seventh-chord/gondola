@@ -7,21 +7,26 @@ use std::collections::HashMap;
 
 use shader::{Shader, ShaderPrototype};
 use buffer::Vertex;
-use texture::Texture;
+use texture::{Texture, TextureReference};
 
 pub struct ResourceLoader {
     resources: HashMap<PathBuf, Resource>,
 }
 
 #[derive(Debug)]
-pub enum Resource {
+struct Resource {
+    load_time: SystemTime,
+    data: ResourceData,
+}
+
+#[derive(Debug)]
+enum ResourceData {
     Shader(ShaderPrototype),
     Texture(Texture),
 }
 
 impl ResourceLoader {
-    pub fn new(path: &str, _hotload: bool) -> io::Result<ResourceLoader> {
-        // TODO: Hotloading
+    pub fn new(path: &str) -> io::Result<ResourceLoader> {
         let root = PathBuf::from(path);
         let mut loader = ResourceLoader {
             resources: HashMap::new(),
@@ -61,23 +66,60 @@ impl ResourceLoader {
     fn load_shader(&mut self, file: &Path) -> io::Result<()> {
         let mut prototype = ShaderPrototype::from_file(file)?;
         prototype.propagate_outputs();
-        self.resources.insert(PathBuf::from(file), Resource::Shader(prototype));
 
+        let resource = Resource {
+            load_time: SystemTime::now(),
+            data: ResourceData::Shader(prototype),
+        };
+        self.resources.insert(PathBuf::from(file), resource);
         Ok(())
     }
     fn load_texture(&mut self, file: &Path) -> io::Result<()> {
-        let texture = match Texture::load(file) {
-            Ok(texture) => texture,
-            Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+        let texture = Texture::load(file)?;
+
+        let resource = Resource {
+            load_time: SystemTime::now(),
+            data: ResourceData::Texture(texture),
         };
-        self.resources.insert(PathBuf::from(file), Resource::Texture(texture));
+        self.resources.insert(PathBuf::from(file), resource);
         Ok(())
+    }
+
+    /// Checks if the asset files have been modified, and reloads them if they have
+    pub fn reload_assets(&mut self) {
+        for (path, resource) in self.resources.iter_mut() {
+            let last_modified = match fs::metadata(&path) {
+                Ok(metadata) => if let Ok(last_modified) = metadata.modified() {
+                    last_modified
+                } else {
+                    panic!("std::fs::metadata(...).modified() is not supported on this platform");
+                },
+                Err(err) => {
+                    println!("Failed to access '{}': {}", path.to_string_lossy(), err);
+                    continue;
+                }
+            };
+
+            // duration_since returns Ok(_) if last_modified is later than path.last_check,
+            // indicating that the file has been modified since the last check
+            if let Err(_) = resource.load_time.duration_since(last_modified) {
+                resource.load_time = SystemTime::now();
+                match resource.data {
+                    ResourceData::Shader(ref shader) => {
+                    },
+                    ResourceData::Texture(ref mut texture) => {
+                        texture.reload();
+                    }
+                }
+                println!("File modified: '{}'", path.to_string_lossy());
+            }
+        }
     }
 
     /// Looks for a pre-loaded shader at the given path
     pub fn get_shader<P>(&self, name: P) -> Option<&ShaderPrototype> where P: AsRef<Path> {
         match self.resources.get(name.as_ref()) {
-            Some(&Resource::Shader(ref prototype)) => {
+            Some(&Resource { data: ResourceData::Shader(ref prototype), .. } ) => {
                 Some(prototype)
             },
             _ => None
@@ -97,62 +139,12 @@ impl ResourceLoader {
     }
 
     /// Retrieves a pre-loaded texture
-    pub fn get_texture<P>(&self, name: P) -> Option<&Texture> where P: AsRef<Path> {
+    pub fn get_texture<P>(&self, name: P) -> Option<TextureReference> where P: AsRef<Path> {
         match self.resources.get(name.as_ref()) {
-            Some(&Resource::Texture(ref texture)) => {
-                Some(texture)
+            Some(&Resource { data: ResourceData::Texture(ref texture), .. } ) => {
+                Some(texture.create_reference())
             },
             _ => None
-        }
-    }
-}
-
-/// A utility to detect changes in files
-pub struct WatchPath {
-    pub path: PathBuf, 
-    last_check: SystemTime,
-}
-
-pub struct Watcher {
-    paths: Vec<WatchPath>,
-}
-
-impl Watcher {
-    pub fn new() -> Watcher {
-        Watcher {
-            paths: Vec::new(),
-        }
-    }
-
-    /// Adds a path to the watch list
-    pub fn watch_path(&mut self, path: &str) {
-        self.paths.push(WatchPath {
-            path: PathBuf::from(path),
-            last_check: SystemTime::now(),
-        });
-    }
-
-    /// Checks if any of the files in the watch list have been modified
-    pub fn poll(&mut self) {
-        for path in self.paths.iter_mut() {
-            let last_modified = match fs::metadata(&path.path) {
-                Ok(metadata) => if let Ok(last_modified) = metadata.modified() {
-                    last_modified
-                } else {
-                    panic!("std::fs::metadata(...).modified() is not supported on this platform");
-                },
-                Err(err) => {
-                    println!("Failed to access '{}': {}", path.path.to_string_lossy(), err);
-                    continue;
-                }
-            };
-
-            // duration_since returns Ok(_) if last_modified is later than path.last_check,
-            // indicating that the file has been modified since the last check
-            if let Err(_) = path.last_check.duration_since(last_modified) {
-                path.last_check = SystemTime::now();
-                println!("File modified: '{}'", path.path.to_string_lossy());
-            }
         }
     }
 }
