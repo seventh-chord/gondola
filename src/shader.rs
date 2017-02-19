@@ -116,7 +116,7 @@ impl ShaderPrototype {
     }
 
     /// Converts this prototype into a shader
-    pub fn build(&self) -> Result<Shader, String> {
+    pub fn build(&self) -> io::Result<Shader> {
         let vert_src = self.vert_src.as_str();
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
         let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
@@ -126,7 +126,7 @@ impl ShaderPrototype {
 
     /// Converts this prototype into a shader, inserting input declarations for the given
     /// vertex into the fragment shader
-    pub fn build_with_vert<T>(&self) -> Result<Shader, String> where T: Vertex {
+    pub fn build_with_vert<T>(&self) -> io::Result<Shader> where T: Vertex {
         let input_decl = <T as Vertex>::gen_shader_input_decl();
         let vert_src = &prepend_code(&self.vert_src, &input_decl);
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
@@ -151,7 +151,7 @@ impl Shader {
     pub fn new(vert_src: &str,
                geom_src: Option<&str>,
                frag_src: Option<&str>)
-               -> Result<Shader, String> {
+               -> io::Result<Shader> {
         let program;
         let vert_shader = 0;
         let frag_shader;
@@ -205,7 +205,7 @@ impl Shader {
                 }
 
                 let message = str::from_utf8(&buffer).ok().expect("Shader log is not valid utf8").to_string();
-                return Err(message);
+                return Err(io::Error::new(io::ErrorKind::Other, message));
             }
         }
 
@@ -359,7 +359,7 @@ pub fn create_inputs(src: &str) -> String {
     result
 }
 
-fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, String> {
+fn compile(src: &str, shader_type: GLenum) -> io::Result<GLuint> {
     unsafe {
         let shader = gl::CreateShader(shader_type);
 
@@ -381,7 +381,7 @@ fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, String> {
             gl::DeleteShader(shader);
 
             let message = str::from_utf8(&buffer).ok().expect("Shader log is not valid utf8").to_string();
-            return Err(message);
+            return Err(io::Error::new(io::ErrorKind::Other, message));
         } else {
             return Ok(shader);
         }
@@ -420,6 +420,28 @@ impl UniformValue for u32                   { unsafe fn set_uniform(&self, locat
 impl UniformValue for (u32, u32)            { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, (*self).0 as GLuint, (*self).1 as GLuint); } }
 impl UniformValue for (u32, u32, u32)       { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint); } }
 impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint, (*self).3 as GLuint); } }
+
+/// Shorthand for loading a shader, propagating its outputs and inserting input declarations
+/// for a given vertex type
+///
+/// # Exapmple
+/// ```
+/// TODO
+/// ```
+#[macro_export]
+macro_rules! load_shader {
+    ($src:expr, $vert:ty) => {
+        {
+            match ShaderPrototype::from_file($src) {
+                Ok(mut shader) => {
+                    shader.propagate_outputs();
+                    shader.build_with_vert::<$vert>()
+                },
+                Err(err) => Err(err)
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

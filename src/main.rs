@@ -11,7 +11,7 @@ extern crate gondola_vertex_macro;
 mod framebuffer;
 mod color;
 mod texture;
-mod shader;
+#[macro_use] mod shader;
 mod buffer;
 mod vertex_array;
 mod matrix_stack;
@@ -74,17 +74,8 @@ fn main() {
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
-    let shader = {
-        let mut shader = ShaderPrototype::from_file("assets/basic.glsl").unwrap();
-        shader.propagate_outputs();
-        shader.build_with_vert::<TestVertex>().unwrap()
-    };
-
-    let texture_shader = {
-        let mut shader = ShaderPrototype::from_file("assets/textured.glsl").unwrap();
-        shader.propagate_outputs();
-        shader.build_with_vert::<TileVertex>().unwrap()
-    };
+    let shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
+    let texture_shader = load_shader!("assets/textured.glsl", TileVertex).unwrap();
 
     let mut texture = Texture::from_file("assets/tile.png").unwrap();
 
