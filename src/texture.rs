@@ -4,22 +4,6 @@ use gl;
 use gl::types::*;
 use std::path::{ Path, PathBuf };
 
-/// Attempts to load a texture from the given path
-pub fn load(path: &Path) -> Result<Texture, image::ImageError> {
-    let image = image::open(path)?;
-    let image = match image {
-        image::DynamicImage::ImageRgba8(image) => image,
-        other => other.to_rgba() // Convert other formats to RGBA
-    }; 
-
-    // Note that image dereferences to &[u8]
-    let mut texture = Texture::with_data(&image,
-                                         image.width(), image.height(),
-                                         TextureFormat::RGBA_8);
-    texture.source_file = Some(PathBuf::from(path));
-    Ok(texture)
-}
-
 #[derive(Debug)]
 pub struct Texture {
     source_file: Option<PathBuf>, // If this texture did not originate from a file, this will be None 
@@ -30,6 +14,24 @@ pub struct Texture {
 }
 
 impl Texture {
+    /// Attempts to load a texture from the given path
+    pub fn load(path: &Path) -> Result<Texture, image::ImageError> {
+        let image = image::open(path)?;
+        let image = match image {
+            image::DynamicImage::ImageRgba8(image) => image,
+            other => other.to_rgba() // Convert other formats to RGBA
+        }; 
+
+        // Note that image dereferences to &[u8]
+        let mut texture = Texture::with_data(&image,
+                                             image.width(), image.height(),
+                                             TextureFormat::RGBA_8);
+        texture.source_file = Some(PathBuf::from(path));
+        Ok(texture)
+    }
+
+    /// Creates a new texture with the given data. Usually the `Texture::load(path)` function
+    /// should be used instead.
     pub fn with_data(data: &[u8], width: u32, height: u32, format: TextureFormat) -> Texture {
         let mut texture = 0;
 
