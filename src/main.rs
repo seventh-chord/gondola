@@ -16,19 +16,18 @@ mod buffer;
 mod vertex_array;
 mod matrix_stack;
 mod util;
+mod loading;
 
 use framebuffer::*;
 use color::*;
-use shader::*;
 use buffer::*;
 use vertex_array::*;
 use matrix_stack::*;
-use texture::*;
+use loading::*;
 
 use glutin::*;
 use gl::types::*;
 use std::time::{Instant, Duration};
-use std::path::Path;
 use cable_math::Vec2;
 
 #[derive(Vertex)]
@@ -64,11 +63,14 @@ fn main() {
     let clear_color = clear_color.with_lightness(4.0);
 
     let window = glutin::Window::new().unwrap();
-
     unsafe {
         window.make_current().unwrap();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
+
+    // We need to load OpenGL before loading resources, as it is needed to load textures.
+    let resource_loader = ResourceLoader::new("assets/", cfg!(debug_assertions)) // Hotload in debug mode
+        .expect("Failed to load resources"); 
 
     let mut mouse_pos: (u32, u32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
@@ -76,8 +78,9 @@ fn main() {
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
-    let shader = Shader::from_file::<TestVertex>("assets/basic.glsl").unwrap();
-    let texture_shader = Shader::from_file::<TileVertex>("assets/textured.glsl").unwrap();
+    let shader = resource_loader.get_shader_with_vert::<TestVertex>("assets/basic.glsl").unwrap();
+    let texture_shader = resource_loader.get_shader_with_vert::<TileVertex>("assets/textured.glsl").unwrap();
+    let texture = resource_loader.get_texture("assets/tile.png").expect("Failed to load texture");
 
     let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
@@ -102,15 +105,18 @@ fn main() {
     ];
     let tile_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &tile_data);
 
-    let texture = Texture::load(Path::new("assets/tile.png")).expect("Failed to load texture");
-
     let mut matrix_stack = MatrixStack::new();
 
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
 
+    let mut file_watcher = Watcher::new();
+    file_watcher.watch_path("assets/basic.glsl");
+
     'main_loop:
     loop {
+        file_watcher.poll();
+
         let start_time = Instant::now();
 
         for event in window.poll_events() {

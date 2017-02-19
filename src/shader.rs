@@ -3,21 +3,23 @@ use gl;
 use gl::types::*;
 use std::ptr;
 use std::str;
-use std::path::Path;
 use std::fs::File;
-use std::io::{ BufRead, BufReader };
+use std::path::Path;
+use std::io;
+use std::io::{BufRead, BufReader};
 use std::ffi::CString;
 use buffer::Vertex;
 use cable_math::{Mat4, Vec2, Vec3, Vec4};
 
-pub struct Shader {
-    program: GLuint,
-    vert_shader: GLuint,
-    geom_shader: Option<GLuint>,
-    frag_shader: Option<GLuint>
+/// A shader that has not yet been fully compiled
+#[derive(Debug)]
+pub struct ShaderPrototype {
+    vert_src: String,
+    frag_src: String,
+    geom_src: String,
 }
 
-impl Shader {
+impl ShaderPrototype {
     /// Loads a shader from a file. The file should contain all the shader stages, with
     /// each shader stage prepended by `-- {name}`, where name is one of `VERT`, `FRAG`
     /// or `GEOM`.
@@ -34,7 +36,7 @@ impl Shader {
     ///     color = vec4(1.0, 0.0, 0.0, 1.0); // Draw in red
     /// }
     /// ```
-    pub fn from_file<T>(path: &str) -> Result<Shader, String> where T: Vertex {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> io::Result<ShaderPrototype> {
         let mut vert_src = String::new();
         let mut frag_src = String::new();
         let mut geom_src = String::new();
@@ -42,16 +44,10 @@ impl Shader {
         enum Target { Vert, Frag, Geom }
         let mut current = None;
 
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(err) => return Err(format!("{}", err))
-        };
+        let file = File::open(path)?;
         let reader = BufReader::new(file);
         for line in reader.lines() {
-            let line = match line {
-                Ok(line) => line,
-                Err(err) => return Err(format!("{}", err))
-            };
+            let line = line?;
             let line = line.trim();
 
             if line.starts_with("--") {
@@ -60,7 +56,10 @@ impl Shader {
                     "VERT" => current = Some(Target::Vert),
                     "FRAG" => current = Some(Target::Frag),
                     "GEOM" => current = Some(Target::Geom),
-                    _ => return Err(format!("Expected 'VERT', 'FRAG' or 'GEOM', found {}", &line[2..]))
+                    _ => {
+                        let message = format!("Expected 'VERT', 'FRAG' or 'GEOM', found {}", &line[2..]);
+                        return Err(io::Error::new(io::ErrorKind::Other, message));
+                    }
                 }
             } else {
                 match current {
@@ -81,44 +80,74 @@ impl Shader {
             }
         }
 
-        // Propagates outputs
-        let vert_out = create_inputs(&vert_src);
-        if geom_src.is_empty() {
-            if !frag_src.is_empty() {
-                frag_src = prepend_code(&frag_src, &vert_out);
+        Ok(ShaderPrototype {
+            vert_src: vert_src,
+            geom_src: geom_src,
+            frag_src: frag_src
+        })
+    }
+
+    /// Creates a new shader prototype from the given string code literals.
+    pub fn new_prototype(vert_src: &str, geom_src: &str, frag_src: &str) -> ShaderPrototype {
+        ShaderPrototype {
+            vert_src: String::from(vert_src),
+            geom_src: String::from(geom_src),
+            frag_src: String::from(frag_src),
+        }
+    }
+
+    /// Inserts input declarations matching the output declarations of a previous
+    /// shader stage into the next shader stage. For example, if the vertex source
+    /// contains `out vec4 color;`, `in vec4 color;` will be added to the either 
+    /// the geometry or the fragment shader, depending on which one exists.
+    pub fn propagate_outputs(&mut self) {
+        let vert_out = create_inputs(&self.vert_src);
+        if self.geom_src.is_empty() {
+            if !self.frag_src.is_empty() {
+                self.frag_src = prepend_code(&self.frag_src, &vert_out);
             }
         } else {
-            if !frag_src.is_empty() {
-                let geom_out = create_inputs(&geom_src);
-                frag_src = prepend_code(&frag_src, &geom_out);
+            if !self.frag_src.is_empty() {
+                let geom_out = create_inputs(&self.geom_src);
+                self.frag_src = prepend_code(&self.frag_src, &geom_out);
             }
-            geom_src = prepend_code(&geom_src, &vert_out);
+            self.geom_src = prepend_code(&self.geom_src, &vert_out);
         }
+    }
 
-        let input_decl = <T as Vertex>::gen_shader_input_decl();
-        vert_src = prepend_code(&vert_src, &input_decl);
-
-        let vert_src = vert_src.as_str();
-        let frag_src = if frag_src.is_empty() { None } else { Some(frag_src.as_str()) };
-        let geom_src = if geom_src.is_empty() { None } else { Some(geom_src.as_str()) };
+    /// Converts this prototype into a shader
+    pub fn build(&self) -> Result<Shader, String> {
+        let vert_src = self.vert_src.as_str();
+        let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
+        let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
 
         Shader::new(vert_src, geom_src, frag_src)
     }
 
-    /// Creates a new shader, inserting input declarations for the given vert type at the
-    /// beginning of the vert shader
-    pub fn with_vert<T>(vert_src: &str,
-                          geom_src: Option<&str>,
-                          frag_src: Option<&str>)
-                          -> Result<Shader, String>
-                          where T: Vertex {
+    /// Converts this prototype into a shader, inserting input declarations for the given
+    /// vertex into the fragment shader
+    pub fn build_with_vert<T>(&self) -> Result<Shader, String> where T: Vertex {
         let input_decl = <T as Vertex>::gen_shader_input_decl();
-        let vert_src = &prepend_code(vert_src, &input_decl);
-        Shader::new(vert_src , geom_src, frag_src)
-    }
+        let vert_src = &prepend_code(&self.vert_src, &input_decl);
+        let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
+        let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
 
-    /// Constructs a glsl shader from src. Note that the geom and frag shaders are
-    /// optional
+        Shader::new(vert_src, geom_src, frag_src)
+    }
+}
+
+/// A OpenGL shader that is ready for use
+#[derive(Debug, Hash)]
+pub struct Shader {
+    program: GLuint,
+    vert_shader: GLuint,
+    geom_shader: Option<GLuint>,
+    frag_shader: Option<GLuint>
+}
+
+impl Shader {
+    /// Constructs a glsl shader from source. Note that the geometry and fragment shaders are
+    /// optional, as they are not needed for all purposes.
     pub fn new(vert_src: &str,
                geom_src: Option<&str>,
                frag_src: Option<&str>)
@@ -271,6 +300,8 @@ pub fn prepend_code(src: &str, code: &str) -> String {
 /// Finds all variables marked as `out` in the given glsl shader and generates
 /// corresponding ´in´ declarations for the next shader stage. These declarations
 /// can be inserted into the next stage with `prepend_code()`
+///
+/// TODO: This does not take the special format needed for geometry shaders into account!
 ///
 /// # Example
 /// ```
