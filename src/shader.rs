@@ -36,7 +36,7 @@ impl ShaderPrototype {
     ///     color = vec4(1.0, 0.0, 0.0, 1.0); // Draw in red
     /// }
     /// ```
-    pub fn from_file<P: AsRef<Path>>(path: P) -> io::Result<ShaderPrototype> {
+    pub fn from_file<P>(path: P) -> io::Result<ShaderPrototype> where P: AsRef<Path> {
         let mut vert_src = String::new();
         let mut frag_src = String::new();
         let mut geom_src = String::new();

@@ -3,42 +3,26 @@ use image;
 use gl;
 use gl::types::*;
 use std::io;
-use std::path::{ Path, PathBuf };
+use std::time::SystemTime;
+use std::path::{Path, PathBuf};
 
 /// A wraper around a OpenGL texture object which can be modified
 #[derive(Debug)]
 pub struct Texture {
     source_file: Option<PathBuf>, // If this texture did not originate from a file, this will be None 
+    load_time: Option<SystemTime>,
+
     texture: GLuint,
     pub format: TextureFormat,
     pub width: u32,
     pub height: u32,
 }
 
-/// A reference to a OpenGL texture object which can not be modified. Note that the underlying
-/// data, represented by a [`Texture`](struct.Texture.html), can be modified while this object
-/// is in use. If the texture this reference reffers to is dropped, this texture reference will
-/// either not work or show another texture.
-#[derive(Debug, Clone, Copy)]
-pub struct TextureReference {
-    texture: GLuint,
-}
-
-impl Texture {
-    /// Attempts to load a texture from the given path
-    pub fn load(path: &Path) -> io::Result<Texture> {
-        let image = match image::open(path) {
-            Ok(image) => image,
-            Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
-        };
-        let image = match image {
-            image::DynamicImage::ImageRgba8(image) => image,
-            other => other.to_rgba() // Convert other formats to RGBA
-        }; 
-
+impl Texture { 
+    /// Creates a texture with the image data from a file
+    pub fn from_file<P>(path: P) -> io::Result<Texture> where P: AsRef<Path> {
         let mut texture = Texture::new();
-        texture.load_data(&image, image.width(), image.height(), TextureFormat::RGBA_8);
-        texture.source_file = Some(PathBuf::from(path));
+        texture.load_file(path)?;
         Ok(texture)
     }
 
@@ -55,11 +39,45 @@ impl Texture {
 
         Texture {
             source_file: None,
+            load_time: None,
+
             texture: texture,
             format: TextureFormat::RGB_8,
             width: 0,
             height: 0,
         }
+    }
+
+    /// Attempts to load data from a file into this texture
+    pub fn load_file<P>(&mut self, path: P) -> io::Result<()> where P: AsRef<Path> {
+        let image = load_image(path.as_ref())?;
+
+        self.load_data(&image, image.width(), image.height(), TextureFormat::RGBA_8);
+        self.load_time = Some(SystemTime::now());
+        self.source_file = Some(PathBuf::from(path.as_ref()));
+
+        Ok(())
+    }
+
+    /// If this texture has been loaded from a file this method checks if the file has
+    /// been modified, and in that case reloads it. If the texture has not been loaded
+    /// from a file, or the file from which it was loaded has not been modified, this
+    /// function returns without doing anything.
+    pub fn reload(&mut self) -> io::Result<()> {
+        if self.source_file.is_some() {
+            if self.load_time.is_none() {
+                self.load_time = Some(SystemTime::now());
+            }
+
+            if let Some(load_time) = self.load_time {
+                let source_file = self.source_file.clone().unwrap();
+                if ::util::modified_since(&source_file, load_time)? {
+                    self.load_file(&source_file)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Sets the data this texture points to
@@ -76,20 +94,6 @@ impl Texture {
         self.width = width;
         self.height = height;
         self.format = format;
-    }
-
-    /// Reloads this texture from source, if it was originally loaded from a file 
-    pub fn reload(&mut self) -> io::Result<()> {
-        if self.source_file.is_some() {
-            let source_file = self.source_file.clone().unwrap();
-            let new = Texture::load(&source_file)?;
-            // This will not be executed if loading fails
-            // Replace with new texture
-            unsafe { gl::DeleteTextures(1, &self.texture); }
-            *self = new;
-        }
-
-        Ok(())
     }
 
     /// Binds this texture to the given texture unit
@@ -118,13 +122,6 @@ impl Texture {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, TextureFilter::mipmap_filter(min, mipmap_min) as GLint);
         }
     }
-
-    /// Creates a reference to this texture which can not be modified
-    pub fn create_reference(&self) -> TextureReference {
-        TextureReference {
-            texture: self.texture,
-        }
-    }
 }
 
 impl Drop for Texture {
@@ -135,18 +132,17 @@ impl Drop for Texture {
     }
 }
 
-impl TextureReference {
-    /// Binds this texture to the given texture unit
-    pub fn bind(&self, unit: u32) {
-        unsafe {
-            if gl::IsTexture(self.texture) != gl::TRUE {
-                // Draw MISSING-NO texture
-            } else {
-                gl::ActiveTexture(gl::TEXTURE0 + unit as GLenum);
-                gl::BindTexture(gl::TEXTURE_2D, self.texture);
-            }
-        }
-    }
+/// Loads image data from a file
+fn load_image(path: &Path) -> io::Result<image::RgbaImage> {
+    let image = match image::open(path) {
+        Ok(image) => image,
+        Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
+    };
+    let image = match image {
+        image::DynamicImage::ImageRgba8(image) => image,
+        other => other.to_rgba() // Convert other formats to RGBA
+    };
+    Ok(image)
 }
 
 /// Represents an OpenGL texture filter. Use in OpenGL functions like ´TextureFilter::* as GLenum´

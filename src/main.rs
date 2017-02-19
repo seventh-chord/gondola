@@ -16,14 +16,14 @@ mod buffer;
 mod vertex_array;
 mod matrix_stack;
 mod util;
-mod loading;
 
 use framebuffer::*;
 use color::*;
 use buffer::*;
 use vertex_array::*;
 use matrix_stack::*;
-use loading::*;
+use texture::*;
+use shader::*;
 
 use glutin::*;
 use gl::types::*;
@@ -68,18 +68,25 @@ fn main() {
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
 
-    // We need to load OpenGL before loading resources, as it is needed to load textures.
-    let mut resource_loader = ResourceLoader::new("assets/").expect("Failed to load resources"); 
-
     let mut mouse_pos: (u32, u32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
     util::viewport(0, 0, window_size.0, window_size.1);
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
-    let shader = resource_loader.get_shader_with_vert::<TestVertex>("assets/basic.glsl").unwrap();
-    let texture_shader = resource_loader.get_shader_with_vert::<TileVertex>("assets/textured.glsl").unwrap();
-    let texture = resource_loader.get_texture("assets/tile.png").expect("Failed to load texture");
+    let shader = {
+        let mut shader = ShaderPrototype::from_file("assets/basic.glsl").unwrap();
+        shader.propagate_outputs();
+        shader.build_with_vert::<TestVertex>().unwrap()
+    };
+
+    let texture_shader = {
+        let mut shader = ShaderPrototype::from_file("assets/textured.glsl").unwrap();
+        shader.propagate_outputs();
+        shader.build_with_vert::<TileVertex>().unwrap()
+    };
+
+    let mut texture = Texture::from_file("assets/tile.png").unwrap();
 
     let mut vbo = PrimitiveBuffer::new(BufferTarget::Array, BufferUsage::StaticDraw, DataType::Float);
     let vao = VertexArray::new();
@@ -112,7 +119,9 @@ fn main() {
     'main_loop:
     loop {
         // Hotload assets when not in release mode
-        #[cfg(debug_assertions)] resource_loader.reload_assets();
+        #[cfg(debug_assertions)] {
+            texture.reload().unwrap_or_else(|err| println!("Failed to reload texture: {}", err));
+        }
 
         let start_time = Instant::now();
 
