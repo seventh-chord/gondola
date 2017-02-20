@@ -101,16 +101,18 @@ impl ShaderPrototype {
     /// contains `out vec4 color;`, `in vec4 color;` will be added to the either 
     /// the geometry or the fragment shader, depending on which one exists.
     pub fn propagate_outputs(&mut self) {
-        let vert_out = create_inputs(&self.vert_src);
         if self.geom_src.is_empty() {
+            let vert_out = create_inputs(&self.vert_src, false);
             if !self.frag_src.is_empty() {
                 self.frag_src = prepend_code(&self.frag_src, &vert_out);
             }
         } else {
             if !self.frag_src.is_empty() {
-                let geom_out = create_inputs(&self.geom_src);
+                let geom_out = create_inputs(&self.geom_src, false);
                 self.frag_src = prepend_code(&self.frag_src, &geom_out);
             }
+            
+            let vert_out = create_inputs(&self.vert_src, true);
             self.geom_src = prepend_code(&self.geom_src, &vert_out);
         }
     }
@@ -299,9 +301,10 @@ pub fn prepend_code(src: &str, code: &str) -> String {
 
 /// Finds all variables marked as `out` in the given glsl shader and generates
 /// corresponding ´in´ declarations for the next shader stage. These declarations
-/// can be inserted into the next stage with `prepend_code()`
+/// can be inserted into the next stage with `prepend_code()`.
 ///
-/// TODO: This does not take the special format needed for geometry shaders into account!
+/// Note that this takes the format required for geometry shaders into account. If
+/// `for_geom` is set to `true` inputs will be marked as arrays.
 ///
 /// # Example
 /// ```
@@ -316,7 +319,7 @@ pub fn prepend_code(src: &str, code: &str) -> String {
 ///
 /// assert_eq!("in vec4 color; in vec2 tex;", inputs);
 /// ```
-pub fn create_inputs(src: &str) -> String {
+pub fn create_inputs(src: &str, for_geom: bool) -> String {
     let pattern = "out";
     let mut result = String::new();
 
@@ -350,6 +353,7 @@ pub fn create_inputs(src: &str) -> String {
             if !result.is_empty() { result.push(' '); }
             result.push_str("in ");
             result.push_str(&src[start..end]);
+            if for_geom { result.push_str("[]"); }
             result.push(';');
         } else {
             break 'outer;
@@ -456,8 +460,11 @@ mod tests {
             // Rest of shader ommited
         ";
 
-        let inputs = create_inputs(shader);
-
+        let inputs = create_inputs(shader, false);
         assert_eq!("in vec4 color; in vec2 tex;", inputs);
+
+        let geom_inputs = create_inputs(shader, true);
+        assert_eq!("in vec4 color[]; in vec2 tex[];", geom_inputs);
     }
 }
+

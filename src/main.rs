@@ -47,13 +47,11 @@ impl TestVertex {
 #[derive(Vertex)]
 struct TileVertex {
     position: Vec2<f32>,
-    tex_coord: Vec2<f32>,
 }
 impl TileVertex {
-    fn new(x: f32, y: f32, s: f32, t: f32) -> TileVertex {
+    fn new(x: f32, y: f32) -> TileVertex {
         TileVertex {
             position: Vec2::new(x, y),
-            tex_coord: Vec2::new(s, t)
         }
     }
 }
@@ -75,7 +73,10 @@ fn main() {
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
     let shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
-    let texture_shader = load_shader!("assets/textured.glsl", TileVertex).unwrap();
+
+    let tile_shader = load_shader!("assets/tile.glsl", TileVertex).unwrap();
+    tile_shader.bind();
+    tile_shader.set_uniform("size", (200.0, 200.0));
 
     let mut texture = Texture::from_file("assets/tile.png").unwrap();
 
@@ -92,15 +93,12 @@ fn main() {
     let mut line_buffer = VertexBuffer::new(PrimitiveMode::LineStrip, BufferUsage::StaticDraw);
 
     let tile_data = vec![
-        TileVertex::new(0.0, 0.0, 0.0, 1.0),
-        TileVertex::new(200.0, 0.0, 1.0, 1.0),
-        TileVertex::new(200.0, 200.0, 1.0, 0.0),
-
-        TileVertex::new(0.0, 0.0, 0.0, 1.0),
-        TileVertex::new(200.0, 200.0, 1.0, 0.0),
-        TileVertex::new(0.0, 200.0, 0.0, 0.0),
+        TileVertex::new(100.0, 100.0),
+        TileVertex::new(300.0, 100.0),
+        TileVertex::new(300.0, 300.0),
+        TileVertex::new(100.0, 300.0),
     ];
-    let tile_buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &tile_data);
+    let tile_buffer = VertexBuffer::from_data(PrimitiveMode::Points, &tile_data);
 
     let mut matrix_stack = MatrixStack::new();
 
@@ -157,8 +155,8 @@ fn main() {
             line_buffer.draw();
             vao.draw(PrimitiveMode::Triangles, 0..3);
 
-            texture_shader.bind();
-            texture_shader.set_uniform("mvp", matrix_stack.mvp());
+            tile_shader.bind();
+            tile_shader.set_uniform("mvp", matrix_stack.mvp());
 
             texture.bind(0);
             tile_buffer.draw();
