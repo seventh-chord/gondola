@@ -5,6 +5,7 @@ use gl::types::*;
 use std::io;
 use std::time::SystemTime;
 use std::path::{Path, PathBuf};
+use util::loading;
 
 /// A wraper around a OpenGL texture object which can be modified
 #[derive(Debug)]
@@ -71,7 +72,7 @@ impl Texture {
 
             if let Some(load_time) = self.load_time {
                 let source_file = self.source_file.clone().unwrap();
-                if ::util::modified_since(&source_file, load_time)? {
+                if loading::modified_since(&source_file, load_time)? {
                     self.load_file(&source_file)?;
                 }
             }

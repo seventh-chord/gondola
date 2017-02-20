@@ -8,14 +8,15 @@ extern crate cable_math;
 #[macro_use]
 extern crate gondola_vertex_macro;
 
-mod framebuffer;
-mod color;
-mod texture;
-#[macro_use] mod shader;
-mod buffer;
-mod vertex_array;
-mod matrix_stack;
-mod util;
+pub mod framebuffer;
+pub mod color;
+pub mod texture;
+#[macro_use]
+pub mod shader;
+pub mod buffer;
+pub mod vertex_array;
+pub mod matrix_stack;
+pub mod util;
 
 use framebuffer::*;
 use color::*;
@@ -24,6 +25,8 @@ use vertex_array::*;
 use matrix_stack::*;
 use texture::*;
 use shader::*;
+use util::graphics;
+use util::loading;
 
 use glutin::*;
 use gl::types::*;
@@ -68,11 +71,11 @@ fn main() {
 
     let mut mouse_pos: (u32, u32) = (0, 0);
     let mut window_size = window.get_inner_size_points().unwrap();
-    util::viewport(0, 0, window_size.0, window_size.1);
+    graphics::viewport(0, 0, window_size.0, window_size.1);
 
     let mut framebuffer = FramebufferProperties::new(window_size.0, window_size.1) .build().unwrap();
 
-    let shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
+    let mut shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
 
     let tile_shader = load_shader!("assets/tile.glsl", TileVertex).unwrap();
     tile_shader.bind();
@@ -105,10 +108,15 @@ fn main() {
     let mut delta: u64 = 16;
     let target_delta = Duration::from_millis(14);
 
+    let mut resource_refresher = loading::ResourceRefresher::new();
+
     'main_loop:
     loop {
         // Hotload assets when not in release mode
         #[cfg(debug_assertions)] {
+            if resource_refresher.check("assets/basic.glsl") {
+                shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
+            }
             texture.reload().unwrap_or_else(|err| println!("Failed to reload texture: {}", err));
         }
 
@@ -121,7 +129,7 @@ fn main() {
                     window_size = (width, height);
                     framebuffer = FramebufferProperties::new(window_size.0, window_size.1).build().unwrap();
                     matrix_stack.ortho(0.0, window_size.0 as f32, 0.0, window_size.1 as f32, -1.0, 1.0);
-                    util::viewport(0, 0, window_size.0, window_size.1);
+                    graphics::viewport(0, 0, window_size.0, window_size.1);
                 },
                 Event::MouseMoved(x, y) => {
                     mouse_pos = (x as u32, window_size.1 - y as u32);
@@ -165,7 +173,7 @@ fn main() {
 
         window.swap_buffers().unwrap();
 
-        util::print_errors();
+        graphics::print_errors();
 
         // Ensure loop runs at aprox. target delta
         let elapsed = start_time.elapsed();

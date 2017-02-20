@@ -428,9 +428,18 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 /// Shorthand for loading a shader, propagating its outputs and inserting input declarations
 /// for a given vertex type
 ///
-/// # Exapmple
+/// # Example
 /// ```
-/// TODO
+/// use shader;
+/// use cable_math::Vec2;
+/// use buffer::Vertex;
+///
+/// #[derive(Vertex)]
+/// struct TestVertex {
+///     position: Vec2<f32>,
+/// }
+///
+/// let shader = load_shader!("assets/basic.glsl", TestVertex);
 /// ```
 #[macro_export]
 macro_rules! load_shader {
