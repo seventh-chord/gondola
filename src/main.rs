@@ -117,7 +117,9 @@ fn main() {
             if resource_refresher.check("assets/basic.glsl") {
                 shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
             }
-            texture.reload().unwrap_or_else(|err| println!("Failed to reload texture: {}", err));
+            if resource_refresher.check("assets/tile.png") {
+                texture.load_file("assets/tile.png").unwrap_or_else(|err| println!("Failed to reload texture: {}", err));
+            }
         }
 
         let start_time = Instant::now();

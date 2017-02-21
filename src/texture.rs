@@ -3,16 +3,11 @@ use image;
 use gl;
 use gl::types::*;
 use std::io;
-use std::time::SystemTime;
-use std::path::{Path, PathBuf};
-use util::loading;
+use std::path::Path;
 
 /// A wraper around a OpenGL texture object which can be modified
 #[derive(Debug)]
 pub struct Texture {
-    source_file: Option<PathBuf>, // If this texture did not originate from a file, this will be None 
-    load_time: Option<SystemTime>,
-
     texture: GLuint,
     pub format: TextureFormat,
     pub width: u32,
@@ -39,9 +34,6 @@ impl Texture {
         }
 
         Texture {
-            source_file: None,
-            load_time: None,
-
             texture: texture,
             format: TextureFormat::RGB_8,
             width: 0,
@@ -49,35 +41,20 @@ impl Texture {
         }
     }
 
-    /// Attempts to load data from a file into this texture
+    /// Attempts to load data from the given file into this texture. Note that it is
+    /// usually more convenient to create a new texture from a file using
+    /// [`from_file(path)`](struct.Texture.html#method.from_file)
+    ///
+    /// # Example
+    /// ```
+    /// use texture::Texture;
+    ///
+    /// let texture = Texture::new();
+    /// texture.load_file("assets/test.png").expect("Failed to load texture");
+    /// ```
     pub fn load_file<P>(&mut self, path: P) -> io::Result<()> where P: AsRef<Path> {
         let image = load_image(path.as_ref())?;
-
         self.load_data(&image, image.width(), image.height(), TextureFormat::RGBA_8);
-        self.load_time = Some(SystemTime::now());
-        self.source_file = Some(PathBuf::from(path.as_ref()));
-
-        Ok(())
-    }
-
-    /// If this texture has been loaded from a file this method checks if the file has
-    /// been modified, and in that case reloads it. If the texture has not been loaded
-    /// from a file, or the file from which it was loaded has not been modified, this
-    /// function returns without doing anything.
-    pub fn reload(&mut self) -> io::Result<()> {
-        if self.source_file.is_some() {
-            if self.load_time.is_none() {
-                self.load_time = Some(SystemTime::now());
-            }
-
-            if let Some(load_time) = self.load_time {
-                let source_file = self.source_file.clone().unwrap();
-                if loading::modified_since(&source_file, load_time)? {
-                    self.load_file(&source_file)?;
-                }
-            }
-        }
-
         Ok(())
     }
 
