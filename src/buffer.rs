@@ -163,7 +163,7 @@ impl <T: Vertex> VertexBuffer<T> {
         let end = index + data.len();
 
         if end > self.allocated {
-            self.allocate(end); // Maybe we should allocate some extra space
+            self.ensure_allocated(end); // This currently does not allocate extra space
         }
 
         if end > self.vertex_count {
@@ -193,8 +193,9 @@ impl <T: Vertex> VertexBuffer<T> {
     }
 
     /// Sets the number of vertices that can be stored in this buffer without
-    /// realocating memory.
-    pub fn allocate(&mut self, new_size: usize) {
+    /// realocating memory. If the buffer allready has capacity for the given
+    /// number of vertices no space will be allocated.
+    pub fn ensure_allocated(&mut self, new_size: usize) {
         // Only realocate if necessary
         if new_size > self.allocated {
             let mut new_vbo = 0;
