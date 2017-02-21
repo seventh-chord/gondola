@@ -1,7 +1,6 @@
 
 #![recursion_limit = "128"]
 
-extern crate gl;
 extern crate proc_macro;
 extern crate syn;
 #[macro_use]
@@ -34,8 +33,8 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|field| field.ty.clone())
                 .map(|ty| {
                     quote! {
-                        let primitives = <#ty as VertexComponent>::primitives();
-                        let data_type = <#ty as VertexComponent>::data_type();
+                        let primitives = <#ty as gondola::buffer::VertexComponent>::primitives();
+                        let data_type = <#ty as gondola::buffer::VertexComponent>::data_type();
 
                         unsafe {
                             gl::EnableVertexAttribArray(index);
@@ -78,7 +77,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                             "layout(location = {index}) in {glsl_type} {name};",
                             name = stringify!(#ident),
                             index = index,
-                            glsl_type = <#ty as VertexComponent>::get_glsl_type(),
+                            glsl_type = <#ty as gondola::buffer::VertexComponent>::get_glsl_type(),
                         );
                         result.push_str(&line);
                         result.push('\n');
@@ -100,12 +99,14 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             // Join all the code into a single implementation
             quote! {
                 #[allow(unused_assignments)] // We create some unused asignments in setup_attrib_pointers_impl
-                impl Vertex for #ident {
+                impl gondola::buffer::Vertex for #ident {
                     fn bytes_per_vertex() -> usize {
                         #bytes_per_vertex_impl
                     }
 
                     fn setup_attrib_pointers() {
+                        use gl;
+                        use gl::types::*;
                         #setup_attrib_pointers_impl
                     }
 
