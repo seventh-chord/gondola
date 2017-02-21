@@ -1,10 +1,13 @@
 
+//! Framebuffers are used to draw to off-screen render targets
+
 use gl;
 use std;
 use gl::types::*;
 use texture::TextureFormat;
 use color::Color;
 
+/// Utility to specify the format of a framebuffer before building it.
 pub struct FramebufferProperties {
     pub width: u32,
     pub height: u32,
@@ -20,6 +23,7 @@ impl FramebufferProperties {
         }
     }
 
+    /// Creates a new framebuffer with these properties
     pub fn build(&self) -> Result<Framebuffer, String> {
         Framebuffer::new(&self)
     }

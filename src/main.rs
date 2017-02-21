@@ -14,14 +14,12 @@ pub mod texture;
 #[macro_use]
 pub mod shader;
 pub mod buffer;
-pub mod vertex_array;
 pub mod matrix_stack;
 pub mod util;
 
 use framebuffer::*;
 use color::*;
 use buffer::*;
-use vertex_array::*;
 use matrix_stack::*;
 use texture::*;
 use shader::*;
@@ -151,7 +149,7 @@ fn main() {
             100.0, 0.0,
             mouse_pos.0 as f32, mouse_pos.1 as f32
         ];
-        vbo.put_floats(new_data);
+        vbo.put_floats(&new_data);
 
         vertex_buffer.put(0, &[TestVertex::new(mouse_pos.0 as f32, mouse_pos.1 as f32)]);
 

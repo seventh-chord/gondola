@@ -1,4 +1,10 @@
 
+//! Utilities for loading and using glsl shaders.
+//!
+//! [`ShaderPrototype`](struct.ShaderPrototype.html) is used to load and
+//! modify the source of a shader. It can then be converted to an actual
+//! [`Shader`](struct.Shader.html) which can be used for rendering.
+
 use gl;
 use gl::types::*;
 use std::ptr;

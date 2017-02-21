@@ -1,4 +1,6 @@
 
+//! Utilities for loading and using textures
+
 use image;
 use gl;
 use gl::types::*;
@@ -15,7 +17,7 @@ pub struct Texture {
 }
 
 impl Texture { 
-    /// Creates a texture with the image data from a file
+    /// Creates a texture from a image file.
     pub fn from_file<P>(path: P) -> io::Result<Texture> where P: AsRef<Path> {
         let mut texture = Texture::new();
         texture.load_file(path)?;
@@ -41,8 +43,8 @@ impl Texture {
         }
     }
 
-    /// Attempts to load data from the given file into this texture. Note that it is
-    /// usually more convenient to create a new texture from a file using
+    /// Attempts to load data from the given image file into this texture. Note that
+    /// it is usually more convenient to create a new texture from a file using
     /// [`from_file(path)`](struct.Texture.html#method.from_file)
     ///
     /// # Example

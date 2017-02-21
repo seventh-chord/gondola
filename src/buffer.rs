@@ -1,13 +1,61 @@
 
+//! Utilities for storing and drawing data in GPU buffers
+
 use gl;
 use gl::types::*;
 use std;
-use vertex_array::PrimitiveMode;
+use std::ops::Range;
 use cable_math::{Vec2, Vec3, Vec4};
 
 const DEFAULT_SIZE: usize = 100;
 
-/// A GPU buffer which holds a list of verticies for rendering.
+/// A GPU buffer which holds a list of a custom vertex type. This struct also has utility methods
+/// for rendering the vertices as primitives.
+///
+/// # Deriving [`Vertex`](trait.Vertex.html)
+/// A custom proc_macro is defined in `gondola_vertex_macro` that can be used to derive the
+/// [`Vertex`](trait.Vertex.html) trait for custom structs. For this to work, all members of
+/// the struct need to implement [`VertexComponent`](trait.VertexComponent.html). See the
+/// trait documentation for a list of implementations.
+///
+/// # Example - Rendering with a custom shader and vertex type
+///
+/// Imports:
+///
+/// ```
+/// extern crate cable_math;
+///
+/// use cable_math::Vec2;
+/// use buffer::VertexBuffer;
+/// #[macro_use] // We use a macro to easily load shaders
+/// use shader::*;
+/// ```
+///
+/// Vertex declaration:
+///
+/// ```
+/// #[derive(Vertex)]
+/// struct Point {
+///     position: Vec2<f32>,
+/// }
+/// ```
+///
+/// Usage:
+///
+/// ```
+/// let data = vec![
+///     Point { position: Vec2::new(0.0, 0.0) },
+///     Point { position: Vec2::new(100.0, 0.0) },
+///     Point { position: Vec2::new(0.0, 100.0) },
+/// ];
+/// let buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &data);
+///
+/// // Creates a shader with input declarations for the custom type inserted
+/// let shader = load_shader!("assets/shader.glsl", Point).unwrap();
+///
+/// shader.bind();
+/// buffer.draw();
+/// ```
 pub struct VertexBuffer<T: Vertex> {
     // We are generic over the vertex type, but dont actually store any vertices
     phantom: std::marker::PhantomData<T>,
@@ -195,6 +243,8 @@ impl <T: Vertex> Drop for VertexBuffer<T> {
     }
 }
 
+/// A GPU buffer which holds a set of primitives (floats, bytes or integers). These primitives
+/// can be rendered using a [`VertexArray`](struct.VertexArray.html).
 pub struct PrimitiveBuffer {
     buffer: GLuint,
     target: BufferTarget,
@@ -225,8 +275,8 @@ impl PrimitiveBuffer {
         }
     }
 
-    /// Stores the given vector in a new buffer. This assumes usage to be BufferUsage::StaticDraw
-    pub fn from_floats(target: BufferTarget, data: Vec<f32>) -> PrimitiveBuffer {
+    /// Stores the given data in a new buffer. The buffer will have its usage set to `BufferUsage::StaticDraw`
+    pub fn from_floats(target: BufferTarget, data: &[f32]) -> PrimitiveBuffer {
         let mut buffer = 0;
         let byte_count = data.len() * DataType::Float.size(); // We assume f32 to be equal to GLfloat, which it is
 
@@ -253,7 +303,7 @@ impl PrimitiveBuffer {
 
     /// Stores the given vector into this buffer, overwriting any data that was 
     /// previously in the buffer
-    pub fn put_floats(&mut self, data: Vec<f32>) {
+    pub fn put_floats(&mut self, data: &[f32]) {
         self.data_type = DataType::Float;
         self.primitives = data.len();
         let byte_count = data.len() * DataType::Float.size(); 
@@ -310,6 +360,72 @@ impl Drop for PrimitiveBuffer {
         }
     }
 }
+
+/// Contains information on how to render a group of primitive buffers
+pub struct VertexArray {
+    array: GLuint,
+}
+
+impl VertexArray {
+    pub fn new() -> VertexArray {
+        let mut array = 0;
+        unsafe {
+            gl::GenVertexArrays(1, &mut array);
+        }
+        VertexArray {
+            array: array,
+        }
+    }
+
+    /// Adds a buffer from which this vertex array will pull data when drawing
+    pub fn add_data_source(&self, source: &PrimitiveBuffer, index: usize, size: usize, stride: usize, offset: usize) {
+        source.bind();
+
+        unsafe {
+            gl::BindVertexArray(self.array);
+            gl::EnableVertexAttribArray(index as GLuint);
+
+            let data_type = source.data_type();
+            gl::VertexAttribPointer(
+                index as GLuint, size as GLint,
+                data_type as GLenum, false as GLboolean,
+                (stride * data_type.size()) as GLsizei, (offset * data_type.size()) as *const GLvoid
+            );
+        }
+    }
+
+    /// Draws the given primitives with the graphics buffers bound to this vertex array 
+    pub fn draw(&self, mode: PrimitiveMode, range: Range<usize>) {
+        unsafe {
+            gl::BindVertexArray(self.array);
+            gl::DrawArrays(mode as GLenum, range.start as GLint, (range.end - range.start) as GLsizei);
+        }
+    }
+}
+
+impl Drop for VertexArray {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteVertexArrays(1, &mut self.array);
+        }
+    }
+}
+
+/// Represents different types of primitives which can be drawn on the GPU.
+#[derive(Copy, Clone)]
+pub enum PrimitiveMode {
+    Points                      = gl::POINTS as isize,
+    LineStrip                   = gl::LINE_STRIP as isize,
+    LineLoop                    = gl::LINE_LOOP as isize,
+    Lines                       = gl::LINES as isize,
+    LineStripAdjacency          = gl::LINE_STRIP_ADJACENCY as isize,
+    LinesAdjacency              = gl::LINES_ADJACENCY as isize,
+    TriangleStrip               = gl::TRIANGLE_STRIP as isize,
+    TriangleFan                 = gl::TRIANGLE_FAN as isize,
+    Triangles                   = gl::TRIANGLES as isize,
+    TriangleStripAdjacency      = gl::TRIANGLE_STRIP_ADJACENCY as isize,
+    TrianglesAdjacency          = gl::TRIANGLES_ADJACENCY as isize,
+} 
 
 /// Represents different GL buffer usage hints. Note that these are hints,
 /// and drivers will not necesarily respect these.

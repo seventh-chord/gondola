@@ -1,5 +1,9 @@
 
+//! Various utilities for rendering and resource management
+
 pub mod graphics {
+    //! Wrappers for unsafe OpenGL calls
+
     use gl;
     use gl::types::*;
 
@@ -37,6 +41,8 @@ pub mod graphics {
 }
 
 pub mod loading {
+    //! Utilities for loading/reloading files 
+
     use std::time::SystemTime;
     use std::fs;
     use std::io;

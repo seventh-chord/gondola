@@ -1,8 +1,12 @@
 
+//! A replacement for the default OpenGL matrix stack which is deprecated in newer versions
+
 use cable_math::{Vec3, Mat4};
 
 const STACK_SIZE: usize = 32;
 
+/// A matrix stack containing a single projection matrix and a stack of
+/// modelview matrices
 pub struct MatrixStack {
     modelview_stack: [Mat4<f32>; STACK_SIZE],
     modelview_pointer: usize,
@@ -70,3 +74,4 @@ impl MatrixStack {
         self.projection * self.peek()
     }
 }
+

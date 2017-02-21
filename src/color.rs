@@ -1,10 +1,14 @@
 
+//! A color type, with utility methods for modifying colors and parsing colors from hex strings. 
+
 use gl;
 use gl::types::*;
 use std;
 use shader::UniformValue;
 use buffer::VertexComponent;
 
+/// A color with red, green, blue and alpha components. All components are expected to be
+/// between 0 and 1, both inclusinve.
 #[derive(Debug)]
 pub struct Color {
     pub r: f32,
@@ -14,7 +18,7 @@ pub struct Color {
 }
 
 impl Color {
-    /// Creates a new, completly opaque, color.
+    /// Creates a new, completly opaque (alpha = 1), color.
     ///
     /// All parameters should be between 0 and 1, both inclusive.
     pub fn rgb(r: f32, g: f32, b: f32) -> Color {
@@ -75,7 +79,7 @@ impl Color {
     }
 }
 
-/// Does not properly handle NaN
+// Does not properly handle NaN, which should not really matter
 fn clamp(value: f32, min: f32, max: f32) -> f32 {
     if value < min {
         return min;
