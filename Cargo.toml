@@ -9,5 +9,5 @@ gondola_vertex_macro = { path = "gondola_vertex_macro" }
 cable_math = { path = "cable_math" }
 glutin = "0.7.*"
 gl = "*"
-image = "0.12.*"
+png = "0.6.*"
 

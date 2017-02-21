@@ -3,7 +3,8 @@
 
 extern crate gl;
 extern crate glutin;
-extern crate image;
+extern crate png;
+
 extern crate cable_math;
 #[macro_use]
 extern crate gondola_vertex_macro;

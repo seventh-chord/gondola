@@ -1,11 +1,12 @@
 
 //! Utilities for loading and using textures
 
-use image;
+use png;
 use gl;
 use gl::types::*;
 use std::io;
 use std::path::Path;
+use std::fs::File;
 
 /// A wraper around a OpenGL texture object which can be modified
 #[derive(Debug)]
@@ -55,8 +56,21 @@ impl Texture {
     /// texture.load_file("assets/test.png").expect("Failed to load texture");
     /// ```
     pub fn load_file<P>(&mut self, path: P) -> io::Result<()> where P: AsRef<Path> {
-        let image = load_image(path.as_ref())?;
-        self.load_data(&image, image.width(), image.height(), TextureFormat::RGBA_8);
+        let (info, data) = load_image(path.as_ref())?;
+        let texture_format = match (info.color_type, info.bit_depth) {
+            (png::ColorType::RGBA, png::BitDepth::Eight) => TextureFormat::RGBA_8,
+            (png::ColorType::RGB, png::BitDepth::Eight)  => TextureFormat::RGB_8,
+            other => {
+                let message = format!(
+                    "Unsuported texture format ({:?}, {:?}) in \"{}\" ({}:{})",
+                    other.0, other.1,
+                    path.as_ref().to_string_lossy(),
+                    module_path!(), line!()
+                );
+                return Err(io::Error::new(io::ErrorKind::Other, message));
+            }
+        };
+        self.load_data(&data, info.width, info.height, texture_format);
         Ok(())
     }
 
@@ -113,16 +127,13 @@ impl Drop for Texture {
 }
 
 /// Loads image data from a file
-fn load_image(path: &Path) -> io::Result<image::RgbaImage> {
-    let image = match image::open(path) {
-        Ok(image) => image,
-        Err(err) => return Err(io::Error::new(io::ErrorKind::Other, err)),
-    };
-    let image = match image {
-        image::DynamicImage::ImageRgba8(image) => image,
-        other => other.to_rgba() // Convert other formats to RGBA
-    };
-    Ok(image)
+fn load_image(path: &Path) -> io::Result<(png::OutputInfo, Vec<u8>)> {
+    let decoder = png::Decoder::new(File::open(path)?);
+    let (info, mut reader) = decoder.read_info()?;
+    let mut buf = vec![0; info.buffer_size()];
+    reader.next_frame(&mut buf)?;
+
+    Ok((info, buf))
 }
 
 /// Represents an OpenGL texture filter. Use in OpenGL functions like ´TextureFilter::* as GLenum´
