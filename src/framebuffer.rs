@@ -155,8 +155,7 @@ fn get_status_message(message: GLenum) -> String {
     })
 }
 
-/// Clears the currently bound framebuffer to the given color. The color should
-/// be in the format (R, G, B, A)
+/// Clears the currently bound framebuffer to the given color.
 pub fn clear(color: &Color) {
     unsafe {
         gl::ClearColor(color.r, color.g, color.b, color.a);

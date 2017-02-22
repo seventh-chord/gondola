@@ -9,7 +9,7 @@ use buffer::VertexComponent;
 
 /// A color with red, green, blue and alpha components. All components are expected to be
 /// between 0 and 1, both inclusinve.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
