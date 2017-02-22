@@ -5,7 +5,7 @@ version = "0.1.0"
 authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 
 [dependencies]
-gondola_vertex_macro = { path = "gondola_vertex_macro" }
+gondola_derive = { path = "gondola_derive" }
 cable_math = { path = "cable_math" }
 glutin = "0.7.*"
 gl = "*"

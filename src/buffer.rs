@@ -24,11 +24,12 @@ const DEFAULT_SIZE: usize = 100;
 ///
 /// ```
 /// extern crate cable_math;
+/// #[macro_use]
+/// extern crate gondola_derive; // Provides custom derive for Vertex
 ///
 /// use cable_math::Vec2;
-/// use buffer::VertexBuffer;
-/// #[macro_use] // We use a macro to easily load shaders
-/// use shader::*;
+/// use gondola::buffer::VertexBuffer;
+/// use gondola::shader::{Shader, ShaderPrototype}
 /// ```
 ///
 /// Vertex declaration:
