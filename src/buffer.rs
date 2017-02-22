@@ -160,6 +160,10 @@ impl <T: Vertex> VertexBuffer<T> {
     /// vertices which where previously in that location. This resizes the underlying
     /// buffer if more space is needed to store the new data.
     pub fn put(&mut self, index: usize, data: &[T]) {
+        if data.is_empty() {
+            return;
+        }
+
         let start = index;
         let end = index + data.len();
 
@@ -180,6 +184,12 @@ impl <T: Vertex> VertexBuffer<T> {
                 std::mem::transmute(&data[0])
             );
         }
+    }
+
+    /// Empties this buffer, setting its length to 0. This does nothing to the data
+    /// stored in the buffer, it simply marks all current data as invalid.
+    pub fn clear(&mut self) {
+        self.vertex_count = 0;
     }
 
     /// The number of vertices that are stored in GPU memory.
