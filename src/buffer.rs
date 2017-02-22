@@ -74,8 +74,12 @@ pub struct VertexBuffer<T: Vertex> {
 impl <T: Vertex> VertexBuffer<T> {
     /// Creates a new vertex buffer, prealocating space for 100 vertices.
     pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> VertexBuffer<T> {
-        let vertices = DEFAULT_SIZE;
-        let bytes = T::bytes_per_vertex() * vertices;
+        VertexBuffer::with_capacity(primitive_mode, usage, DEFAULT_SIZE)
+    }
+
+    /// Creates a new vertex buffer, preallocating space for the given number of vertices.
+    pub fn with_capacity(primitive_mode: PrimitiveMode, usage: BufferUsage, initial_capacity: usize) -> VertexBuffer<T> {
+        let bytes = T::bytes_per_vertex() * initial_capacity;
 
         let mut vbo = 0;
         let mut vao = 0;
@@ -95,7 +99,7 @@ impl <T: Vertex> VertexBuffer<T> {
             phantom: std::marker::PhantomData,
 
             vertex_count: 0,
-            allocated: vertices,
+            allocated: initial_capacity,
 
             primitive_mode: primitive_mode,
             usage: usage,
