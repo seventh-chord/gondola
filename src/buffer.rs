@@ -110,7 +110,7 @@ impl <T: Vertex> VertexBuffer<T> {
     }
 
     /// Creates a new vertex buffer, storing the given vertices on the GPU.
-    pub fn from_data(primitive_mode: PrimitiveMode, data: &[T]) -> VertexBuffer<T> {
+    pub fn with_data(primitive_mode: PrimitiveMode, data: &[T]) -> VertexBuffer<T> {
         let vertices = data.len();
         let bytes = T::bytes_per_vertex() * vertices;
 
