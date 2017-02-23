@@ -38,6 +38,96 @@ pub mod graphics {
         };
         Some(String::from(value))
     }
+
+    /// If passed `Some` enables the given blend settings, if passed `None` disables
+    /// blending
+    pub fn set_blending(blending: Option<BlendSettings>) {
+        unsafe {
+            if let Some(ref settings) = blending {
+                settings.enable();
+            } else {
+                gl::Disable(gl::BLEND);
+            }
+        }
+    }
+
+    /// Settings used to define OpenGL blend state. You should create a pair of settings
+    /// for every operation which uses blending, and apply those settings before rendering.
+    /// Blending can be enabled either through
+    /// [`enable()`](struct.BlendSettings.html#method.enable)
+    /// or
+    /// [`graphics::set_blending(Some(my_settings))`](fn.set_blending.html)
+    /// and can be disabled wtih
+    /// [`graphics::set_blending(None)`](fn.set_blending.html).
+    ///
+    /// Note that this struct implements `Default`, so default blend settings can be retrieved
+    /// with `BlendSettings::default()`.
+    #[derive(Debug, Clone, Copy)]
+    pub struct BlendSettings {
+        pub src_color: BlendFactor,
+        pub src_alpha: BlendFactor,
+        pub dst_color: BlendFactor,
+        pub dst_alpha: BlendFactor,
+        pub function: BlendFunction,
+    }
+    const DEFAULT_BLEND_SETTINGS: BlendSettings = BlendSettings {
+        src_color: BlendFactor::SrcAlpha,
+        dst_color: BlendFactor::OneMinusSrcAlpha,
+        src_alpha: BlendFactor::One,
+        dst_alpha: BlendFactor::Zero,
+        function: BlendFunction::Add,
+    };
+    impl BlendSettings {
+        /// Enables blending, and uses these blend settings 
+        pub fn enable(&self) {
+            unsafe {
+                gl::Enable(gl::BLEND);
+                gl::BlendFuncSeparate(self.src_color as GLenum,
+                                      self.dst_color as GLenum,
+                                      self.src_alpha as GLenum,
+                                      self.dst_alpha as GLenum);
+                gl::BlendEquation(self.function as GLenum);
+            }
+        }
+    }
+    impl Default for BlendSettings {
+        fn default() -> BlendSettings {
+            DEFAULT_BLEND_SETTINGS
+        }
+    }
+
+    /// OpenGL blend functions
+    #[derive(Copy, Clone, Debug)]
+    pub enum BlendFactor {
+        Zero                    = gl::ZERO as isize,
+        One                     = gl::ONE as isize,
+        SrcColor                = gl::SRC_COLOR as isize,
+        OneMinusSrcColor        = gl::ONE_MINUS_SRC_COLOR as isize,
+        DstColor                = gl::DST_COLOR as isize,
+        OneMinusDstColor        = gl::ONE_MINUS_DST_COLOR as isize,
+        SrcAlpha                = gl::SRC_ALPHA as isize,
+        OneMinusSrcAlpha        = gl::ONE_MINUS_SRC_ALPHA as isize,
+        DstAlpha                = gl::DST_ALPHA as isize,
+        OneMinusDstAlpha        = gl::ONE_MINUS_DST_ALPHA as isize,
+        ConstantColor           = gl::CONSTANT_COLOR as isize,
+        OneMinusConstantColor   = gl::ONE_MINUS_CONSTANT_COLOR as isize,
+        ConstantAlpha           = gl::CONSTANT_ALPHA as isize,
+        OneMinusConstantAlpha   = gl::ONE_MINUS_CONSTANT_ALPHA as isize,
+    }
+    /// OpenGL blend equations
+    #[derive(Copy, Clone, Debug)]
+    pub enum BlendFunction {
+        /// `Src + Dst`
+        Add             = gl::FUNC_ADD as isize,
+        /// `Src - Dst`
+        Subtract        = gl::FUNC_SUBTRACT as isize,
+        /// `Dst - Src`
+        ReverseSubtract = gl::FUNC_REVERSE_SUBTRACT as isize,
+        /// `min(Dst, Src)`
+        Min             = gl::MIN as isize,
+        /// `max(Dst, Src)`
+        Max             = gl::MAX as isize,
+    }
 }
 
 pub mod loading {

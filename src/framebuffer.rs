@@ -112,9 +112,19 @@ impl Framebuffer {
     }
 
     /// Moves the contents of this framebuffer to the backbuffer, resolving multisampling
-    /// if present. Note that this also unbinds this framebuffer
+    /// if present. Note that this also unbinds this framebuffer. This will only partially
+    /// cover the backbuffer if this framebuffer is smaller than the backbuffer. To upscale
+    /// a framebuffer while blitting, use [`blit_with_size`](struct.Framebuffer.html#method.blit_with_size).
     pub fn blit(&self) {
         self.blit_indexed(0, self.width, self.height);
+    }
+
+    /// Moves the contents of this framebuffer to the backbuffer, resolving multisampling
+    /// if present. Note that this also unbinds this framebuffer. This allows setting
+    /// the size to which this framebuffer should be scaled while blitting. This should
+    /// be used if the framebuffer is larger or smaller than the backbuffer.
+    pub fn blit_with_size(&self, width: u32, height: u32) {
+        self.blit_indexed(0, width, height);
     }
 
     fn blit_indexed(&self, target: GLuint, dst_width: u32, dst_height: u32) {
