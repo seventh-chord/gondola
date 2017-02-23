@@ -4,7 +4,7 @@ use vec::Vec3;
 use std::ops::*;
 
 /// A matrix which is layed out in column major format in memory
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Mat4<T: Num + Copy> {
     // The order in which the components are defined here is inverse of
     // the way they are typically would be used, as the matrix should
@@ -133,6 +133,52 @@ impl<T: Num + Copy> Mat4<T> {
     pub fn translation(translation: Vec3<T>) -> Mat4<T> {
         Mat4 {
             a14: translation.x, a24: translation.y, a34: translation.z,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a scaling matrix
+    pub fn scaling(scale: Vec3<T>) -> Mat4<T> {
+        Mat4 {
+            a11: scale.x, a22: scale.y, a33: scale.z,
+            .. Mat4::identity()
+        }
+    }
+}
+
+impl<T: Float + Copy> Mat4<T> {
+    /// Creates a matrix representing a counterclockwise rotation of `angle` radians
+    /// around the x-axis
+    pub fn rotation_x(angle: T) -> Mat4<T> {
+        let sin = angle.sin();
+        let cos = angle.cos();
+        Mat4 {
+            a22: cos, a23: -sin,
+            a32: sin, a33: cos,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a matrix representing a counterclockwise rotation of `angle` radians
+    /// around the y-axis
+    pub fn rotation_y(angle: T) -> Mat4<T> {
+        let sin = angle.sin();
+        let cos = angle.cos();
+        Mat4 {
+            a11: cos, a13: sin,
+            a31: -sin, a33: cos,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a matrix representing a counterclockwise rotation of `angle` radians
+    /// around the z-axis
+    pub fn rotation_z(angle: T) -> Mat4<T> {
+        let sin = angle.sin();
+        let cos = angle.cos();
+        Mat4 {
+            a11: cos, a12: -sin,
+            a21: sin, a22: cos,
             .. Mat4::identity()
         }
     }

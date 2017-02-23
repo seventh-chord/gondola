@@ -6,7 +6,8 @@ extern crate cable_math;
 
 pub mod color;
 pub mod texture;
-#[macro_use] pub mod shader;
+#[macro_use]
+pub mod shader;
 pub mod buffer;
 pub mod matrix_stack;
 pub mod util;

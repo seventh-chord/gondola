@@ -3,20 +3,20 @@ use num::*;
 use std::fmt;
 use std::ops::*;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Vec2<T: Num + Copy> {
     pub x: T,
     pub y: T
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Vec3<T: Num + Copy> {
     pub x: T,
     pub y: T,
     pub z: T
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct Vec4<T: Num + Copy> {
     pub x: T,
     pub y: T,
