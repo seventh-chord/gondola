@@ -22,7 +22,7 @@ const DEFAULT_SIZE: usize = 100;
 ///
 /// Imports:
 ///
-/// ```
+/// ```rust,ignore
 /// extern crate cable_math;
 /// #[macro_use]
 /// extern crate gondola_derive; // Provides custom derive for Vertex
@@ -34,7 +34,7 @@ const DEFAULT_SIZE: usize = 100;
 ///
 /// Vertex declaration:
 ///
-/// ```
+/// ```rust,ignore
 /// #[derive(Vertex)]
 /// struct Point {
 ///     position: Vec2<f32>,
@@ -43,7 +43,7 @@ const DEFAULT_SIZE: usize = 100;
 ///
 /// Usage:
 ///
-/// ```
+/// ```rust,ignore
 /// let data = vec![
 ///     Point { position: Vec2::new(0.0, 0.0) },
 ///     Point { position: Vec2::new(100.0, 0.0) },

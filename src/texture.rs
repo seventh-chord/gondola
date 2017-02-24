@@ -49,10 +49,10 @@ impl Texture {
     /// [`from_file(path)`](struct.Texture.html#method.from_file)
     ///
     /// # Example
-    /// ```
-    /// use texture::Texture;
+    /// ```rust,no_run
+    /// use gondola::texture::Texture;
     ///
-    /// let texture = Texture::new();
+    /// let mut texture = Texture::new();
     /// texture.load_file("assets/test.png").expect("Failed to load texture");
     /// ```
     pub fn load_file<P>(&mut self, path: P) -> io::Result<()> where P: AsRef<Path> {

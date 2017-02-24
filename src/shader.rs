@@ -314,6 +314,8 @@ pub fn prepend_code(src: &str, code: &str) -> String {
 ///
 /// # Example
 /// ```
+/// use gondola::shader::create_inputs;
+///
 /// let shader = "
 ///     #version 330 core
 ///     out vec4 color;
@@ -321,7 +323,7 @@ pub fn prepend_code(src: &str, code: &str) -> String {
 ///     // Rest of shader ommited
 /// ";
 ///
-/// let inputs = create_inputs(shader);
+/// let inputs = create_inputs(shader, false);
 ///
 /// assert_eq!("in vec4 color; in vec2 tex;", inputs);
 /// ```
@@ -435,17 +437,25 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 /// for a given vertex type
 ///
 /// # Example
-/// ```
-/// use shader;
-/// use cable_math::Vec2;
-/// use buffer::Vertex;
+/// ```rust,no_run
+/// # #![allow(dead_code, unused_variables)]
+/// #[macro_use]
+/// extern crate gondola; 
+/// #[macro_use]
+/// extern crate gondola_derive;
+/// extern crate gl; // Required for the vertex derive
 ///
+/// use gondola::shader::*;
+/// use gondola::buffer::Vertex;
+/// 
 /// #[derive(Vertex)]
 /// struct TestVertex {
-///     position: Vec2<f32>,
+///     position: (f32, f32),
 /// }
 ///
-/// let shader = load_shader!("assets/basic.glsl", TestVertex);
+/// # fn main() {
+/// let shader = load_shader!("assets/basic.glsl", TestVertex).unwrap();
+/// # }
 /// ```
 #[macro_export]
 macro_rules! load_shader {

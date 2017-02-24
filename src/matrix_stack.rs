@@ -60,6 +60,13 @@ impl MatrixStack {
     ///
     /// # Example
     /// ```
+    /// # extern crate gondola;
+    /// extern crate cable_math;
+    ///
+    /// # fn main() {
+    /// use gondola::matrix_stack::MatrixStack;
+    /// use cable_math::Vec3;
+    ///
     /// let mut matrix_stack = MatrixStack::new();
     ///
     /// matrix_stack.push(|matrix_stack| {
@@ -69,6 +76,7 @@ impl MatrixStack {
     ///         // Nested pushing works just fine
     ///     });
     /// });
+    /// # }
     /// // All translations that happened in the above block are reset here
     /// ```
     pub fn push<F>(&mut self, action: F) where F: Fn(&mut Self) {

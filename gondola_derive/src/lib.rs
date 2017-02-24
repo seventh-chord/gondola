@@ -47,7 +47,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                         }
 
                         index += 1;
-                        offset += <#ty as VertexComponent>::bytes();
+                        offset += <#ty as gondola::buffer::VertexComponent>::bytes();
                     }
                 });
             // Join all the attrib pointer setup code
@@ -65,7 +65,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             let types = variant_data.fields().iter().map(|field| field.ty.clone());
             let bytes_per_vertex_impl = quote! {
                 // Expands to "0 + <first_field as VertexComponent>::primitives() + ..."
-                0 #( + <#types as VertexComponent>::bytes())*
+                0 #( + <#types as gondola::buffer::VertexComponent>::bytes())*
             };
 
             // Generate gen_shader_input_decl code

@@ -165,14 +165,36 @@ impl<T: Float> Vec2<T> {
     /// use cable_math::Vec2;
     ///
     /// let a = Vec2::new(1.0f32, 1.0);
-    /// let angle = 3.1315 / 4.0; // π/4 = 45°
+    /// let angle = 3.1415 / 4.0; // π/4 = 45°
     ///
     /// let epsilon = (a.angle() - angle).abs();
     ///
-    /// assert!(epsilon < 0.003);
+    /// assert!(epsilon < 0.001);
     /// ```
     pub fn angle(&self) -> T {
         (self.y / self.x).atan()
+    }
+
+    /// Rotates this vector counterclockwise by the given angle in radians.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    ///
+    /// let a = Vec2::new(1.0f32, 1.0);
+    ///
+    /// let b = a.rotate(3.1415); // π radians counterclockwise (Suffers from floating point errors)
+    /// let c = a.left().left();  // π/2 radians counterclockwise, twice (Very precice)
+    ///
+    /// let error = (b - c).len();
+    /// assert!(error < 0.0002); // Could get more precice with more digits of π
+    /// ```
+    pub fn rotate(&self, angle: T) -> Vec2<T> {
+        let cos = angle.cos();
+        let sin = angle.sin();
+        Vec2 {
+            x: self.x*cos - self.y*sin, 
+            y: self.x*sin + self.y*cos,
+        }
     }
 
     /// Calculates the length of this vector

@@ -158,7 +158,7 @@ pub mod loading {
         /// error and returns `false`.
         ///
         /// # Example
-        /// ```
+        /// ```rust,ignore
         /// use util::loading::ResourceRefresher;
         ///
         /// let mut refresher = ResourceRefresher::new();
