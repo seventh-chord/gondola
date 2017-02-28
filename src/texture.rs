@@ -5,6 +5,7 @@ use png;
 use gl;
 use gl::types::*;
 use std::io;
+use std::ptr;
 use std::path::Path;
 use std::fs::File;
 
@@ -83,6 +84,46 @@ impl Texture {
                            width as GLsizei, height as GLsizei, 0, // Size and border
                            format.unsized_format(), // Data format
                            gl::UNSIGNED_BYTE, data.as_ptr() as *const GLvoid);
+        }
+
+        self.width = width;
+        self.height = height;
+        self.format = format;
+    }
+
+    /// Sets the data in a sub-region of this texture. The data is expected to be in the
+    /// format this texture was initialized to. This texture needs to be initialized
+    /// before this method can be used.
+    /// Note that there is a debug assertion in place to ensure that the given region
+    /// is within the bounds of this texture. If debug assertions are not enabled this
+    /// function will return without taking any action.
+    pub fn load_data_to_region(&mut self, data: &[u8], x: u32, y: u32, width: u32, height: u32) {
+        if x + width > self.width && y + height > self.height {
+            debug_assert!(false, "Invalid region passed ({}:{}) Region: (x: {}, y: {}, width: {}, height: {})",
+                          module_path!(), line!(),
+                          x, y, width, height);
+            return;
+        }
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, self.texture);
+            gl::TexSubImage2D(gl::TEXTURE_2D, 0,
+                              x as GLint, y as GLint,
+                              width as GLsizei, height as GLsizei,
+                              self.format.unsized_format(), // It is unclear whether opengl allows a different format here
+                              gl::UNSIGNED_BYTE, data.as_ptr() as *const GLvoid);
+        }
+    }
+
+    /// Converts this texture to a empty texture of the given size. The contents
+    /// of the texture after this operation are undefined.
+    pub fn initialize(&mut self, width: u32, height: u32, format: TextureFormat) {
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, self.texture);
+            gl::TexImage2D(gl::TEXTURE_2D, 0, // Mipmap level
+                           format as GLint, // Internal format
+                           width as GLsizei, height as GLsizei, 0, // Size and border
+                           format.unsized_format(), // Data format
+                           gl::UNSIGNED_BYTE, ptr::null());
         }
 
         self.width = width;
