@@ -14,6 +14,7 @@ use cable_math::Mat4;
 use texture::*;
 use buffer::*;
 use shader::*;
+use util::graphics;
 
 const CACHE_SIZE: u32 = 512;
 
@@ -54,25 +55,62 @@ impl<'a> Font<'a> {
         })
     }
 
-    /// Calculates the width, in pixels, of the given string
+    /// Calculates the width, in pixels, of the given string if it where to be
+    /// rendered at the given size. This takes newlines into acount, meaning that
+    /// for a multiline string this will return the length of the longest line.
     pub fn get_width(&self, text: &str, text_size: f32) -> f32 {
         let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size));
         iter.map(|glyph| glyph.unpositioned().h_metrics().advance_width).sum()
     }
 
+    /// Sets up this font for rendering and takes a closure. This closure takes
+    /// a [`DrawContext`](struct.DrawContext.html) as a parameter, which can be
+    /// used to draw text. See [documentation for `draw(...)`](struct.DrawContext.html#method.draw)
+    /// for details on rendering.
+    ///
+    /// # Usage note 
+    /// No other shader or texture should be bound from within the closure that
+    /// is passed to this function. If this is done subsequent font drawing will
+    /// not work as expected.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let mut font = Font::from_file("assets/comic_sans.ttf").unwrap();
+    /// font.draw_context(|font| { // Text can be drawn within this closure
+    ///     font.draw("Hello\nworld!", 20.0);
+    /// });
+    /// #
+    /// ```
+    pub fn draw_context<F>(&mut self, mut action: F) where F: FnMut(&mut DrawContext) {
+        graphics::set_blending(Some(graphics::BlendSettings::default()));
+        self.shader.bind();
+        self.cache_texture.bind(0);
+        action(&mut DrawContext { font: self });
+        graphics::set_blending(None);
+    }
+
+}
+
+/// This struct is available when a font is set up for rendering. It can be used
+/// to draw text using the font from which it originated.
+pub struct DrawContext<'a: 'b, 'b> {
+    font: &'b mut Font<'a>
+}
+
+impl<'a: 'b, 'b> DrawContext<'a, 'b> {
     /// Draws the given string. A mutable reference to self is needed as 
-    /// glyphs are cached internally. Note that blending should be enabled 
-    /// when drawing text.
+    /// glyphs are cached internally.
     pub fn draw(&mut self, mvp: Mat4<f32>, text: &str, text_size: f32) {
-        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size));
+        let font = &mut self.font;
+        let iter = PosGlyphIter::new(text, &font.font, Scale::uniform(text_size));
 
         // Push textures to GPU
         {
             for glyph in iter.clone() {
-                self.cache.queue_glyph(0, glyph);
+                font.cache.queue_glyph(0, glyph);
             }
-            let ref mut tex = self.cache_texture;
-            self.cache.cache_queued(|rect, data| {
+            let ref mut tex = font.cache_texture;
+            font.cache.cache_queued(|rect, data| {
                 tex.load_data_to_region(data,
                                         rect.min.x, rect.min.y,
                                         rect.width(), rect.height());
@@ -80,20 +118,18 @@ impl<'a> Font<'a> {
         }
 
         // Push render data to GPU
-        self.buffer_data.clear();
+        font.buffer_data.clear();
         for glyph in iter {
-            if let Ok(Some((uv, pos))) = self.cache.rect_for(0, &glyph) {
-                FontVert::to_buffer(&mut self.buffer_data, pos, uv);
+            if let Ok(Some((uv, pos))) = font.cache.rect_for(0, &glyph) {
+                FontVert::to_buffer(&mut font.buffer_data, pos, uv);
             }
         }
-        self.buffer.clear();
-        self.buffer.put_at_start(&self.buffer_data);
+        font.buffer.clear();
+        font.buffer.put_at_start(&font.buffer_data);
 
         // Draw
-        self.cache_texture.bind(0);
-        self.shader.bind(); // Somehow avoid repeatdly doing this by batching font draw calls with closures similar to how matrix stacks operate
-        self.shader.set_uniform("mvp", mvp);
-        self.buffer.draw();
+        font.shader.set_uniform("mvp", mvp);
+        font.buffer.draw();
     }
 }
 
