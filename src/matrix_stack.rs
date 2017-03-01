@@ -79,7 +79,7 @@ impl MatrixStack {
     /// # }
     /// // All translations that happened in the above block are reset here
     /// ```
-    pub fn push<F>(&mut self, action: F) where F: Fn(&mut Self) {
+    pub fn push<F>(&mut self, mut action: F) where F: FnMut(&mut Self) {
         self.push_private();
         action(self);
         self.pop_private();

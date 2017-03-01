@@ -3,6 +3,7 @@ extern crate gl;
 extern crate glutin;
 extern crate png;
 extern crate cable_math;
+extern crate rusttype;
 
 pub mod color;
 pub mod texture;
@@ -12,6 +13,7 @@ pub mod buffer;
 pub mod matrix_stack;
 pub mod util;
 pub mod framebuffer;
+pub mod font;
 
 /// Creates a new window
 pub fn create_window() -> glutin::Window {

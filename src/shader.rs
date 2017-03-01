@@ -212,7 +212,7 @@ impl Shader {
                     gl::DeleteShader(frag_shader);
                 }
 
-                let message = str::from_utf8(&buffer).ok().expect("Shader log is not valid utf8").to_string();
+                let message = str::from_utf8(&buffer).expect("Shader log was not valid UTF-8").to_string();
                 return Err(io::Error::new(io::ErrorKind::Other, message));
             }
         }
@@ -393,6 +393,8 @@ fn compile(src: &str, shader_type: GLenum) -> io::Result<GLuint> {
             gl::DeleteShader(shader);
 
             let message = str::from_utf8(&buffer).ok().expect("Shader log is not valid utf8").to_string();
+            let message = format!("{}For source: \"\n{}\"",
+                                  message, src);
             return Err(io::Error::new(io::ErrorKind::Other, message));
         } else {
             return Ok(shader);

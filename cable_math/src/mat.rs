@@ -5,6 +5,7 @@ use std::ops::*;
 
 /// A matrix which is layed out in column major format in memory
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[repr(C)]
 pub struct Mat4<T: Num + Copy> {
     // The order in which the components are defined here is inverse of
     // the way they are typically would be used, as the matrix should

@@ -105,6 +105,11 @@ impl Texture {
             return;
         }
         unsafe {
+            // OpenGL is allowed to expect rows in pixel data to be aligned
+            // at powers of two. This ensures that any data will be accepted.
+            gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
+            gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+
             gl::BindTexture(gl::TEXTURE_2D, self.texture);
             gl::TexSubImage2D(gl::TEXTURE_2D, 0,
                               x as GLint, y as GLint,

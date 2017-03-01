@@ -4,12 +4,14 @@ use std::fmt;
 use std::ops::*;
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[repr(C)]
 pub struct Vec2<T: Num + Copy> {
     pub x: T,
     pub y: T
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[repr(C)]
 pub struct Vec3<T: Num + Copy> {
     pub x: T,
     pub y: T,
@@ -17,6 +19,7 @@ pub struct Vec3<T: Num + Copy> {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[repr(C)]
 pub struct Vec4<T: Num + Copy> {
     pub x: T,
     pub y: T,

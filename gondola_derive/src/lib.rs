@@ -33,8 +33,8 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|field| field.ty.clone())
                 .map(|ty| {
                     quote! {
-                        let primitives = <#ty as gondola::buffer::VertexComponent>::primitives();
-                        let data_type = <#ty as gondola::buffer::VertexComponent>::data_type();
+                        let primitives = <#ty as ::gondola::buffer::VertexComponent>::primitives();
+                        let data_type = <#ty as ::gondola::buffer::VertexComponent>::data_type();
 
                         unsafe {
                             gl::EnableVertexAttribArray(index);
@@ -47,7 +47,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                         }
 
                         index += 1;
-                        offset += <#ty as gondola::buffer::VertexComponent>::bytes();
+                        offset += <#ty as ::gondola::buffer::VertexComponent>::bytes();
                     }
                 });
             // Join all the attrib pointer setup code
@@ -65,7 +65,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             let types = variant_data.fields().iter().map(|field| field.ty.clone());
             let bytes_per_vertex_impl = quote! {
                 // Expands to "0 + <first_field as VertexComponent>::primitives() + ..."
-                0 #( + <#types as gondola::buffer::VertexComponent>::bytes())*
+                0 #( + <#types as ::gondola::buffer::VertexComponent>::bytes())*
             };
 
             // Generate gen_shader_input_decl code
@@ -77,7 +77,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                             "layout(location = {index}) in {glsl_type} {name};",
                             name = stringify!(#ident),
                             index = index,
-                            glsl_type = <#ty as gondola::buffer::VertexComponent>::get_glsl_type(),
+                            glsl_type = <#ty as ::gondola::buffer::VertexComponent>::get_glsl_type(),
                         );
                         result.push_str(&line);
                         result.push('\n');
@@ -99,7 +99,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             // Join all the code into a single implementation
             quote! {
                 #[allow(unused_assignments)] // We create some unused asignments in setup_attrib_pointers_impl
-                impl gondola::buffer::Vertex for #ident {
+                impl ::gondola::buffer::Vertex for #ident {
                     fn bytes_per_vertex() -> usize {
                         #bytes_per_vertex_impl
                     }

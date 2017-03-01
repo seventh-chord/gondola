@@ -10,4 +10,5 @@ cable_math = { path = "cable_math" }
 glutin = "0.7.*"
 gl = "*"
 png = "0.6.*"
+rusttype = "0.2.1"
 
