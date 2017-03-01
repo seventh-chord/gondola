@@ -15,11 +15,10 @@ use texture::*;
 use buffer::*;
 use shader::*;
 
-const CACHE_SIZE: u32 = 100;
+const CACHE_SIZE: u32 = 512;
 
 pub struct Font<'a> {
     font: rusttype::Font<'a>,
-    default_scale: Scale,
 
     cache: Cache,
     cache_texture: Texture,
@@ -45,30 +44,27 @@ impl<'a> Font<'a> {
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_SIZE, CACHE_SIZE, TextureFormat::R_8);
 
-        let shader = build_font_shader();
-
         Ok(Font {
             font: font,
-            default_scale: Scale::uniform(18.0),
             cache: cache,
             cache_texture: cache_texture,
             buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 200),
             buffer_data: Vec::with_capacity(200),
-            shader: shader,
+            shader: build_font_shader(),
         })
     }
 
     /// Calculates the width, in pixels, of the given string
-    pub fn get_width(&self, text: &str) -> f32 {
-        let iter = PosGlyphIter::new(text, &self.font, self.default_scale);
+    pub fn get_width(&self, text: &str, text_size: f32) -> f32 {
+        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size));
         iter.map(|glyph| glyph.unpositioned().h_metrics().advance_width).sum()
     }
 
     /// Draws the given string. A mutable reference to self is needed as 
     /// glyphs are cached internally. Note that blending should be enabled 
     /// when drawing text.
-    pub fn draw(&mut self, mvp: Mat4<f32>, text: &str) {
-        let iter = PosGlyphIter::new(text, &self.font, self.default_scale);
+    pub fn draw(&mut self, mvp: Mat4<f32>, text: &str, text_size: f32) {
+        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size));
 
         // Push textures to GPU
         {
@@ -122,14 +118,19 @@ impl Vertex for FontVert {
                                     16 as GLsizei, 8 as *const GLvoid);
         }
     }
-    fn gen_shader_input_decl() -> String {
-        String::from("layout(location=0) in vec2 pos; layout(location=1) in vec2 uv;")
-    }
+    // Not used, we manualy declare inputs in the shader
+    fn gen_shader_input_decl() -> String { String::new() }
 }
 const VERT_SRC: &'static str = "
     #version 330 core
+
+    layout(location = 0) in vec2 pos;
+    layout(location = 1) in vec2 uv;
+
     out vec2 vert_uv;
+
     uniform mat4 mvp;
+
     void main() {
         gl_Position = mvp * vec4(pos, 0.0, 1.0);
         vert_uv = uv;
@@ -137,8 +138,12 @@ const VERT_SRC: &'static str = "
 ";
 const FRAG_SRC: &'static str = "
     #version 330 core
+
+    in vec2 vert_uv;
     out vec4 color;
+
     uniform sampler2D tex_sampler;
+
     void main() {
 //        color = texture2D(tex_sampler, vert_uv);
         // Temp. workaround until I implement texture swizeling
@@ -146,41 +151,43 @@ const FRAG_SRC: &'static str = "
     }
 ";
 fn build_font_shader() -> Shader {
-    let mut shader = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
-    shader.propagate_outputs();
-    match shader.build_with_vert::<FontVert>() {
+    match ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC).build() {
         Ok(shader) => shader,
         Err(err) => {
-            println!("{}", err); // Print the error properly
+            println!("{}", err); // Print the error neatly properly
             panic!();
         }
     }
 }
 impl FontVert {
     fn to_buffer(data: &mut Vec<FontVert>, pos: Rect<i32>, uv: Rect<f32>) {
+        let x1 = pos.min.x as f32;
+        let x2 = pos.max.x as f32;
+        let y1 = -pos.min.y as f32;
+        let y2 = -pos.max.y as f32;
         data.push(FontVert {
-            pos: Vec2::new(pos.min.x as f32, pos.min.y as f32),
+            pos: Vec2::new(x1, y1),
             uv: Vec2::new(uv.min.x, uv.min.y),
         });
         data.push(FontVert {
-            pos: Vec2::new(pos.max.x as f32, pos.min.y as f32),
+            pos: Vec2::new(x2, y1),
             uv: Vec2::new(uv.max.x, uv.min.y),
         });
         data.push(FontVert {
-            pos: Vec2::new(pos.max.x as f32, pos.max.y as f32),
+            pos: Vec2::new(x2, y2),
             uv: Vec2::new(uv.max.x, uv.max.y),
         });
 
         data.push(FontVert {
-            pos: Vec2::new(pos.min.x as f32, pos.min.y as f32),
+            pos: Vec2::new(x1, y1),
             uv: Vec2::new(uv.min.x, uv.min.y),
         });
         data.push(FontVert {
-            pos: Vec2::new(pos.max.x as f32, pos.max.y as f32),
+            pos: Vec2::new(x2, y2),
             uv: Vec2::new(uv.max.x, uv.max.y),
         });
         data.push(FontVert {
-            pos: Vec2::new(pos.min.x as f32, pos.max.y as f32),
+            pos: Vec2::new(x1, y2),
             uv: Vec2::new(uv.min.x, uv.max.y),
         });
     }
@@ -224,6 +231,7 @@ impl<'a: 'b, 'b> Iterator for PosGlyphIter<'a, 'b> {
                 if c == '\n' {
                     self.caret.x = 0.0;
                     self.caret.y += self.vertical_advance;
+                    self.last_glyph = None; //No kerning after newline
                 }
                 continue;
             }
@@ -240,10 +248,10 @@ impl<'a: 'b, 'b> Iterator for PosGlyphIter<'a, 'b> {
             }
             self.last_glyph = Some(glyph.id());
 
-            let glyph = glyph.scaled(self.scale);
-            self.caret.x += glyph.h_metrics().advance_width;
-
-            let glyph = glyph.positioned(point(self.caret.x, self.caret.y));
+            let glyph = glyph
+                .scaled(self.scale)
+                .positioned(point(self.caret.x, self.caret.y));
+            self.caret.x += glyph.unpositioned().h_metrics().advance_width;
             return Some(glyph);
         }
         None
