@@ -1,7 +1,10 @@
 
 //! A replacement for the default OpenGL matrix stack which is deprecated in newer versions
 
+use gl;
+use gl::types::*;
 use cable_math::{Vec3, Mat4};
+use buffer::*;
 
 const STACK_SIZE: usize = 32;
 
@@ -10,16 +13,25 @@ const STACK_SIZE: usize = 32;
 pub struct MatrixStack {
     modelview_stack: [Mat4<f32>; STACK_SIZE],
     modelview_pointer: usize,
+    projection: Mat4<f32>,
 
-    projection: Mat4<f32>
+    uniform_buffer_index: GLuint,
+    uniform_buffer: PrimitiveBuffer,
 }
 
 impl MatrixStack {
     pub fn new() -> MatrixStack {
+        let uniform_buffer = PrimitiveBuffer::new(BufferTarget::Uniform,
+                                                  BufferUsage::DynamicDraw,
+                                                  DataType::Float);
+
         MatrixStack {
             modelview_stack: [Mat4::identity(); STACK_SIZE],
             modelview_pointer: 0,
             projection: Mat4::identity(),
+
+            uniform_buffer_index: get_uniform_binding_index(),
+            uniform_buffer: uniform_buffer,
         }
     }
 
@@ -126,6 +138,27 @@ impl MatrixStack {
     /// Returns the model-view-projection matrix
     pub fn mvp(&self) -> Mat4<f32> {
         self.projection * self.peek()
+    }
+
+    /// Writes the model-view-projection matrix to the uniform buffer to which all shaders
+    /// have access. Note that shaders need to be set up in order to have access to this 
+    /// buffer. This is done automatically when constructing a shader with the `load_shader!()`
+    /// macro, or can be done manually by calling `bind_to_matrix_storage()` on a
+    /// `ShaderPrototype` before building a shader from it.
+    pub fn update_buffer(&mut self) {
+        let mvp = self.mvp();
+        self.uniform_buffer.put_floats(mvp.as_slice());
+        self.uniform_buffer.bind_base(self.uniform_buffer_index);
+    }
+}
+
+/// Retrives the uniform binding index at which matricies are stored.
+/// *This is for internal use only.*
+pub fn get_uniform_binding_index() -> GLuint {
+    unsafe {
+        let mut index = 0;
+        gl::GetIntegerv(gl::MAX_UNIFORM_BUFFER_BINDINGS, &mut index);
+        (index - 1) as GLuint
     }
 }
 

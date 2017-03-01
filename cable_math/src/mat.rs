@@ -145,6 +145,13 @@ impl<T: Num + Copy> Mat4<T> {
             .. Mat4::identity()
         }
     }
+
+    pub fn as_slice(&self) -> &[T] {
+        use std::slice;
+        unsafe {
+            slice::from_raw_parts(&self.a11 as *const T, 16)
+        }
+    }
 }
 
 impl<T: Float + Copy> Mat4<T> {

@@ -23,6 +23,7 @@ pub struct ShaderPrototype {
     vert_src: String,
     frag_src: String,
     geom_src: String,
+    bind_to_matrix_storage: bool,
 }
 
 impl ShaderPrototype {
@@ -89,7 +90,8 @@ impl ShaderPrototype {
         Ok(ShaderPrototype {
             vert_src: vert_src,
             geom_src: geom_src,
-            frag_src: frag_src
+            frag_src: frag_src,
+            bind_to_matrix_storage: false,
         })
     }
 
@@ -99,6 +101,7 @@ impl ShaderPrototype {
             vert_src: String::from(vert_src),
             geom_src: String::from(geom_src),
             frag_src: String::from(frag_src),
+            bind_to_matrix_storage: false,
         }
     }
 
@@ -123,13 +126,44 @@ impl ShaderPrototype {
         }
     }
 
+    /// Binds this shader to matrix stack storage, so that it automatically
+    /// has access to the currently set matrix stacks without the need to 
+    /// set uniforms every time a shader is bound.
+    ///
+    /// *Implementation note*: Matricies are stored at the last valid uniform
+    /// buffer binding index.
+    pub fn bind_to_matrix_storage(&mut self) {
+        let binding_index = ::matrix_stack::get_uniform_binding_index();
+        let uniform_block_decl = &format!( "layout(location={},shared,std140) uniform MatrixBlock {{ mat4 mvp; }};", binding_index);
+        if self.geom_src.is_empty() {
+            self.vert_src = prepend_code(&self.vert_src, uniform_block_decl);
+        } else {
+            self.geom_src = prepend_code(&self.geom_src, uniform_block_decl);
+        }
+        self.bind_to_matrix_storage = true;
+    }
+
+
     /// Converts this prototype into a shader
     pub fn build(&self) -> io::Result<Shader> {
         let vert_src = self.vert_src.as_str();
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
         let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
 
-        Shader::new(vert_src, geom_src, frag_src)
+        match Shader::new(vert_src, geom_src, frag_src) {
+            Ok(shader) => {
+                if self.bind_to_matrix_storage {
+                    unsafe {
+                        let binding_index = ::matrix_stack::get_uniform_binding_index();
+                        let c_str = CString::new("MatrixBlock").unwrap();
+                        let block_index = gl::GetUniformBlockIndex(shader.program, c_str.as_ptr());
+                        gl::UniformBlockBinding(shader.program, block_index, binding_index);
+                    }
+                }
+                Ok(shader)
+            },
+            Err(err) => Err(err)
+        }
     }
 
     /// Converts this prototype into a shader, inserting input declarations for the given
@@ -140,7 +174,20 @@ impl ShaderPrototype {
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
         let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
 
-        Shader::new(vert_src, geom_src, frag_src)
+        match Shader::new(vert_src, geom_src, frag_src) {
+            Ok(shader) => {
+                if self.bind_to_matrix_storage {
+                    unsafe {
+                        let binding_index = ::matrix_stack::get_uniform_binding_index();
+                        let c_str = CString::new("MatrixBlock").unwrap();
+                        let block_index = gl::GetUniformBlockIndex(shader.program, c_str.as_ptr());
+                        gl::UniformBlockBinding(shader.program, block_index, binding_index);
+                    }
+                }
+                Ok(shader)
+            },
+            Err(err) => Err(err)
+        }
     }
 }
 
@@ -466,9 +513,10 @@ macro_rules! load_shader {
             match ShaderPrototype::from_file($src) {
                 Ok(mut shader) => {
                     shader.propagate_outputs();
+                    shader.bind_to_matrix_storage();
                     shader.build_with_vert::<$vert>()
                 },
-                Err(err) => Err(err)
+                Err(err) => Err(err),
             }
         }
     }

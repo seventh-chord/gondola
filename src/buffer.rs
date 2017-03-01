@@ -367,6 +367,14 @@ impl PrimitiveBuffer {
             gl::BindBuffer(self.target as GLenum, self.buffer);
         }
     }
+
+    /// Calls `glBindBufferBase` for this buffer, with the given index. This is used
+    /// in conjunctions with e.g. uniform buffers.
+    pub fn bind_base(&mut self, index: GLuint) {
+        unsafe {
+            gl::BindBufferBase(self.target as GLenum, index, self.buffer);
+        }
+    }
 }
 
 impl Drop for PrimitiveBuffer {
@@ -446,12 +454,13 @@ pub enum PrimitiveMode {
 /// Represents different GL buffer usage hints. Note that these are hints,
 /// and drivers will not necesarily respect these.
 ///
-/// The first part of the name indicates how frequently the data will be used,
-/// the specond part indicates how it will be used:
+/// The first part of the name indicates how frequently the data will be used:  
 ///
 /// * Static - Data is set once and used often 
 /// * Dynamic - Data is set frequently and used frequently
 /// * Stream - Data is set once and used at most a few times
+///
+/// The specond part indicates how it will be used:  
 ///
 /// * Draw - Data will be set by the application and read by the GPU
 /// * Read - Data is set by the GPU and read by the application
