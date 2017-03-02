@@ -44,6 +44,7 @@ impl<'a> Font<'a> {
 
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_SIZE, CACHE_SIZE, TextureFormat::R_8);
+        cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
         Ok(Font {
             font: font,
@@ -181,9 +182,7 @@ const FRAG_SRC: &'static str = "
     uniform sampler2D tex_sampler;
 
     void main() {
-//        color = texture2D(tex_sampler, vert_uv);
-        // Temp. workaround until I implement texture swizeling
-        color = vec4(1.0, 1.0, 1.0, texture2D(tex_sampler, vert_uv).r);
+        color = texture2D(tex_sampler, vert_uv);
     }
 ";
 fn build_font_shader() -> Shader {

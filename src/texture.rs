@@ -162,6 +162,23 @@ impl Texture {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, TextureFilter::mipmap_filter(min, mipmap_min) as GLint);
         }
     }
+
+    /// Sets the swizzle mask of this texture. The swizzle mask specifies how data stored
+    /// in this texture is seen by other parts of OpenGL. This includes texture samplers
+    /// in shaders. This is usefull when using textures with only one or two components
+    /// per pixel.
+    ///
+    /// For example, given a texture with only a red component (That is, its
+    /// format is `TextureFormat::R_8` or similar), a texture sampler in a shader will
+    /// normaly get a value of type `(r, 0.0, 0.0, 1.0)`. By setting the swizzle mask
+    /// to `(SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red)`
+    /// shaders will now see `(1.0, 1.0, 1.0, r)`.
+    pub fn set_swizzle_mask(&mut self, masks: (SwizzleComp, SwizzleComp, SwizzleComp, SwizzleComp)) {
+        unsafe {
+            let masks = [masks.0 as GLint, masks.1 as GLint, masks.2 as GLint, masks.3 as GLint];
+            gl::TexParameteriv(gl::TEXTURE_2D, gl::TEXTURE_SWIZZLE_RGBA, &masks as *const _);
+        }
+    }
 }
 
 impl Drop for Texture {
@@ -205,9 +222,9 @@ impl TextureFilter {
     }
 }
 
+/// Represents a OpenGL texture format. Use in OpenGL functions like `TextureFormat::* as GLenum`
 #[allow(non_camel_case_types, dead_code)]
 #[derive(Debug, Copy, Clone)]
-/// Represents a OpenGL texture format. Use in OpenGL functions like `TextureFormat::* as GLenum`
 pub enum TextureFormat {
     RGBA_F32 = gl::RGBA32F as isize,
     RGBA_F16 = gl::RGBA16F as isize,
@@ -229,5 +246,18 @@ impl TextureFormat {
             TextureFormat::R_F32 | TextureFormat::R_F16 | TextureFormat::R_8 => gl::RED
         }
     }
+}
+
+/// Components that a texture can be mapped to through swizzling. See
+/// [`set_swizzle_mask`](struct.Texture.html#method.set_swizzle_mask)
+/// for more info.
+#[derive(Debug, Copy, Clone)]
+pub enum SwizzleComp {
+    Red     = gl::RED as isize,
+    Green   = gl::GREEN as isize,
+    Blue    = gl::BLUE as isize,
+    Alpha   = gl::ALPHA as isize,
+    One     = gl::ONE as isize,
+    Zero    = gl::ZERO as isize,
 }
 
