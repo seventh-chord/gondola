@@ -35,10 +35,15 @@ impl MatrixStack {
         }
     }
 
-    /// Sets the projection matrix to a orthographic projection with the
-    /// given parameters
+    /// Sets the projection matrix to a orthographic projection with the given parameters
     pub fn ortho(&mut self, left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) {
         self.projection = Mat4::ortho(left, right, bottom, top, near, far);
+    }
+
+    /// Sets the projection matrix to a perspective projection with the given parameters.
+    /// `fov` should be given in radians.
+    pub fn perspective(&mut self, fov: f32, aspect: f32, near: f32, far: f32) {
+        self.projection = Mat4::perspective(fov, aspect, near, far);
     }
 
     /// Pushes one frame onto the modeview stack
@@ -147,7 +152,7 @@ impl MatrixStack {
     /// `ShaderPrototype` before building a shader from it.
     pub fn update_buffer(&mut self) {
         let mvp = self.mvp();
-        self.uniform_buffer.put_floats(mvp.as_slice());
+        self.uniform_buffer.put_floats(mvp.as_ref());
         self.uniform_buffer.bind_base(self.uniform_buffer_index);
     }
 }

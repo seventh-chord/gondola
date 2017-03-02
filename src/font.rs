@@ -10,7 +10,6 @@ use std::path::Path;
 use std::fs::File;
 use std::str::Chars;
 use cable_math::Vec2;
-use cable_math::Mat4;
 use texture::*;
 use buffer::*;
 use shader::*;
@@ -101,7 +100,7 @@ pub struct DrawContext<'a: 'b, 'b> {
 impl<'a: 'b, 'b> DrawContext<'a, 'b> {
     /// Draws the given string. A mutable reference to self is needed as 
     /// glyphs are cached internally.
-    pub fn draw(&mut self, mvp: Mat4<f32>, text: &str, text_size: f32) {
+    pub fn draw(&mut self, text: &str, text_size: f32) {
         let font = &mut self.font;
         let iter = PosGlyphIter::new(text, &font.font, Scale::uniform(text_size));
 
@@ -129,7 +128,6 @@ impl<'a: 'b, 'b> DrawContext<'a, 'b> {
         font.buffer.put_at_start(&font.buffer_data);
 
         // Draw
-        font.shader.set_uniform("mvp", mvp);
         font.buffer.draw();
     }
 }
@@ -166,7 +164,7 @@ const VERT_SRC: &'static str = "
 
     out vec2 vert_uv;
 
-    uniform mat4 mvp;
+    // Matrix block is inserted automatically
 
     void main() {
         gl_Position = mvp * vec4(pos, 0.0, 1.0);
@@ -186,7 +184,9 @@ const FRAG_SRC: &'static str = "
     }
 ";
 fn build_font_shader() -> Shader {
-    match ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC).build() {
+    let mut proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
+    proto.bind_to_matrix_storage();
+    match proto.build() {
         Ok(shader) => shader,
         Err(err) => {
             println!("{}", err); // Print the error neatly properly

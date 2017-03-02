@@ -144,17 +144,26 @@ impl<T: Num + Copy> Mat4<T> {
             a11: scale.x, a22: scale.y, a33: scale.z,
             .. Mat4::identity()
         }
-    }
-
-    pub fn as_slice(&self) -> &[T] {
-        use std::slice;
-        unsafe {
-            slice::from_raw_parts(&self.a11 as *const T, 16)
-        }
-    }
+    } 
 }
 
 impl<T: Float + Copy> Mat4<T> {
+    /// Creates a new perspective projection matrix. FOV should be in degrees
+    pub fn perspective(fov: T, aspect: T, near: T, far: T) -> Mat4<T> {
+        let two = T::one() + T::one();
+        let top = (fov / two).to_radians().tan() * near;
+        let right = top * aspect;
+        Mat4 {
+            a11: near / right,
+            a22: near / top,
+            a33: (-far - near) / (far - near),
+            a34: (-two*far*near) / (far - near),
+            a43: -T::one(),
+            a44: T::zero(),
+            .. Mat4::identity()
+        }
+    }
+
     /// Creates a matrix representing a counterclockwise rotation of `angle` radians
     /// around the x-axis
     pub fn rotation_x(angle: T) -> Mat4<T> {
@@ -287,6 +296,15 @@ impl<T: Num + Copy> SubAssign for Mat4<T> {
         self.a21 = self.a21 - other.a21; self.a22 = self.a22 - other.a22; self.a23 = self.a23 - other.a23; self.a24 = self.a24 - other.a24;
         self.a31 = self.a31 - other.a31; self.a32 = self.a32 - other.a32; self.a33 = self.a33 - other.a33; self.a34 = self.a34 - other.a34;
         self.a41 = self.a41 - other.a41; self.a42 = self.a42 - other.a42; self.a43 = self.a43 - other.a43; self.a44 = self.a44 - other.a44;
+    }
+}
+
+impl<T: Num + Copy> AsRef<[T]> for Mat4<T> {
+    fn as_ref(&self) -> &[T] {
+        use std::slice;
+        unsafe {
+            slice::from_raw_parts(&self.a11 as *const T, 16)
+        }
     }
 }
 
