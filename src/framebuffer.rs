@@ -11,6 +11,7 @@ pub struct FramebufferProperties {
     pub width: u32,
     pub height: u32,
     pub internal_format: TextureFormat,
+    pub depth_buffer: bool,
 }
 
 impl FramebufferProperties {
@@ -18,7 +19,8 @@ impl FramebufferProperties {
         FramebufferProperties {
             width: width,
             height: height,
-            internal_format: TextureFormat::RGB_8
+            internal_format: TextureFormat::RGB_8,
+            depth_buffer: false,
         }
     }
 
@@ -31,14 +33,16 @@ impl FramebufferProperties {
 pub struct Framebuffer {
     framebuffer: GLuint,
     texture: GLuint,
+    depth_buffer: Option<GLuint>,
     pub width: u32,
-    pub height: u32,
+    pub height: u32
 }
 
 impl Framebuffer {
     fn new(properties: &FramebufferProperties) -> Result<Framebuffer, String> {
         let mut framebuffer: GLuint = 0;
         let mut texture: GLuint = 0;
+        let mut depth_buffer: Option<GLuint> = None;
 
         let mut error: Option<String> = None;
 
@@ -65,10 +69,23 @@ impl Framebuffer {
             gl::FramebufferTexture(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, texture, 0);
             gl::DrawBuffers(1, &gl::COLOR_ATTACHMENT0);
 
+            if properties.depth_buffer {
+                let mut depth_buffer_handle = 0;
+                gl::GenRenderbuffers(1, &mut depth_buffer_handle);
+                gl::BindRenderbuffer(gl::RENDERBUFFER, depth_buffer_handle);
+                gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT16,
+                                        properties.width as GLint, properties.height as GLint);
+                gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depth_buffer_handle);
+                depth_buffer = Some(depth_buffer_handle);
+            }
+
             let status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
             if status != gl::FRAMEBUFFER_COMPLETE {
                 gl::DeleteFramebuffers(1, &framebuffer);
                 gl::DeleteTextures(1, &texture);
+                if let Some(depth_buffer) = depth_buffer {
+                    gl::DeleteRenderbuffers(1, &depth_buffer);
+                }
                 error = Some(format!("Framebuffer error: {}", get_status_message(status)));
             }
 
@@ -82,6 +99,7 @@ impl Framebuffer {
                 Framebuffer {
                     framebuffer: framebuffer,
                     texture: texture,
+                    depth_buffer: depth_buffer,
                     width: properties.width,
                     height: properties.height,
                 }
@@ -145,8 +163,11 @@ impl Framebuffer {
 impl Drop for Framebuffer {
     fn drop(&mut self) {
         unsafe {
-            gl::DeleteFramebuffers(1, &mut self.framebuffer);
-            gl::DeleteTextures(1, &mut self.texture);
+            gl::DeleteFramebuffers(1, &self.framebuffer);
+            gl::DeleteTextures(1, &self.texture);
+            if let Some(depth_buffer) = self.depth_buffer {
+                gl::DeleteRenderbuffers(1, &depth_buffer);
+            }
         }
     }
 }
