@@ -266,6 +266,32 @@ impl<T: Float> Vec4<T> {
     }
 }
 
+// Swizzling
+impl<T: Num + Copy> Vec3<T> {
+    /// Equal to `Vec3::new(vec.x, vec.y, z)`
+    pub fn from2(vec: Vec2<T>, z: T) -> Vec3<T> { Vec3 { x: vec.x, y: vec.y, z: z } }
+    /// Equal to `Vec2::new(vec.x, vec.y)`.
+    pub fn xy(self) -> Vec2<T> { Vec2 { x: self.x, y: self.y } }
+    /// Equal to `Vec2::new(vec.x, vec.z)`.
+    pub fn xz(self) -> Vec2<T> { Vec2 { x: self.x, y: self.z } }
+    /// Equal to `Vec2::new(vec.y, vec.z)`.
+    pub fn yz(self) -> Vec2<T> { Vec2 { x: self.y, y: self.z } }
+}
+impl<T: Num + Copy> Vec4<T> {
+    /// Equal to `Vec4::new(vec.x, vec.y, vec.z, w)`
+    pub fn from3(vec: Vec3<T>, w: T) -> Vec4<T> { Vec4 { x: vec.x, y: vec.y, z: vec.z, w: w } }
+    /// Equal to `Vec4::new(vec.x, vec.y, z, w)`
+    pub fn from2(vec: Vec2<T>, z: T, w: T) -> Vec4<T> { Vec4 { x: vec.x, y: vec.y, z: z, w: w } }
+    /// Equal to `Vec4::new(vec.x, vec.y, vec.z)`
+    pub fn xyz(self) -> Vec3<T> { Vec3 { x: self.x, y: self.y, z: self.z } }
+    /// Equal to `Vec2::new(vec.x, vec.y)`.
+    pub fn xy(self) -> Vec2<T> { Vec2 { x: self.x, y: self.y } }
+    /// Equal to `Vec2::new(vec.x, vec.z)`.
+    pub fn xz(self) -> Vec2<T> { Vec2 { x: self.x, y: self.z } }
+    /// Equal to `Vec2::new(vec.y, vec.z)`.
+    pub fn yz(self) -> Vec2<T> { Vec2 { x: self.y, y: self.z } }
+}
+
 // Addition, subtraction and scaling
 impl<T: Num + Copy> Add for Vec2<T> {
     type Output = Self;
@@ -384,6 +410,58 @@ impl<T: Num + Copy> MulAssign<T> for Vec4<T> {
         self.y = self.y * scalar;
         self.z = self.z * scalar;
         self.w = self.w * scalar;
+    }
+}
+
+impl<T: Num + Copy> Div<T> for Vec2<T> {
+    type Output = Self; 
+    fn div(self, scalar: T) -> Self {
+        Vec2 {
+            x: self.x / scalar,
+            y: self.y / scalar
+        }
+    }
+}
+impl<T: Num + Copy> DivAssign<T> for Vec2<T> {
+    fn div_assign(&mut self, scalar: T) {
+        self.x = self.x / scalar;
+        self.y = self.y / scalar;
+    }
+}
+impl<T: Num + Copy> Div<T> for Vec3<T> {
+    type Output = Self; 
+    fn div(self, scalar: T) -> Self {
+        Vec3 {
+            x: self.x / scalar,
+            y: self.y / scalar,
+            z: self.z / scalar
+        }
+    }
+}
+impl<T: Num + Copy> DivAssign<T> for Vec3<T> {
+    fn div_assign(&mut self, scalar: T) {
+        self.x = self.x / scalar;
+        self.y = self.y / scalar;
+        self.z = self.z / scalar;
+    }
+}
+impl<T: Num + Copy> Div<T> for Vec4<T> {
+    type Output = Self; 
+    fn div(self, scalar: T) -> Self {
+        Vec4 {
+            x: self.x / scalar,
+            y: self.y / scalar,
+            z: self.z / scalar,
+            w: self.w / scalar
+        }
+    }
+}
+impl<T: Num + Copy> DivAssign<T> for Vec4<T> {
+    fn div_assign(&mut self, scalar: T) {
+        self.x = self.x / scalar;
+        self.y = self.y / scalar;
+        self.z = self.z / scalar;
+        self.w = self.w / scalar;
     }
 }
 
