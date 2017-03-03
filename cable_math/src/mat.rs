@@ -1,7 +1,8 @@
 
 use num::*;
-use vec::Vec3;
+use vec::{Vec3, Vec4};
 use std::ops::*;
+
 
 /// A matrix which is layed out in column major format in memory
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
@@ -156,11 +157,10 @@ impl<T: Float + Copy> Mat4<T> {
         Mat4 {
             a11: near / right,
             a22: near / top,
-            a33: (-far - near) / (far - near),
+            a33: -(far + near) / (far - near),
             a34: (-two*far*near) / (far - near),
             a43: -T::one(),
-            a44: T::zero(),
-            .. Mat4::identity()
+            .. Mat4::zero()
         }
     }
 
@@ -256,6 +256,19 @@ impl<T: Num + Copy> MulAssign<T> for Mat4<T> {
         self.a21 = self.a21 * scalar; self.a22 = self.a22 * scalar; self.a23 = self.a23 * scalar; self.a24 = self.a24 * scalar;
         self.a31 = self.a31 * scalar; self.a32 = self.a32 * scalar; self.a33 = self.a33 * scalar; self.a34 = self.a34 * scalar;
         self.a41 = self.a41 * scalar; self.a42 = self.a42 * scalar; self.a43 = self.a43 * scalar; self.a44 = self.a44 * scalar;
+    }
+}
+
+// Vector multiplication
+impl<T: Num + Copy> Mul<Vec4<T>> for Mat4<T> {
+    type Output = Vec4<T>;
+    fn mul(self, v: Vec4<T>) -> Vec4<T> {
+        Vec4 {
+            x: self.a11*v.x + self.a12*v.y + self.a13*v.z + self.a14*v.w,
+            y: self.a21*v.x + self.a22*v.y + self.a23*v.z + self.a24*v.w,
+            z: self.a31*v.x + self.a32*v.y + self.a33*v.z + self.a34*v.w,
+            w: self.a41*v.x + self.a42*v.y + self.a43*v.z + self.a44*v.w,
+        }
     }
 }
 
@@ -465,6 +478,31 @@ mod tests {
         assert!((i_det - a_det).abs() < 0.00001);
         assert!((i_det - b_det).abs() < 0.00001);
         assert!((i_det - c_det).abs() < 0.00001);
+    }
+
+    #[test]
+    fn vec_mul() {
+        let identity = Mat4::<f32>::identity();
+        let vec = Vec4::new(7.2, 2.4, 3.4, 1.9);
+
+        assert_eq!(vec, identity * vec);
+    }
+
+    #[test]
+    fn inv_vec_mul() {
+        let vec = Vec4::new(6.3, -1.3, 4.3, -2.8);
+
+        let a = mat_a();
+        let result = a * (a.inverse() * vec);
+        assert!((vec - result).len() < 0.00001);
+
+        let b = mat_b();
+        let result = b * (b.inverse() * vec);
+        assert!((vec - result).len() < 0.00001);
+
+        let c = mat_c();
+        let result = c * (c.inverse() * vec);
+        assert!((vec - result).len() < 0.00001);
     }
 }
 
