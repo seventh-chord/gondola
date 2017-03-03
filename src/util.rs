@@ -6,6 +6,7 @@ pub mod graphics {
 
     use gl;
     use gl::types::*;
+    use color::Color;
 
     /// Sets the opengl viewport
     pub fn viewport(x: u32, y: u32, width: u32, height: u32) {
@@ -37,6 +38,33 @@ pub mod graphics {
             _                                   => return Some(format!("Invalid error code: {:x}", error)),
         };
         Some(String::from(value))
+    }
+    
+    /// Clears the currently bound framebuffer to the given color. If no color is specified
+    /// only the backbuffer is cleared
+    pub fn clear(color: Option<Color>, depth: bool, stencil: bool) {
+        unsafe {
+            if let Some(color) = color {
+                gl::ClearColor(color.r, color.g, color.b, color.a);
+            }
+            let mut mask = 0;
+            if color.is_some() { mask |= gl::COLOR_BUFFER_BIT }
+            if depth           { mask |= gl::DEPTH_BUFFER_BIT }
+            if stencil         { mask |= gl::STENCIL_BUFFER_BIT }
+            gl::Clear(mask);
+        }
+    }
+
+    /// Toggles depth testing. This only has an effect if the currently bound framebuffer
+    /// has a depthbuffer (The backbuffer allways has a depthbuffer).
+    pub fn set_depth_testing(enabled: bool) {
+        unsafe {
+            if enabled {
+                gl::Enable(gl::DEPTH_TEST);
+            } else {
+                gl::Disable(gl::DEPTH_TEST);
+            }
+        }
     }
 
     /// If passed `Some` enables the given blend settings, if passed `None` disables

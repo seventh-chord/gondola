@@ -5,7 +5,6 @@ use gl;
 use std;
 use gl::types::*;
 use texture::TextureFormat;
-use color::Color;
 
 /// Utility to specify the format of a framebuffer before building it.
 pub struct FramebufferProperties {
@@ -91,7 +90,8 @@ impl Framebuffer {
     }
 
     /// Binds this framebuffer. Subsequent draw operations will modify this framebuffer
-    /// rather than the backbuffer
+    /// rather than the backbuffer. Note that you probably want to modify the viewport
+    /// to fit this framebuffers size.
     pub fn bind(&self) {
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer);
@@ -163,13 +163,5 @@ fn get_status_message(message: GLenum) -> String {
         gl::FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS      => "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS",
         _ => return format!("Unkown error ({})", message)
     })
-}
-
-/// Clears the currently bound framebuffer to the given color.
-pub fn clear(color: &Color) {
-    unsafe {
-        gl::ClearColor(color.r, color.g, color.b, color.a);
-        gl::Clear(gl::COLOR_BUFFER_BIT);
-    }
 }
 
