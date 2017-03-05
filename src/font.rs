@@ -198,8 +198,8 @@ impl FontVert {
     fn to_buffer(data: &mut Vec<FontVert>, pos: Rect<i32>, uv: Rect<f32>) {
         let x1 = pos.min.x as f32;
         let x2 = pos.max.x as f32;
-        let y1 = -pos.min.y as f32;
-        let y2 = -pos.max.y as f32;
+        let y1 = pos.min.y as f32;
+        let y2 = pos.max.y as f32;
         data.push(FontVert {
             pos: Vec2::new(x1, y1),
             uv: Vec2::new(uv.min.x, uv.min.y),

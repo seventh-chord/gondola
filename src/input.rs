@@ -1,10 +1,13 @@
 
+//! Provides utilities for tracking the state of various input devices
+
 use cable_math::Vec2;
 use glutin::*;
 
 const MOUSE_KEYS: usize = 5;
 const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
 
+/// Manages keyboard and mouse input
 pub struct InputManager {
     mouse_pos: Vec2<f32>,
     mouse_delta: Vec2<f32>,
