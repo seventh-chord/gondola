@@ -485,13 +485,11 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 /// for a given vertex type
 ///
 /// # Parameters
-/// `load_shader!(src, vertex_type, panic_on_err)`
+/// `load_shader!(src, vertex_type)`
 ///
 /// * `src`: The source file from which to load this shader. Should be `AsRef<Path>` 
 ///   (This includes `&str` and `Path`).
 /// * `vertex_type`: The name of a struct which implementes [`Vertex`](buffer/trait.Vertex.html).
-/// * `panic_on_err`: If `true`, this macro returns [`Shader`](shader/struct.Shader.html) or panics 
-///    if it failed to load, if `false` this macro returns a `io::Result<Shader>`.
 ///
 /// # Example
 /// ```rust,no_run
@@ -511,28 +509,12 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 /// }
 ///
 /// # fn main() {
-/// let shader = load_shader!("assets/basic.glsl", TestVertex, true);
+/// let shader = load_shader!("assets/basic.glsl", TestVertex)?;
 /// # }
 /// ```
 #[macro_export]
 macro_rules! load_shader {
-    ($src:expr, $vert:ty, true) => {
-        {
-            let result = ShaderPrototype::from_file($src).and_then(|mut prototype| {
-                prototype.propagate_outputs();
-                prototype.bind_to_matrix_storage();
-                prototype.build_with_vert::<$vert>()
-            });
-            match result {
-                Ok(shader) => shader,
-                Err(err) => {
-                    println!("Failed to load shader {}:\n{}", $src, err);
-                    panic!();
-                },
-            }
-        }
-    };
-    ($src:expr, $vert:ty, false) => {
+    ($src:expr, $vert:ty) => {
         ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
