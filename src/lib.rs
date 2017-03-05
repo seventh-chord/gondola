@@ -18,21 +18,23 @@ pub mod input;
 
 pub use color::*;
 pub use input::*;
-pub use util::graphics;
+pub use font::*;
 pub use matrix_stack::*;
+pub use util::graphics;
 
 use cable_math::Vec2;
 use glutin::*;
 use std::io;
 use std::time::{Instant, Duration};
 
-pub fn run<T: Game + Sized>() {
+pub fn run<T: Game + Sized>(title: &str) {
     // Create window
     let window = glutin::Window::new().unwrap();
     unsafe {
         window.make_current().unwrap();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
+    window.set_title(title);
 
     // Set up game state
     let mut state = GameState::new();
@@ -115,7 +117,7 @@ pub struct GameState {
     pub target_delta: u32,
 }
 
-/// Used with [`gondola::run`](fn.run)
+/// Used with [`gondola::run`](fn.run.html)
 pub trait Game: Sized {
     /// Called before the main loop. Resources and initial state should be set up here.
     fn setup(state: &mut GameState) -> io::Result<Self>;

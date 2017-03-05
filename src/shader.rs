@@ -515,7 +515,7 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 #[macro_export]
 macro_rules! load_shader {
     ($src:expr, $vert:ty) => {
-        ShaderPrototype::from_file($src).and_then(|mut prototype| {
+        ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
             prototype.build_with_vert::<$vert>()

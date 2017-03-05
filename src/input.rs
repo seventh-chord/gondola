@@ -62,10 +62,18 @@ impl InputManager {
                     };
                 }
             },
-            Event::KeyboardInput(state, key, _) => {
-                self.keyboard_states[key as usize] = match state {
-                    ElementState::Pressed => State::Pressed,
-                    ElementState::Released => State::Released,
+            Event::KeyboardInput(state, key, name) => {
+//                if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
+                let ref mut internal_state = self.keyboard_states[key as usize];
+                match state {
+                    ElementState::Pressed => {
+                        *internal_state = if internal_state.down() {
+                            State::PressedRepeat
+                        } else {
+                            State::Pressed
+                        }
+                    },
+                    ElementState::Released => *internal_state = State::Released,
                 };
             },
             Event::ReceivedCharacter(c) => self.type_buffer.push(c),
@@ -104,6 +112,8 @@ pub enum State {
     Up,
     /// The button is beeing held down. In the previous frame it was not held down.
     Pressed, 
+    /// The button is beeing held down, and its repeat action triggered
+    PressedRepeat,
     /// The button is beeing held down.
     Down,
     /// The button is not beeing held down. In the previous frame it was held down.
@@ -111,13 +121,30 @@ pub enum State {
 }
 impl State {
     /// Returns true if the button is beeing held down (`Down` or `Pressed`) and
-    /// false otherwise (`Up` or `Released`).
-    pub fn is_down(self) -> bool {
+    /// false otherwise (`Up`, `Released` or `PressedRepeat`).
+    pub fn down(self) -> bool {
         match self {
             State::Up | State::Released => false,
-            State::Down | State::Pressed => true,
+            State::Down | State::Pressed | State::PressedRepeat => true,
         }
     }
+    /// Returns true if the button is not beeing held down (`Up` or `Released`) and
+    /// false otherwise (`Down` or `Pressed`).
+    pub fn up(self) -> bool {
+        !self.down()
+    }
+    /// Returns true if the button is beeing held down, but was not held down in the last
+    /// frame (`Pressed`)
+    pub fn pressed(self) -> bool { self == State::Pressed }
+    /// Returns true either if this button is beeing held down and was not held down in the
+    /// last frame (`Pressed`), or if the repeat action has been triggered by the key beeing
+    /// held down for an extended amount of time (`PressedRepeat`).
+    pub fn pressed_repeat(self) -> bool {
+        self == State::Pressed || self == State::PressedRepeat
+    }
+    /// Returns true if the button is beeing not held down, but was held down in the last
+    /// frame (`Released`)
+    pub fn released(self) -> bool { self == State::Released }
 }
 
 /// Codes for most keys. Note that these are scancodes, so they refer to a position
@@ -134,5 +161,6 @@ pub enum Key {
     Escape = 0x9, Grave  = 0x31, Tab = 0x17, CapsLock  = 0x42,
     LShift = 0x32, LCtrl = 0x25, LAlt = 0x40,
     RAlt  = 0x6c, RMeta  = 0x86, RCtrl = 0x69, RShift = 0x3e, Return = 0x24, Back = 0x16,
+    Right = 0x72, Left = 0x71, Down = 0x74, Up = 0x6f,
 }
 
