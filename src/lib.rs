@@ -14,9 +14,12 @@ pub mod matrix_stack;
 pub mod util;
 pub mod framebuffer;
 pub mod font;
+pub mod input;
 
 pub use color::*;
+pub use input::*;
 pub use util::graphics;
+pub use matrix_stack::*;
 
 use cable_math::Vec2;
 use glutin::*;
@@ -34,10 +37,14 @@ pub fn run<T: Game + Sized>() {
     // Set up game state
     let mut state = GameState::new();
     state.window_size = {
-        let window_size = window.get_inner_size_pixels().unwrap();
-        Vec2::new(window_size.0, window_size.1)
+        let (width, height) = window.get_inner_size_pixels().unwrap();
+        Vec2::new(width, height)
     };
     graphics::viewport(0, 0, state.window_size.x, state.window_size.y);
+
+    let mut input = InputManager::new();
+
+    let mut mat_stack = MatrixStack::new();
 
     // Set up game
     let mut game = match T::setup(&mut state) {
@@ -49,31 +56,31 @@ pub fn run<T: Game + Sized>() {
     };
 
     let mut delta: u64 = 16;
-    let target_delta = Duration::from_millis(14);
 
     'main_loop:
     loop {
         let start_time = Instant::now();
 
         // Events
-        state.input.update();
+        input.update();
         for event in window.poll_events() {
             match event {
                 Event::Closed => break 'main_loop,
-                Event::Resized(width, height) => {
+                Event::Resized(..) => {
+                    let (width, height) = window.get_inner_size_pixels().unwrap();
                     if width != 0 && height != 0 {
                         state.window_size = Vec2::new(width, height);
                         graphics::viewport(0, 0, state.window_size.x, state.window_size.y);
                         game.on_resize(&state);
                     }
                 }
-                other => state.input.handle_event(other),
+                other => input.handle_event(other),
             }
         }
 
         // Logic and rendering
-        game.update(delta as u32, &mut state);
-        game.draw(&state);
+        game.update(delta as u32, &mut state, &input);
+        game.draw(&state, &mut mat_stack);
         window.swap_buffers().unwrap();
         graphics::print_errors();
 
@@ -83,7 +90,8 @@ pub fn run<T: Game + Sized>() {
 
         // Timing
         let elapsed = start_time.elapsed();
-        if elapsed < target_delta {
+        let target_delta = Duration::from_millis(state.target_delta as u64);
+        if state.target_delta > 0 && elapsed < target_delta {
             std::thread::sleep(target_delta - elapsed); // This is not very precice :/
         }
         let delta_dur = start_time.elapsed();
@@ -93,23 +101,33 @@ pub fn run<T: Game + Sized>() {
     game.close();
 }
 
+/// General info about the currently running game. Passed as a parameter to
+/// most [`Game`](trait.Game.html) methods.
 pub struct GameState {
-    window_size: Vec2<u32>,
-    input: InputManager,
-    exit: bool,
+    /// The size of the window in which this game is running, in pixels.
+    pub window_size: Vec2<u32>,
+    /// If set to true the game will exit after rendering.
+    pub exit: bool,
+    /// The number of milliseconds per frame this game should aim to run at. Set to 16
+    /// for 60 fps. If the main loop takes less time than this amount the game will
+    /// sleep until a total of `target_delta` has ellapsed. If set to `0` the game will
+    /// never sleep.
+    pub target_delta: u32,
 }
 
-pub struct InputManager {
-    mouse_pos: Vec2<f32>,
-    mouse_delta: Vec2<f32>,
-}
-
+/// Used with [`gondola::run`](fn.run)
 pub trait Game: Sized {
+    /// Called before the main loop. Resources and initial state should be set up here.
     fn setup(state: &mut GameState) -> io::Result<Self>;
-    fn update(&mut self, delta: u32, state: &mut GameState);
-    fn draw(&mut self, state: &GameState);
+    /// Called once every frame, before drawing.
+    fn update(&mut self, delta: u32, state: &mut GameState, input: &InputManager);
+    /// Called once every frame, after updating.
+    fn draw(&mut self, state: &GameState, mat_stack: &mut MatrixStack);
 
+    /// Called whenever the game window is resized
     fn on_resize(&mut self, state: &GameState) {}
+    /// Called after the main game loop exists. This method is not called if the main
+    /// loop `panic!`s.
     fn close(&mut self) {} // Most simple games dont need any special logic here
 }
 
@@ -117,44 +135,9 @@ impl GameState {
     pub fn new() -> GameState {
         GameState {
             window_size: Vec2::zero(),
-            input: InputManager::new(),
-            exit: false
+            exit: false,
+            target_delta: 15,
         }
     }
-
-    /// Causes the game to exit. The game is exited after calls to `update` and 
-    /// `draw` have returned.
-    pub fn exit(&mut self) { self.exit = true; }
-
-    pub fn input(&self) -> &InputManager { &self.input }
-    pub fn window_size(&self) -> Vec2<u32> { self.window_size }
-}
-
-impl InputManager {
-    fn new() -> InputManager {
-        InputManager {
-            mouse_pos: Vec2::zero(),
-            mouse_delta: Vec2::zero(),
-        }
-    }
-
-    fn update(&mut self) {
-        self.mouse_delta = Vec2::zero();
-    }
-
-    fn handle_event(&mut self, event: Event) {
-        match event {
-            Event::MouseMoved(x, y) => {
-                let old_mouse_pos = self.mouse_pos;
-                self.mouse_pos = Vec2::new(x as f32, y as f32);
-                self.mouse_delta = self.mouse_pos - old_mouse_pos;
-            },
-            _ => {},
-        }
-    }
-    
-    // Getters
-    pub fn mouse_pos(&self)   -> Vec2<f32> { self.mouse_pos }
-    pub fn mouse_delta(&self) -> Vec2<f32> { self.mouse_delta }
 }
 
