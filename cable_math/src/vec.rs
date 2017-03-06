@@ -45,6 +45,19 @@ impl<T: Num + Copy> Vec2<T> {
         a.x*b.x + a.y*b.y
     }
 
+    /// Calculates the 2D cross product of the given vectors. This is equal
+    /// the `z` component of the 3D cross product of two 3D vectors with the
+    /// same `x` and `y` components, and with `z = 0`.
+    ///
+    /// Algebraically, the cross product is equal to `a.x*b.y - b.x*a.y`.
+    ///
+    /// The 2D cross product is mostly used to determine whether two vectors
+    /// are clockwise or counterclockwise from one another. If the crossproduct
+    /// is positive, the shortest rotation from `a` to `b` is counterclockwise.
+    pub fn cross(a: Vec2<T>, b: Vec2<T>) -> T {
+        a.x*b.y - a.y*b.x
+    }
+
     /// Rotates this vector 90 degrees (π/2 radians) counterclockwise
     /// # Example
     /// ```

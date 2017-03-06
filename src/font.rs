@@ -59,58 +59,41 @@ impl<'a> Font<'a> {
     /// rendered at the given size. This takes newlines into acount, meaning that
     /// for a multiline string this will return the length of the longest line.
     pub fn get_width(&self, text: &str, text_size: f32) -> f32 {
-        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size));
+        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
         iter.map(|glyph| glyph.unpositioned().h_metrics().advance_width).sum()
     }
 
-    /// Sets up this font for rendering and takes a closure. This closure takes
-    /// a [`DrawContext`](struct.DrawContext.html) as a parameter, which can be
-    /// used to draw text. See [documentation for `draw(...)`](struct.DrawContext.html#method.draw)
-    /// for details on rendering.
-    ///
-    /// # Usage note 
-    /// No other shader or texture should be bound from within the closure that
-    /// is passed to this function. If this is done subsequent font drawing will
-    /// not work as expected.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let mut font = Font::from_file("assets/comic_sans.ttf").unwrap();
-    /// font.draw_context(|font| { // Text can be drawn within this closure
-    ///     font.draw("Hello\nworld!", 20.0);
-    /// });
-    /// #
-    /// ```
-    pub fn draw_context<F>(&mut self, mut action: F) where F: FnMut(&mut DrawContext) {
+    /// Sets up this font for rendering. This binds a texture and a shader, and
+    /// enables blending. Until another shader or texture is bound, or blending
+    /// is disabled font rendering will work.
+    pub fn start_draw(&self) {
         graphics::set_blending(Some(graphics::BlendSettings::default()));
         self.shader.bind();
         self.cache_texture.bind(0);
-        action(&mut DrawContext { font: self });
+    }
+
+    /// Disables settings that where enabled during `start_draw`. Currently, this only
+    /// disables blending. This call is strictly speaking not needed.
+    pub fn end_draw(&self) {
         graphics::set_blending(None);
     }
 
-}
-
-/// This struct is available when a font is set up for rendering. It can be used
-/// to draw text using the font from which it originated.
-pub struct DrawContext<'a: 'b, 'b> {
-    font: &'b mut Font<'a>
-}
-
-impl<'a: 'b, 'b> DrawContext<'a, 'b> {
     /// Draws the given string. A mutable reference to self is needed as 
     /// glyphs are cached internally.
-    pub fn draw(&mut self, text: &str, text_size: f32) {
-        let font = &mut self.font;
-        let iter = PosGlyphIter::new(text, &font.font, Scale::uniform(text_size));
+    ///
+    /// Remember to set up the font drawing context by calling
+    /// [`start_draw()`](struct.Font.html#method.start_draw)
+    /// *each* frame before using the font.
+    pub fn draw(&mut self, text: &str, text_size: f32, offset: Vec2<f32>) {
+        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size), offset);
 
         // Push textures to GPU
         {
             for glyph in iter.clone() {
-                font.cache.queue_glyph(0, glyph);
+                self.cache.queue_glyph(0, glyph);
             }
-            let ref mut tex = font.cache_texture;
-            font.cache.cache_queued(|rect, data| {
+            let ref mut tex = self.cache_texture;
+            self.cache.cache_queued(|rect, data| {
                 tex.load_data_to_region(data,
                                         rect.min.x, rect.min.y,
                                         rect.width(), rect.height());
@@ -118,17 +101,17 @@ impl<'a: 'b, 'b> DrawContext<'a, 'b> {
         }
 
         // Push render data to GPU
-        font.buffer_data.clear();
+        self.buffer_data.clear();
         for glyph in iter {
-            if let Ok(Some((uv, pos))) = font.cache.rect_for(0, &glyph) {
-                FontVert::to_buffer(&mut font.buffer_data, pos, uv);
+            if let Ok(Some((uv, pos))) = self.cache.rect_for(0, &glyph) {
+                FontVert::to_buffer(&mut self.buffer_data, pos, uv);
             }
         }
-        font.buffer.clear();
-        font.buffer.put_at_start(&font.buffer_data);
+        self.buffer.clear();
+        self.buffer.put_at_start(&self.buffer_data);
 
         // Draw
-        font.buffer.draw();
+        self.buffer.draw();
     }
 }
 
@@ -235,12 +218,13 @@ struct PosGlyphIter<'a: 'b, 'b> {
     font: &'b rusttype::Font<'a>,
     scale: Scale,
 
+    offset: Vec2<f32>,
     caret: Vec2<f32>,
     last_glyph: Option<GlyphId>,
     vertical_advance: f32,
 }
 impl<'a: 'b, 'b> PosGlyphIter<'a, 'b> {
-    fn new(text: &'b str, font: &'a rusttype::Font<'b>, scale: Scale) -> PosGlyphIter<'a, 'b> {
+    fn new(text: &'b str, font: &'a rusttype::Font<'b>, scale: Scale, offset: Vec2<f32>) -> PosGlyphIter<'a, 'b> {
         let v_metrics = font.v_metrics(scale);
         let vertical_advance = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
 
@@ -250,7 +234,8 @@ impl<'a: 'b, 'b> PosGlyphIter<'a, 'b> {
             font: font,
             scale: scale,
 
-            caret: Vec2::new(0.0, 0.0),
+            caret: offset,
+            offset: offset,
             last_glyph: None,
             vertical_advance: vertical_advance,
         }
@@ -264,7 +249,7 @@ impl<'a: 'b, 'b> Iterator for PosGlyphIter<'a, 'b> {
             // Move to new line
             if c.is_control() {
                 if c == '\n' {
-                    self.caret.x = 0.0;
+                    self.caret.x = self.offset.x;
                     self.caret.y += self.vertical_advance;
                     self.last_glyph = None; //No kerning after newline
                 }
