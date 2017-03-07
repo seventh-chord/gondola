@@ -13,6 +13,8 @@ pub struct FramebufferProperties {
     pub width: u32,
     /// Size in pixels
     pub height: u32,
+    /// The amount of multisampling to apply
+    pub multisample: Option<usize>,
     /// The format in which color data is stored internally
     pub internal_format: TextureFormat,
     /// If `true` a depthbuffer will be constructed for framebuffers
@@ -24,6 +26,7 @@ impl FramebufferProperties {
         FramebufferProperties {
             width: width,
             height: height,
+            multisample: None,
             internal_format: TextureFormat::RGB_8,
             depth_buffer: false,
         }
@@ -57,21 +60,30 @@ impl Framebuffer {
             gl::GenFramebuffers(1, &mut framebuffer);
             gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffer);
 
-            gl::GenTextures(1, &mut texture);
-            gl::BindTexture(gl::TEXTURE_2D, texture);
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
-                0, // Level
-                properties.internal_format as GLint,
-                properties.width as GLint, properties.height as GLint, 0, //Size and border
-                gl::RGBA, gl::UNSIGNED_BYTE, std::ptr::null() // Data for texture
-            );
+            let texture_target = if properties.multisample.is_none() { gl::TEXTURE_2D } else { gl::TEXTURE_2D_MULTISAMPLE };
 
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
+            gl::GenTextures(1, &mut texture);
+            gl::BindTexture(texture_target, texture);
+            ::util::graphics::print_errors();
+            if let Some(level) = properties.multisample {
+                gl::TexImage2DMultisample(texture_target,
+                                          level as GLsizei,
+                                          properties.internal_format as GLuint,
+                                          properties.width as GLint, properties.height as GLint, //Size
+                                          true as GLboolean); // Fixed sample locations
+            } else {
+                gl::TexImage2D(texture_target,
+                               0, // Level
+                               properties.internal_format as GLint,
+                               properties.width as GLint, properties.height as GLint, 0, //Size and border
+                               gl::RGBA, gl::UNSIGNED_BYTE, std::ptr::null()); // Data for texture
+                gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+                gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+                gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+                gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
+                gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
+            }
+            
 
             gl::FramebufferTexture(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, texture, 0);
             gl::DrawBuffers(1, &gl::COLOR_ATTACHMENT0);
@@ -80,8 +92,13 @@ impl Framebuffer {
                 let mut depth_buffer_handle = 0;
                 gl::GenRenderbuffers(1, &mut depth_buffer_handle);
                 gl::BindRenderbuffer(gl::RENDERBUFFER, depth_buffer_handle);
-                gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT16,
-                                        properties.width as GLint, properties.height as GLint);
+                if let Some(level) = properties.multisample {
+                    gl::RenderbufferStorageMultisample(gl::RENDERBUFFER, level as GLsizei, gl::DEPTH_COMPONENT16, 
+                                                       properties.width as GLint, properties.height as GLint);
+                } else {
+                    gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT16,
+                                            properties.width as GLint, properties.height as GLint);
+                }
                 gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depth_buffer_handle);
                 depth_buffer = Some(depth_buffer_handle);
             }
