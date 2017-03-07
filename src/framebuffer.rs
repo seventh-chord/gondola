@@ -3,14 +3,19 @@
 
 use gl;
 use std;
+use std::io;
 use gl::types::*;
 use texture::TextureFormat;
 
 /// Utility to specify the format of a framebuffer before building it.
 pub struct FramebufferProperties {
+    /// Size in pixels
     pub width: u32,
+    /// Size in pixels
     pub height: u32,
+    /// The format in which color data is stored internally
     pub internal_format: TextureFormat,
+    /// If `true` a depthbuffer will be constructed for framebuffers
     pub depth_buffer: bool,
 }
 
@@ -25,11 +30,13 @@ impl FramebufferProperties {
     }
 
     /// Creates a new framebuffer with these properties
-    pub fn build(&self) -> Result<Framebuffer, String> {
+    pub fn build(&self) -> io::Result<Framebuffer> {
         Framebuffer::new(&self)
     }
 }
 
+/// A OpenGL framebuffer that is ready to be used. Framebuffers are constructed from
+/// [`FramebufferProperties`](struct.FramebufferProperties.html).
 pub struct Framebuffer {
     framebuffer: GLuint,
     texture: GLuint,
@@ -39,7 +46,7 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
-    fn new(properties: &FramebufferProperties) -> Result<Framebuffer, String> {
+    fn new(properties: &FramebufferProperties) -> io::Result<Framebuffer> {
         let mut framebuffer: GLuint = 0;
         let mut texture: GLuint = 0;
         let mut depth_buffer: Option<GLuint> = None;
@@ -93,7 +100,7 @@ impl Framebuffer {
         }
 
         if let Some(error) = error {
-            return Err(error);
+            return Err(io::Error::new(io::ErrorKind::Other, error));
         } else {
             return Ok(
                 Framebuffer {
