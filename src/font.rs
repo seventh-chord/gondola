@@ -163,6 +163,21 @@ impl DrawCache {
 /// A thin wrapper around a [`Font`] coupled with a [`DrawCache`]. This is intended for simple text
 /// rendering, and is probably adequate for most usecases.
 ///
+/// # Example
+/// ```rust,ignore
+/// use gondola::font::CachedFont;
+/// use cable_math::Vec2;
+///
+/// let mut font = CachedFont::from_file("assets/comic_sans.ttf").unwrap();
+///
+/// loop {
+///     // Main logic goes here ...
+///     font.cache("Hello world\nTesting", 14.0, Vec2::new(50.0, 50.0));
+///     font.cache("ax² + bx + c = 0", 14.0, Vec2::new(50.0, 100.0));
+///     font.draw();
+/// }
+/// ```
+///
 /// [`Font`]:       struct.Font.html
 /// [`DrawCache`]:  struct.DrawCache.html
 pub struct CachedFont<'a> {
@@ -182,7 +197,8 @@ impl<'a> CachedFont<'a> {
     }
 
     /// Adds the given piece of text to the internal draw cache. Cached text can be drawn with 
-    /// [`CachedFont::draw`](struct.CachedFont.html#method.draw)
+    /// [`draw`](struct.CachedFont.html#method.draw). Usually you want to cache all text you want
+    /// to draw in a given frame and then draw it all in a single call.
     pub fn cache(&mut self, text: &str, size: f32, pos: Vec2<f32>) {
         self.font.cache(&mut self.draw_cache, text, size, pos);
     }
