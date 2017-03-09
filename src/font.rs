@@ -1,4 +1,6 @@
 
+//! This module provides various utilities for rendering text.
+
 use gl;
 use gl::types::*;
 use rusttype;
@@ -17,19 +19,22 @@ use util::graphics;
 
 const CACHE_SIZE: u32 = 512;
 
+/// A font. This struct can be used both to store data in and to draw data from a [`DrawCache`]. 
+/// Usually a [`CachedFont`] will be more convenient.
+///
+/// [`DrawCache`]:  struct.DrawCache.html
+/// [`CachedFont`]: struct.CachedFont.html
 pub struct Font<'a> {
     font: rusttype::Font<'a>,
-
     cache: Cache,
     cache_texture: Texture,
-
-    buffer: VertexBuffer<FontVert>,
-    buffer_data: Vec<FontVert>,
-
     shader: Shader,
 }
 
 impl<'a> Font<'a> {
+    /// Constructs a new font from the given font file. The file should be in either trutype (`.ttf`) or
+    /// opentype (`.otf`) format. See [rusttype documentation](https://docs.rs/rusttype) for a complete 
+    /// overview of font support. 
     pub fn from_file<P>(p: P) -> io::Result<Font<'a>> where P: AsRef<Path> {
         let mut file = File::open(p)?;
         
@@ -49,8 +54,6 @@ impl<'a> Font<'a> {
             font: font,
             cache: cache,
             cache_texture: cache_texture,
-            buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 200),
-            buffer_data: Vec::with_capacity(200),
             shader: build_font_shader(),
         })
     }
@@ -63,28 +66,10 @@ impl<'a> Font<'a> {
         iter.map(|glyph| glyph.unpositioned().h_metrics().advance_width).sum()
     }
 
-    /// Sets up this font for rendering. This binds a texture and a shader, and
-    /// enables blending. Until another shader or texture is bound, or blending
-    /// is disabled font rendering will work.
-    pub fn start_draw(&self) {
-        graphics::set_blending(Some(graphics::BlendSettings::default()));
-        self.shader.bind();
-        self.cache_texture.bind(0);
-    }
-
-    /// Disables settings that where enabled during `start_draw`. Currently, this only
-    /// disables blending. This call is strictly speaking not needed.
-    pub fn end_draw(&self) {
-        graphics::set_blending(None);
-    }
-
-    /// Draws the given string. A mutable reference to self is needed as 
-    /// glyphs are cached internally.
-    ///
-    /// Remember to set up the font drawing context by calling
-    /// [`start_draw()`](struct.Font.html#method.start_draw)
-    /// *each* frame before using the font.
-    pub fn draw(&mut self, text: &str, text_size: f32, offset: Vec2<f32>) {
+    /// Writes data needed to render the given text into the given render cache. Multiple pieces of
+    /// text can be written into the render cache before rendering it. This allows for efficient
+    /// rendering of large sets of text.
+    pub fn cache(&mut self, draw_cache: &mut DrawCache, text: &str, text_size: f32, offset: Vec2<f32>) {
         let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size), offset);
 
         // Push textures to GPU
@@ -101,20 +86,117 @@ impl<'a> Font<'a> {
         }
 
         // Push render data to GPU
-        self.buffer_data.clear();
         for glyph in iter {
             if let Ok(Some((uv, pos))) = self.cache.rect_for(0, &glyph) {
-                FontVert::to_buffer(&mut self.buffer_data, pos, uv);
+                FontVert::to_buffer(&mut draw_cache.buffer_data, pos, uv);
             }
         }
-        self.buffer.clear();
-        self.buffer.put_at_start(&self.buffer_data);
+    }
 
-        // Draw
-        self.buffer.draw();
+    /// Draws teh data stored in the given draw cache. Note that you should call
+    /// [`DrawCache::update_vbo`] before drawing a cache, and you probably want to
+    /// call [`DrawCache::clear`] afterwards.
+    ///
+    /// [`DrawCache::update_vbo`]:  struct.DrawCache.html#method.update_vbo
+    /// [`DrawCache::clear`]:       struct.DrawCache.html#method.clear
+    pub fn draw_cache(&mut self, cache: &DrawCache) {
+        graphics::set_blending(Some(graphics::BlendSettings::default()));
+        self.shader.bind();
+        self.cache_texture.bind(0);
+        cache.buffer.draw();
+        graphics::set_blending(None);
     }
 }
 
+/// A draw cache contains the raw data that is sent to the GPU when rendering font. This struct is
+/// used to temporarily store data during cached rendering. Large amounts of text can be written to
+/// the cache and then drawn with a single rendercall, allowing for more efficient rendering.
+///
+/// The cache can be filled with [`Font::cache`], and its contents can be drawn with [`Font::draw_cache`].
+/// Note that the internal vertex buffer needs to be updated with [`DrawCache::update_vbo`] before
+/// rendering. You probably also want to clear the buffer with [`DrawCache::clear`] after rendering,
+/// otherwise the same data will be redrawn in the next frame.
+///
+/// Note that a cache should only ever be used with a single [`Font`] per call to [`Font::draw_cache`]. 
+/// This is because a `DrawCache` has no knowledge of which font provided the data stored in it. Failing 
+/// to comply to this rule will lead to garbled text beeing rendered.
+///
+/// If you do not need the `Font` - `DrawCache` separation you might want to concider using
+/// [`CachedFont`] instead, as it provides a draw cache and a font in a
+/// single cohesive package.
+///
+/// [`Font`]:                   struct.Font.html
+/// [`Font::cache`]:            struct.Font.html#method.cache
+/// [`Font::draw_cache`]:       struct.Font.html#method.draw_cache
+/// [`DrawCache::update_vbo`]:  struct.DrawCache.html#method.update_vbo
+/// [`DrawCache::clear`]:       struct.DrawCache.html#method.clear
+/// [`CachedFont`]:             struct.CachedFont.html
+pub struct DrawCache {
+    buffer: VertexBuffer<FontVert>,
+    buffer_data: Vec<FontVert>,
+}
+
+impl DrawCache {
+    /// Constructs a new, empty, draw cache
+    pub fn new() -> DrawCache {
+        DrawCache {
+            buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 500),
+            buffer_data: Vec::with_capacity(500),
+        }
+    }
+
+    /// When drawing to this cache, data is by default stored on the CPU side. This method moves
+    /// data over to the GPU.
+    pub fn update_vbo(&mut self) {
+        self.buffer.clear();
+        self.buffer.put(0, &self.buffer_data);
+    }
+
+    /// Removes all data from this cache. Note that this does not call any expensive operations,
+    /// it simply sets the size of the internal buffers to 0.
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+        self.buffer_data.clear();
+    }
+}
+
+/// A thin wrapper around a [`Font`] coupled with a [`DrawCache`]. This is intended for simple text
+/// rendering, and is probably adequate for most usecases.
+///
+/// [`Font`]:       struct.Font.html
+/// [`DrawCache`]:  struct.DrawCache.html
+pub struct CachedFont<'a> {
+    font: Font<'a>,
+    draw_cache: DrawCache,
+}
+
+impl<'a> CachedFont<'a> {
+    /// Constructs a new cached font from the given font file. The file should be in either trutype (`.ttf`)
+    /// or opentype (`.otf`) format. See [rusttype documentation](https://docs.rs/rusttype) for a complete 
+    /// overview of font support. 
+    pub fn from_file<P>(p: P) -> io::Result<CachedFont<'a>> where P: AsRef<Path> {
+        Ok(CachedFont {
+            font: Font::from_file(p)?,
+            draw_cache: DrawCache::new(),
+        })
+    }
+
+    /// Adds the given piece of text to the internal draw cache. Cached text can be drawn with 
+    /// [`CachedFont::draw`](struct.CachedFont.html#method.draw)
+    pub fn cache(&mut self, text: &str, size: f32, pos: Vec2<f32>) {
+        self.font.cache(&mut self.draw_cache, text, size, pos);
+    }
+
+    /// Draws all text in the internal cache and then clears the cache
+    pub fn draw(&mut self) {
+        self.draw_cache.update_vbo();
+        self.font.draw_cache(&self.draw_cache);
+        self.draw_cache.clear();
+    }
+
+    pub fn font(&self) -> &Font<'a> { &self.font }
+    pub fn font_mut(&mut self) -> &mut Font<'a> { &mut self.font }
+}
 #[derive(Debug)]
 #[repr(C)]
 struct FontVert {
@@ -172,7 +254,7 @@ fn build_font_shader() -> Shader {
     match proto.build() {
         Ok(shader) => shader,
         Err(err) => {
-            println!("{}", err); // Print the error neatly properly
+            println!("{}", err); // Print the error properly
             panic!();
         }
     }

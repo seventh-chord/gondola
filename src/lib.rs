@@ -18,7 +18,6 @@ pub mod input;
 
 pub use color::*;
 pub use input::*;
-pub use font::*;
 pub use matrix_stack::*;
 pub use util::graphics;
 
