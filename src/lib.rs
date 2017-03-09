@@ -26,14 +26,41 @@ use glutin::*;
 use std::io;
 use std::time::{Instant, Duration};
 
-pub fn run<T: Game + Sized>(title: &str) {
+/// Creates a new window and runs the given game in this window. This function does 
+/// not return until the game exits.
+///
+/// # Example
+/// ```rust
+/// fn main() {
+///     gondola::run::<Pong>();
+/// }
+///
+/// struct Pong {
+///     // All data neded for game is defined here
+/// }
+///
+/// impl Game for Pong {
+///     fn setup(state: &mut GameState) -> io::Result<Pong> {
+///         Ok(Pong {})
+///     }
+///
+///     fn update(&mut self, delta: u32, state: &mut GameState, input: &InputManager) {
+///         // All logic goes here.
+///     }
+///
+///     fn draw(&mut self, state: &GameState, mut mat_stack: &mut MatrixStack) {
+///         // All rendering goes here
+///     }
+/// }
+/// ```
+pub fn run<T: Game + Sized>() {
     // Create window
     let window = glutin::Window::new().unwrap();
     unsafe {
         window.make_current().unwrap();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
-    window.set_title(title);
+    window.set_title(T::name());
 
     // Set up game state
     let mut state = GameState::new();
@@ -130,6 +157,8 @@ pub trait Game: Sized {
     /// Called after the main game loop exists. This method is not called if the main
     /// loop `panic!`s.
     fn close(&mut self) {} // Most simple games dont need any special logic here
+
+    fn name() -> &'static str { "Unnamed game (Override Game::name to change title)" }
 }
 
 impl GameState {
