@@ -25,6 +25,10 @@ pub struct Ui {
     draw_data: Vec<Vert>,
     draw_vbo: VertexBuffer<Vert>,
 
+    caret: Vec2<f32>,
+    caret_start: Vec2<f32>,
+    line_size: f32,
+    line_dir: LineDir,
     held: Option<Id>,
 
     // Input state
@@ -46,6 +50,10 @@ impl Ui {
             draw_data: Vec::with_capacity(500),
             draw_vbo: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 500),
 
+            caret: Vec2::zero(),
+            caret_start: Vec2::zero(),
+            line_size: 0.0,
+            line_dir: LineDir::Vertical,
             held: None,
 
             mouse_pos: Vec2::zero(),
@@ -64,6 +72,8 @@ impl Ui {
         if self.mouse_state.up() && !self.mouse_state.released() {
             self.held = None;
         }
+
+        self.caret = Vec2::zero();
     }
 
     /// Shows all components added since the last call to `draw`. This function update the matrix
@@ -81,13 +91,59 @@ impl Ui {
         self.font.draw();
     }
 
+    /// Moves the internal caret to the given position. Consecutive items will be inserted at
+    /// the caret.
+    pub fn set_caret(&mut self, pos: Vec2<f32>, line_dir: LineDir) {
+        self.caret = pos;
+        self.caret_start = pos;
+        self.line_dir = line_dir;
+        self.line_size = 0.0;
+    }
+
+    /// Advances the caret to the next line. The direction of a line depends on the line direction
+    /// set by [`set_caret`].
+    ///
+    /// [`set_caret`]: struct.Ui.html#method.set_caret
+    pub fn next_line(&mut self) {
+        match self.line_dir {
+            LineDir::Horizontal => {
+                self.caret.y += self.line_size + self.style.line_spacing;
+                self.caret.x = self.caret_start.x;
+                self.line_size = 0.0;
+            },
+            LineDir::Vertical => {
+                self.caret.x += self.line_size + self.style.line_spacing;
+                self.caret.y = self.caret_start.y;
+                self.line_size = 0.0;
+            },
+        }
+    }
+
+    fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
+        match self.line_dir {
+            LineDir::Horizontal => {
+                self.caret.x += comp_width + self.style.line_spacing;
+                self.line_size = f32::max(comp_height, self.line_size);
+            },
+            LineDir::Vertical => {
+                self.caret.y += comp_height + self.style.line_spacing;
+                self.line_size = f32::max(comp_width, self.line_size);
+            },
+        }
+    }
+
     /// Shows a new button with the given text at the given location. Returns true if the button
     /// was pressed. Note that this function needs to be called every frame you want to see the
     /// button.
-    pub fn button(&mut self, text: &str, pos: Vec2<f32>) -> bool {
-        let width = self.font.font().width(text, FONT_SIZE) + self.style.padding.x;
-        let height = self.font.font().line_height(FONT_SIZE) + self.style.padding.y;
-        let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+    pub fn button(&mut self, text: &str) -> bool {
+        let id = Id::from_str(text, CompType::Button);
+
+        let width = self.font.font().width(text, FONT_SIZE) + self.style.internal_padding.x;
+        let height = self.font.font().line_height(FONT_SIZE) + self.style.internal_padding.y;
+        let pos = self.caret;
+        self.advance_caret(width, height);
+
+        let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
         
         let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
                       self.mouse_pos.x < pos.x + width && self.mouse_pos.y < pos.y + height;
@@ -100,11 +156,8 @@ impl Ui {
         } else {
             self.style.button_color
         };
-
         quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
-        self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.padding.x/2.0, height - text_start));
-
-        let id = Id::from_str(text, CompType::Button);
+        self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start));
 
         if hovered && self.mouse_state.pressed() {
             self.held = Some(id);
@@ -120,7 +173,8 @@ pub struct Style {
     pub hover_color: Color,
     pub hold_color: Color,
 
-    pub padding: Vec2<f32>,
+    pub internal_padding: Vec2<f32>,
+    pub line_spacing: f32,
 }
 impl Default for Style {
     fn default() -> Style {
@@ -128,9 +182,17 @@ impl Default for Style {
             button_color: Color::hex("4c4665"),
             hover_color: Color::hex("575074"),
             hold_color: Color::hex("413c56"),
-            padding: Vec2::new(10.0, 6.0),
+            internal_padding: Vec2::new(10.0, 6.0),
+            line_spacing: 5.0,
         }
     }
+}
+
+pub enum LineDir {
+    /// Components are layed out below each other
+    Vertical,
+    /// Components are layed out side by side
+    Horizontal,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
