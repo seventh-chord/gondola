@@ -1,5 +1,5 @@
 
-//! Immediate mode gui
+//! Immediate mode gui. See [`ui::Ui`](struct.Ui.html) for more info.
 
 use std::mem;
 use gl;
@@ -15,6 +15,7 @@ use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
 
 const FONT_SIZE: f32 = 14.0;
 
+/// A struct for using a imediate mode gui. 
 pub struct Ui {
     pub style: Style,
 
@@ -30,6 +31,9 @@ pub struct Ui {
 }
 
 impl Ui {
+    /// Creates a new imediate mode gui system with the given font. Note that the font will be
+    /// copied internally, so you can pass a reference to a font you are using elsewhere in your
+    /// program.
     pub fn new(font: &Font) -> Ui {
         Ui {
             style: Default::default(),
@@ -45,6 +49,8 @@ impl Ui {
         }
     }
 
+    /// Updates this imgui system. This should be called once per frame, before using any of the
+    /// gui creation functions.
     pub fn update(&mut self, input: &InputManager, window_size: Vec2<u32>) {
         self.mat_stack.ortho(0.0, window_size.x as f32, 0.0, window_size.y as f32, -1.0, 1.0);
 
@@ -59,6 +65,24 @@ impl Ui {
         }
     }
 
+    /// Shows all components added since the last call to `draw`. This function update the matrix
+    /// buffers and binds new shaders. No special opengl state is required to be set when calling
+    /// this function. Note that this function does not necessarily reset the state it changes.
+    pub fn draw(&mut self) {
+        self.mat_stack.update_buffer();
+
+        self.draw_vbo.clear();
+        self.draw_vbo.put(0, &self.draw_data);
+        self.draw_data.clear();
+
+        self.shader.bind();
+        self.draw_vbo.draw();
+        self.font.draw();
+    }
+
+    /// Shows a new button with the given text at the given location. Returns true if the button
+    /// was pressed. Note that this function needs to be called every frame you want to see the
+    /// button.
     pub fn button(&mut self, text: &str, pos: Vec2<f32>) -> bool {
         let width = self.font.font().width(text, FONT_SIZE) + self.style.padding.x;
         let height = self.font.font().line_height(FONT_SIZE) + self.style.padding.y;
@@ -81,27 +105,15 @@ impl Ui {
 
         hovered && self.mouse_state.released()
     }
-
-    pub fn draw(&mut self) {
-        self.mat_stack.update_buffer();
-
-        self.draw_vbo.clear();
-        self.draw_vbo.put(0, &self.draw_data);
-        self.draw_data.clear();
-
-        self.shader.bind();
-        self.draw_vbo.draw();
-        self.font.draw();
-    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Style {
-    button_color: Color,
-    hover_color: Color,
-    hold_color: Color,
+    pub button_color: Color,
+    pub hover_color: Color,
+    pub hold_color: Color,
 
-    padding: Vec2<f32>,
+    pub padding: Vec2<f32>,
 }
 impl Default for Style {
     fn default() -> Style {
