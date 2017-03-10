@@ -25,6 +25,8 @@ pub struct Ui {
     draw_data: Vec<Vert>,
     draw_vbo: VertexBuffer<Vert>,
 
+    held: Option<Id>,
+
     // Input state
     mouse_pos: Vec2<f32>,
     mouse_state: State,
@@ -44,6 +46,8 @@ impl Ui {
             draw_data: Vec::with_capacity(500),
             draw_vbo: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 500),
 
+            held: None,
+
             mouse_pos: Vec2::zero(),
             mouse_state: State::Up,
         }
@@ -57,11 +61,8 @@ impl Ui {
         self.mouse_pos = input.mouse_pos();
         self.mouse_state = input.mouse_key(0);
 
-        if input.key(Key::A).down() {
-            self.font.cache("A is down", FONT_SIZE, Vec2::new(100.0, 100.0));
-        }
-        if input.key(Key::B).down() {
-            self.font.cache("B is down", FONT_SIZE, Vec2::new(100.0, 100.0));
+        if self.mouse_state.up() && !self.mouse_state.released() {
+            self.held = None;
         }
     }
 
@@ -103,7 +104,13 @@ impl Ui {
         quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
         self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.padding.x/2.0, height - text_start));
 
-        hovered && self.mouse_state.released()
+        let id = Id::from_str(text, CompType::Button);
+
+        if hovered && self.mouse_state.pressed() {
+            self.held = Some(id);
+        }
+
+        self.held == Some(id) && hovered && self.mouse_state.released()
     }
 }
 
@@ -123,6 +130,26 @@ impl Default for Style {
             hold_color: Color::hex("413c56"),
             padding: Vec2::new(10.0, 6.0),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Id(u64, CompType);
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CompType {
+    Button,
+}
+
+impl Id {
+    fn from_str(text: &str, ty: CompType) -> Id {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hasher, Hash};
+
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let id = hasher.finish();
+
+        Id(id, ty)
     }
 }
 
