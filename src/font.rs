@@ -31,22 +31,22 @@ const CACHE_SIZE: usize = 500;
 ///
 /// [`DrawCache`]:  struct.DrawCache.html
 /// [`CachedFont`]: struct.CachedFont.html
-pub struct Font<'a> {
-    font: rusttype::Font<'a>,
+pub struct Font {
+    font: rusttype::Font<'static>,
     cache: Cache,
     cache_texture: Texture,
     shader: Shader,
 }
 
-impl<'a> Font<'a> {
+impl Font {
     /// Constructs a new font from the given font file. The file should be in either trutype (`.ttf`) or
     /// opentype (`.otf`) format. See [rusttype documentation](https://docs.rs/rusttype) for a complete 
     /// overview of font support. 
-    pub fn from_file<P>(p: P) -> io::Result<Font<'a>> where P: AsRef<Path> {
+    pub fn from_file<P>(p: P) -> io::Result<Font> where P: AsRef<Path> {
         let mut file = File::open(p)?;
         
         let mut data = Vec::new();
-        let _bytes_read = file.read_to_end(&mut data)?;
+        file.read_to_end(&mut data)?;
 
         let font_collection = rusttype::FontCollection::from_bytes(data);
         let font = font_collection.font_at(0).unwrap();
@@ -61,7 +61,7 @@ impl<'a> Font<'a> {
             font: font,
             cache: cache,
             cache_texture: cache_texture,
-            shader: build_font_shader(),
+            shader: build_shader(),
         })
     }
 
@@ -188,16 +188,16 @@ impl DrawCache {
 ///
 /// [`Font`]:       struct.Font.html
 /// [`DrawCache`]:  struct.DrawCache.html
-pub struct CachedFont<'a> {
-    font: Font<'a>,
+pub struct CachedFont {
+    font: Font,
     draw_cache: DrawCache,
 }
 
-impl<'a> CachedFont<'a> {
+impl CachedFont {
     /// Constructs a new cached font from the given font file. The file should be in either trutype (`.ttf`)
     /// or opentype (`.otf`) format. See [rusttype documentation](https://docs.rs/rusttype) for a complete 
     /// overview of font support. 
-    pub fn from_file<P>(p: P) -> io::Result<CachedFont<'a>> where P: AsRef<Path> {
+    pub fn from_file<P>(p: P) -> io::Result<CachedFont> where P: AsRef<Path> {
         Ok(CachedFont {
             font: Font::from_file(p)?,
             draw_cache: DrawCache::new(),
@@ -218,8 +218,8 @@ impl<'a> CachedFont<'a> {
         self.draw_cache.clear();
     }
 
-    pub fn font(&self) -> &Font<'a> { &self.font }
-    pub fn font_mut(&mut self) -> &mut Font<'a> { &mut self.font }
+    pub fn font(&self) -> &Font { &self.font }
+    pub fn font_mut(&mut self) -> &mut Font { &mut self.font }
 }
 #[derive(Debug)]
 #[repr(C)]
@@ -272,7 +272,7 @@ const FRAG_SRC: &'static str = "
         color = texture2D(tex_sampler, vert_uv);
     }
 ";
-fn build_font_shader() -> Shader {
+fn build_shader() -> Shader {
     let mut proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
     proto.bind_to_matrix_storage();
     match proto.build() {
@@ -318,10 +318,10 @@ impl FontVert {
 }
 
 #[derive(Clone)]
-struct PosGlyphIter<'a: 'b, 'b> {
-    text: Chars<'b>,
+struct PosGlyphIter<'a> {
+    text: Chars<'a>,
 
-    font: &'b rusttype::Font<'a>,
+    font: &'a rusttype::Font<'a>,
     scale: Scale,
 
     offset: Vec2<f32>,
@@ -329,8 +329,8 @@ struct PosGlyphIter<'a: 'b, 'b> {
     last_glyph: Option<GlyphId>,
     vertical_advance: f32,
 }
-impl<'a: 'b, 'b> PosGlyphIter<'a, 'b> {
-    fn new(text: &'b str, font: &'a rusttype::Font<'b>, scale: Scale, offset: Vec2<f32>) -> PosGlyphIter<'a, 'b> {
+impl<'a> PosGlyphIter<'a> {
+    fn new(text: &'a str, font: &'a rusttype::Font, scale: Scale, offset: Vec2<f32>) -> PosGlyphIter<'a> {
         let v_metrics = font.v_metrics(scale);
         let vertical_advance = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
 
@@ -347,8 +347,8 @@ impl<'a: 'b, 'b> PosGlyphIter<'a, 'b> {
         }
     }
 }
-impl<'a: 'b, 'b> Iterator for PosGlyphIter<'a, 'b> {
-    type Item = PositionedGlyph<'b>;
+impl<'a> Iterator for PosGlyphIter<'a> {
+    type Item = PositionedGlyph<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(c) = self.text.next() {
