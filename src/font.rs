@@ -1,6 +1,11 @@
 
 //! This module provides various utilities for rendering text.
 
+// Note to self: There is a problem with the current font rendering system. When storing data
+// in a draw cache, we write data to the cache texture. If the cache texture is to small we will
+// end up overwriting the original data in the texture with new data before rendering. If this
+// happens we can probably solve the problem by simply increasing the cache texture size.
+
 use gl;
 use gl::types::*;
 use rusttype;
@@ -17,7 +22,9 @@ use buffer::*;
 use shader::*;
 use util::graphics;
 
-const CACHE_SIZE: u32 = 512;
+const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture size: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_TEXTURE_SIZE
+const VERTS_PER_CHAR: usize = 6;
+const CACHE_SIZE: usize = 500;
 
 /// A font. This struct can be used both to store data in and to draw data from a [`DrawCache`]. 
 /// Usually a [`CachedFont`] will be more convenient.
@@ -44,10 +51,10 @@ impl<'a> Font<'a> {
         let font_collection = rusttype::FontCollection::from_bytes(data);
         let font = font_collection.font_at(0).unwrap();
 
-        let cache = Cache::new(CACHE_SIZE, CACHE_SIZE, 0.1, 0.1);
+        let cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.1, 0.1);
 
         let mut cache_texture = Texture::new();
-        cache_texture.initialize(CACHE_SIZE, CACHE_SIZE, TextureFormat::R_8);
+        cache_texture.initialize(CACHE_TEX_SIZE, CACHE_TEX_SIZE, TextureFormat::R_8);
         cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
         Ok(Font {
@@ -139,9 +146,10 @@ pub struct DrawCache {
 impl DrawCache {
     /// Constructs a new, empty, draw cache
     pub fn new() -> DrawCache {
+        let vertices = VERTS_PER_CHAR * CACHE_SIZE;
         DrawCache {
-            buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 500),
-            buffer_data: Vec::with_capacity(500),
+            buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, vertices),
+            buffer_data: Vec::with_capacity(vertices),
         }
     }
 
