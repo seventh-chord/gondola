@@ -15,6 +15,7 @@ pub mod util;
 pub mod framebuffer;
 pub mod font;
 pub mod input;
+pub mod ui;
 
 pub use color::*;
 pub use input::*;
@@ -153,7 +154,7 @@ pub trait Game: Sized {
     fn draw(&mut self, state: &GameState, mat_stack: &mut MatrixStack);
 
     /// Called whenever the game window is resized
-    fn on_resize(&mut self, state: &GameState) {}
+    fn on_resize(&mut self, _state: &GameState) {}
     /// Called after the main game loop exists. This method is not called if the main
     /// loop `panic!`s.
     fn close(&mut self) {} // Most simple games dont need any special logic here

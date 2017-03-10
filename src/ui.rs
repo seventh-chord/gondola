@@ -1,0 +1,197 @@
+
+//! Immediate mode gui
+
+use std::mem;
+use gl;
+use gl::types::*;
+use cable_math::Vec2;
+
+use color::Color;
+use font::{Font, CachedFont};
+use input::{InputManager, Key, State};
+use matrix_stack::MatrixStack;
+use shader::{Shader, ShaderPrototype};
+use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
+
+const FONT_SIZE: f32 = 14.0;
+
+pub struct Ui {
+    pub style: Style,
+
+    mat_stack: MatrixStack,
+    font: CachedFont,
+    shader: Shader,
+    draw_data: Vec<Vert>,
+    draw_vbo: VertexBuffer<Vert>,
+
+    // Input state
+    mouse_pos: Vec2<f32>,
+    mouse_state: State,
+}
+
+impl Ui {
+    pub fn new(font: &Font) -> Ui {
+        Ui {
+            style: Default::default(),
+
+            mat_stack: MatrixStack::new(),
+            font: CachedFont::from_font(font.clone()),
+            shader: build_shader(),
+            draw_data: Vec::with_capacity(500),
+            draw_vbo: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 500),
+
+            mouse_pos: Vec2::zero(),
+            mouse_state: State::Up,
+        }
+    }
+
+    pub fn update(&mut self, input: &InputManager, window_size: Vec2<u32>) {
+        self.mat_stack.ortho(0.0, window_size.x as f32, 0.0, window_size.y as f32, -1.0, 1.0);
+
+        self.mouse_pos = input.mouse_pos();
+        self.mouse_state = input.mouse_key(0);
+
+        if input.key(Key::A).down() {
+            self.font.cache("A is down", FONT_SIZE, Vec2::new(100.0, 100.0));
+        }
+        if input.key(Key::B).down() {
+            self.font.cache("B is down", FONT_SIZE, Vec2::new(100.0, 100.0));
+        }
+    }
+
+    pub fn button(&mut self, text: &str, pos: Vec2<f32>) -> bool {
+        let width = self.font.font().width(text, FONT_SIZE) + self.style.padding.x;
+        let height = self.font.font().line_height(FONT_SIZE) + self.style.padding.y;
+        let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+        
+        let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
+                      self.mouse_pos.x < pos.x + width && self.mouse_pos.y < pos.y + height;
+        let held = hovered && self.mouse_state.down();
+
+        let color = if held {
+            self.style.hold_color
+        } else if hovered {
+            self.style.hover_color
+        } else {
+            self.style.button_color
+        };
+
+        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
+        self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.padding.x/2.0, height - text_start));
+
+        hovered && self.mouse_state.released()
+    }
+
+    pub fn draw(&mut self) {
+        self.mat_stack.update_buffer();
+
+        self.draw_vbo.clear();
+        self.draw_vbo.put(0, &self.draw_data);
+        self.draw_data.clear();
+
+        self.shader.bind();
+        self.draw_vbo.draw();
+        self.font.draw();
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Style {
+    button_color: Color,
+    hover_color: Color,
+    hold_color: Color,
+
+    padding: Vec2<f32>,
+}
+impl Default for Style {
+    fn default() -> Style {
+        Style {
+            button_color: Color::hex("4c4665"),
+            hover_color: Color::hex("575074"),
+            hold_color: Color::hex("413c56"),
+            padding: Vec2::new(10.0, 6.0),
+        }
+    }
+}
+
+#[derive(Debug)]
+#[repr(C)]
+struct Vert {
+    pos: Vec2<f32>,
+    color: Color,
+}
+
+fn quad(buf: &mut Vec<Vert>, pos: Vec2<f32>, size: Vec2<f32>, color: Color){
+    let min = pos;
+    let max = pos + size;
+
+    buf.push(Vert { pos: Vec2::new(min.x, min.y), color: color });
+    buf.push(Vert { pos: Vec2::new(max.x, min.y), color: color });
+    buf.push(Vert { pos: Vec2::new(max.x, max.y), color: color });
+
+    buf.push(Vert { pos: Vec2::new(min.x, min.y), color: color });
+    buf.push(Vert { pos: Vec2::new(max.x, max.y), color: color });
+    buf.push(Vert { pos: Vec2::new(min.x, max.y), color: color });
+}
+
+// We cannot use the custom derive from within this crate
+impl Vertex for Vert {
+    fn bytes_per_vertex() -> usize { mem::size_of::<Vert>() }
+    fn setup_attrib_pointers() {
+        let stride = <Vert as Vertex>::bytes_per_vertex();
+        let mut offset = 0;
+        unsafe {
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(0, 2, gl::FLOAT,
+                                    false as GLboolean,
+                                    stride as GLsizei, offset as *const GLvoid);
+            offset += mem::size_of::<Vec2<f32>>();
+
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribPointer(1, 4, gl::FLOAT,
+                                    false as GLboolean,
+                                    stride as GLsizei, offset as *const GLvoid);
+        }
+    }
+    // Not used, we manualy declare inputs in the shader
+    fn gen_shader_input_decl() -> String { String::new() }
+}
+
+const VERT_SRC: &'static str = "
+    #version 330 core
+
+    layout(location = 0) in vec2 pos;
+    layout(location = 1) in vec4 color;
+
+    out vec4 vert_col;
+
+    // Matrix block is inserted automatically
+
+    void main() {
+        gl_Position = mvp * vec4(pos, 0.0, 1.0);
+        vert_col = color;
+    }
+";
+const FRAG_SRC: &'static str = "
+    #version 330 core
+
+    in vec4 vert_col;
+    out vec4 color;
+
+    void main() {
+        color = vert_col;
+    }
+";
+
+fn build_shader() -> Shader {
+    let mut proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
+    proto.bind_to_matrix_storage();
+    match proto.build() {
+        Ok(shader) => shader,
+        Err(err) => {
+            println!("{}", err); // Print the error properly
+            panic!();
+        }
+    }
+}
+

@@ -51,26 +51,54 @@ impl Font {
         let font_collection = rusttype::FontCollection::from_bytes(data);
         let font = font_collection.font_at(0).unwrap();
 
+        Ok(Font::with_rusttype_font(font))
+    }
+    fn with_rusttype_font(font: rusttype::Font<'static>) -> Font {
         let cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.1, 0.1);
 
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_TEX_SIZE, CACHE_TEX_SIZE, TextureFormat::R_8);
         cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
-        Ok(Font {
+        Font {
             font: font,
             cache: cache,
             cache_texture: cache_texture,
             shader: build_shader(),
-        })
+        }
     }
 
     /// Calculates the width, in pixels, of the given string if it where to be
     /// rendered at the given size. This takes newlines into acount, meaning that
     /// for a multiline string this will return the length of the longest line.
-    pub fn get_width(&self, text: &str, text_size: f32) -> f32 {
+    pub fn width(&self, text: &str, text_size: f32) -> f32 {
         let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
         iter.map(|glyph| glyph.unpositioned().h_metrics().advance_width).sum()
+    }
+
+    /// Retrieves the total height of a line drawn with this font at the given size. This is the
+    /// sum of the max ascent, the max descent and the line gap.
+    pub fn line_height(&self, text_size: f32) -> f32 {
+        let v_metrics = self.font.v_metrics(Scale::uniform(text_size));
+        v_metrics.ascent - v_metrics.descent + v_metrics.line_gap
+    }
+
+    /// Retrieves the max ascent of a line drawn with this font at the given size. Note that this
+    /// number is typically positive
+    pub fn ascent(&self, text_size: f32) -> f32 {
+        let v_metrics = self.font.v_metrics(Scale::uniform(text_size));
+        v_metrics.ascent
+    }
+    /// Retrieves the min descent of a line drawn with this font at the given size. Note that this
+    /// number is typically negative
+    pub fn descent(&self, text_size: f32) -> f32 {
+        let v_metrics = self.font.v_metrics(Scale::uniform(text_size));
+        v_metrics.descent
+    }
+    /// Retrieves the line gap that should be used with this font at the given size.
+    pub fn line_gap(&self, text_size: f32) -> f32 {
+        let v_metrics = self.font.v_metrics(Scale::uniform(text_size));
+        v_metrics.line_gap
     }
 
     /// Writes data needed to render the given text into the given render cache. Multiple pieces of
@@ -112,6 +140,15 @@ impl Font {
         self.cache_texture.bind(0);
         cache.buffer.draw();
         graphics::set_blending(None);
+    }
+}
+
+impl Clone for Font {
+    /// Produces a copy of this font. Note that this creates a new internal glyph cache
+    fn clone(&self) -> Font {
+        // Cloning a rusttype font is cheap as data is internally stored in a
+        // `Arc<Box<&[u8]>>`, which is cheap to clone.
+        Font::with_rusttype_font(self.font.clone())
     }
 }
 
@@ -202,6 +239,14 @@ impl CachedFont {
             font: Font::from_file(p)?,
             draw_cache: DrawCache::new(),
         })
+    }
+
+    /// Wrapps the given font in a cached font
+    pub fn from_font(font: Font) -> CachedFont {
+        CachedFont {
+            font: font,
+            draw_cache: DrawCache::new(),
+        }
     }
 
     /// Adds the given piece of text to the internal draw cache. Cached text can be drawn with 

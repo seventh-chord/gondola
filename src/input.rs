@@ -62,7 +62,7 @@ impl InputManager {
                     };
                 }
             },
-            Event::KeyboardInput(state, key, name) => {
+            Event::KeyboardInput(state, key, _) => {
 //                if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
                 let ref mut internal_state = self.keyboard_states[key as usize];
                 match state {
