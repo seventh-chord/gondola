@@ -4,11 +4,14 @@
 use std::mem;
 use gl;
 use gl::types::*;
+use std::ops::Range;
+use std::collections::HashMap;
+use std::fmt::Write;
 use cable_math::Vec2;
 
 use color::Color;
 use font::{Font, CachedFont};
-use input::{InputManager, Key, State};
+use input::{InputManager, State};
 use matrix_stack::MatrixStack;
 use shader::{Shader, ShaderPrototype};
 use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
@@ -30,6 +33,9 @@ pub struct Ui {
     line_size: f32,
     line_dir: LineDir,
     held: Option<Id>,
+
+    internal_format_string: String,
+    slider_map: HashMap<Id, f32>,
 
     // Input state
     mouse_pos: Vec2<f32>,
@@ -55,6 +61,9 @@ impl Ui {
             line_size: 0.0,
             line_dir: LineDir::Vertical,
             held: None,
+
+            internal_format_string: String::new(),
+            slider_map: HashMap::new(),
 
             mouse_pos: Vec2::zero(),
             mouse_state: State::Up,
@@ -132,6 +141,10 @@ impl Ui {
         }
     }
 
+    fn default_height(&self) -> f32 {
+        self.font.font().line_height(FONT_SIZE) + self.style.internal_padding.y
+    }
+
     /// Shows a new button with the given text at the given location. Returns true if the button
     /// was pressed. Note that this function needs to be called every frame you want to see the
     /// button.
@@ -139,7 +152,7 @@ impl Ui {
         let id = Id::from_str(text, CompType::Button);
 
         let width = self.font.font().width(text, FONT_SIZE) + self.style.internal_padding.x;
-        let height = self.font.font().line_height(FONT_SIZE) + self.style.internal_padding.y;
+        let height = self.default_height();
         let pos = self.caret;
         self.advance_caret(width, height);
 
@@ -147,43 +160,105 @@ impl Ui {
         
         let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
                       self.mouse_pos.x < pos.x + width && self.mouse_pos.y < pos.y + height;
-        let held = hovered && self.mouse_state.down();
-
-        let color = if held {
-            self.style.hold_color
-        } else if hovered {
-            self.style.hover_color
-        } else {
-            self.style.button_color
-        };
-        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
-        self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start));
-
         if hovered && self.mouse_state.pressed() {
             self.held = Some(id);
         }
 
+        let color = if self.held == Some(id) {
+            self.style.hold_color
+        } else if hovered {
+            self.style.hover_color
+        } else {
+            self.style.base_color
+        };
+        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
+        self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start));
+
+
         self.held == Some(id) && hovered && self.mouse_state.released()
+    }
+
+    // TODO: Maybe make this generic over different number types
+    pub fn slider(&mut self, text: &str, range: Range<f32>) -> f32 {
+        let id = Id::from_str(text, CompType::Slider);
+        let mut value = *self.slider_map.entry(id).or_insert((range.start + range.end) / 2.0);
+
+        let width = self.style.default_comp_width;
+        let height = self.default_height();
+        let pos = self.caret;
+        self.advance_caret(width, height);
+
+        let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
+                      self.mouse_pos.x < pos.x + width && self.mouse_pos.y < pos.y + height;
+        if hovered && self.mouse_state.pressed() {
+            self.held = Some(id);
+        } 
+
+        let slider_size = {
+            let size = height - self.style.internal_padding.y;
+            Vec2::new(size, size)
+        };
+        let slider_pos = {
+            let norm_value = (value - range.start) / (range.end - range.start);
+            let slide_distance = width - self.style.internal_padding.x - slider_size.x;
+            pos + Vec2::new(self.style.internal_padding.x/2.0 + norm_value*slide_distance, self.style.internal_padding.y/2.0)
+        };
+
+        self.internal_format_string.clear();
+        write!(self.internal_format_string, "{}: {:.*}", text, 2, value).unwrap();
+
+        let text_pos = {
+            let text_width = self.font.font().width(&self.internal_format_string, FONT_SIZE);
+            let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+            pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
+        }; 
+
+        if self.held == Some(id) {
+            value = (self.mouse_pos.x - pos.x - self.style.internal_padding.x/2.0 - slider_size.x/2.0) /
+                    (width - self.style.internal_padding.x - slider_size.x);
+            if value > 1.0 { value = 1.0 }
+            if value < 0.0 { value = 0.0 }
+            value = range.start + value*(range.end - range.start);
+
+            self.slider_map.insert(id, value);
+        }
+
+        // Main bar
+        let color = if hovered { self.style.hover_color } else { self.style.base_color };
+        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
+        self.font.cache(&self.internal_format_string, FONT_SIZE, text_pos);
+        // Slidy thing
+        let color = if self.held == Some(id) { self.style.top_hold_color } else { self.style.top_color };
+        quad(&mut self.draw_data, slider_pos, slider_size, color);
+
+        value
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Style {
-    pub button_color: Color,
+    pub base_color: Color,
     pub hover_color: Color,
     pub hold_color: Color,
+    pub top_color: Color,
+    pub top_hold_color: Color,
 
     pub internal_padding: Vec2<f32>,
     pub line_spacing: f32,
+    pub default_comp_width: f32,
 }
 impl Default for Style {
     fn default() -> Style {
         Style {
-            button_color: Color::hex("4c4665"),
-            hover_color: Color::hex("575074"),
-            hold_color: Color::hex("413c56"),
+            base_color:      Color::hex("4c4665"),
+            hover_color:     Color::hex("575074"),
+            hold_color:      Color::hex("413c56"),
+            top_color:       Color::hex("403147"),
+            top_hold_color:  Color::hex("2a2738"),
+
             internal_padding: Vec2::new(10.0, 6.0),
             line_spacing: 5.0,
+            default_comp_width: 150.0,
         }
     }
 }
@@ -195,11 +270,12 @@ pub enum LineDir {
     Horizontal,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct Id(u64, CompType);
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum CompType {
     Button,
+    Slider,
 }
 
 impl Id {
