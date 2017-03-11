@@ -32,14 +32,18 @@ pub struct Ui {
     caret_start: Vec2<f32>,
     line_size: f32,
     line_dir: LineDir,
+
     held: Option<Id>,
+    focused: Option<Id>,
 
     internal_fmt_string: String,
     slider_map: HashMap<Id, f32>,
+    textbox_map: HashMap<Id, String>,
 
     // Input state
     mouse_pos: Vec2<f32>,
     mouse_state: State,
+    typed: String,
 }
 
 impl Ui {
@@ -60,13 +64,17 @@ impl Ui {
             caret_start: Vec2::zero(),
             line_size: 0.0,
             line_dir: LineDir::Vertical,
+
             held: None,
+            focused: None,
 
             internal_fmt_string: String::new(),
             slider_map: HashMap::new(),
+            textbox_map: HashMap::new(),
 
             mouse_pos: Vec2::zero(),
             mouse_state: State::Up,
+            typed: String::new(),
         }
     }
 
@@ -77,9 +85,17 @@ impl Ui {
 
         self.mouse_pos = input.mouse_pos();
         self.mouse_state = input.mouse_key(0);
+        self.typed.clear();
+        self.typed.push_str(input.typed());
 
         if self.mouse_state.up() && !self.mouse_state.released() {
             self.held = None;
+        }
+
+        if let Some(held) = self.held {
+            if Some(held) != self.focused {
+                self.focused = None;
+            }
         }
 
         self.caret = Vec2::zero();
@@ -133,8 +149,16 @@ impl Ui {
     /// button.
     pub fn button(&mut self, text: &str) -> bool {
         let id = Id::from_str(text, CompType::Button);
+        self.button_internal(text, id).2
+    }
 
-        let width = self.font.font().width(text, FONT_SIZE) + self.style.internal_padding.x;
+    /// Internal version of the `button` method, which allows specifying a separate id for 
+    /// the button. This allows a button to be used as the "host" for another component.
+    ///
+    /// This function returns the width and height of this button, as well as true if the button
+    /// was pressed.
+    fn button_internal(&mut self, text: &str, id: Id) -> (f32, f32, bool) {
+        let width = self.style.comp_width;
         let height = self.default_height();
         let pos = self.caret;
         self.advance_caret(width, height);
@@ -152,9 +176,10 @@ impl Ui {
         } else {
             self.style.base_color
         };
-        self.draw_comp(pos, width, height, color, text, Alignment::Left);
+        self.draw_comp(pos, width, height, color, text, Alignment::Center);
 
-        self.held == Some(id) && hovered && self.mouse_state.released()
+        let pressed = self.held == Some(id) && hovered && self.mouse_state.released();
+        (width, height, pressed)
     }
 
     /// Creates a new slider that allows selecting values from the given range 
@@ -162,7 +187,7 @@ impl Ui {
         let id = Id::from_str(text, CompType::Slider);
         let mut value = *self.slider_map.entry(id).or_insert((range.start + range.end) / 2.0);
 
-        let width = self.style.default_comp_width;
+        let width = self.style.comp_width;
         let height = self.default_height();
         let pos = self.caret;
         self.advance_caret(width, height);
@@ -207,30 +232,81 @@ impl Ui {
         value
     }
 
+    /// Creates a new textbox. The title will not be displayed, but should be a unique identifier
+    /// for this textbox.
+    pub fn textbox(&mut self, title: &str) -> &str {
+        let id = Id::from_str(title, CompType::Textbox);
+        let pos = self.caret;
+
+        let (width, height, pressed) = self.button_internal("", id);
+        if pressed {
+            if self.focused == Some(id) {
+                self.focused = None;
+            } else {
+                self.focused = Some(id);
+            }
+        }
+
+        if self.focused == Some(id) {
+            let ref mut value = self.textbox_map.entry(id).or_insert(String::new());
+
+            value.reserve(self.typed.len());
+
+            for c in self.typed.chars() {
+                match c {
+                    // Backspace
+                    '\x08' => {
+                        value.pop();
+                    }, 
+                    '\n' | '\r' => {},
+                    _ => {
+                        value.push(c);
+                    },
+                }
+            }
+        }
+
+        if let Some(text) = self.textbox_map.get(&id) {
+            if !text.is_empty() {
+                let visible_range =
+                    self.font.font().visible_area(text, FONT_SIZE,
+                                                  width - self.style.internal_padding.x,
+                                                  text.len() - 1);
+                let slice = &text[visible_range];
+
+                let text_pos = {
+                    let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                    pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start)
+                };
+                self.font.cache(slice, FONT_SIZE, text_pos);
+                text
+            } else {
+                ""
+            }
+        } else {
+            ""
+        }
+    }
+
     fn draw_comp(&mut self, pos: Vec2<f32>, width: f32, height: f32, color: Color, text: &str, alignment: Alignment) {
         quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
-        match alignment {
+        let text_pos = match alignment {
             Alignment::Left => {
                 let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start));
+                pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start)
             },
             Alignment::Right => {
-                let text_pos = {
-                    let text_width = self.font.font().width(&self.internal_fmt_string, FONT_SIZE);
-                    let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                    pos + Vec2::new(width - self.style.internal_padding.x/2.0 - text_width, height - text_v_offset)
-                }; 
-                self.font.cache(text, FONT_SIZE, text_pos);
+                let text_width = self.font.font().width(text, FONT_SIZE);
+                let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                pos + Vec2::new(width - self.style.internal_padding.x/2.0 - text_width, height - text_v_offset)
             },
             Alignment::Center => {
-                let text_pos = {
-                    let text_width = self.font.font().width(&self.internal_fmt_string, FONT_SIZE);
-                    let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                    pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
-                }; 
-                self.font.cache(text, FONT_SIZE, text_pos);
+                let text_width = self.font.font().width(text, FONT_SIZE);
+                let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
             },
-        }
+        };
+        self.font.cache(text, FONT_SIZE, text_pos);
     }
 
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
@@ -261,7 +337,7 @@ pub struct Style {
 
     pub internal_padding: Vec2<f32>,
     pub line_spacing: f32,
-    pub default_comp_width: f32,
+    pub comp_width: f32,
 }
 impl Default for Style {
     fn default() -> Style {
@@ -274,7 +350,7 @@ impl Default for Style {
 
             internal_padding: Vec2::new(10.0, 6.0),
             line_spacing: 5.0,
-            default_comp_width: 150.0,
+            comp_width: 150.0,
         }
     }
 }
@@ -296,6 +372,7 @@ struct Id(u64, CompType);
 enum CompType {
     Button,
     Slider,
+    Textbox,
 }
 
 impl Id {

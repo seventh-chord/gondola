@@ -101,8 +101,8 @@ impl InputManager {
         self.keyboard_states[key as usize]
     }
     /// Characters that have been typed. This is cleared each frame.
-    pub fn typed(&self) -> String {
-        self.type_buffer.clone()
+    pub fn typed(&self) -> &str {
+        &self.type_buffer
     }
 }
 

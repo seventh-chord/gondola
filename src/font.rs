@@ -16,6 +16,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use std::fs::File;
 use std::str::Chars;
+use std::ops::Range;
 use cable_math::Vec2;
 use texture::*;
 use buffer::*;
@@ -72,8 +73,67 @@ impl Font {
     /// rendered at the given size. This takes newlines into acount, meaning that
     /// for a multiline string this will return the length of the longest line.
     pub fn width(&self, text: &str, text_size: f32) -> f32 {
-        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
-        iter.map(|glyph| glyph.unpositioned().h_metrics().advance_width).sum()
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        let mut max_width = 0.0;
+        for PlacementInfo { caret, .. } in iter {
+            max_width = f32::max(caret.x, max_width);
+        }
+        max_width
+    }
+
+    /// Calculates which region of the given piece of text will be visible in a
+    /// viewport with the given width. `focus` specifies which codepoint of the string
+    /// should be in the center of the viewport. For example, if `focus` is set to
+    /// `text.len() - 1` this function will find a range of characters starting from
+    /// the end which will fit into the given width.
+    ///
+    /// Panics if `focus` is not a valid index to `text`. A valid index is within
+    /// the length of the text and on a character boundary. Keep in mind that
+    /// `focus` is a byte index, not a char index.  Returns a range that can be used 
+    /// to take a valid slice of `text`.
+    ///
+    /// This function has not been tested with multiline strings.
+    pub fn visible_area(&self, text: &str, text_size: f32, width: f32, focus: usize) -> Range<usize> {
+        if focus >= text.len() && text.is_char_boundary(focus) { 
+            panic!("`focus` is not a valid index (focus = {})", focus);
+        }
+
+        let mut focus_pos = 0.0;
+        let mut total_width = 0.0;
+
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+
+        // Find the location within the text, in draw space coordinates, which should be in focus
+        for PlacementInfo { caret, glyph, str_index } in iter.clone() {
+            if str_index == focus {
+//                focus_pos = caret.x - glyph.unpositioned().h_metrics().advance_width/2.0;
+                focus_pos = caret.x;
+            }
+            if caret.x > total_width { total_width = caret.x; }
+        }
+
+        // Calculate the start and end, in draw space coordinates, of the visible region
+        let (start, end) = if focus_pos < width {
+            (0.0, width)
+        } else {
+            let end = f32::max(focus_pos, total_width);
+            (end - width, total_width)
+        };
+
+        let mut range = 0..text.len();
+
+        // Find the byte indices of the start and end coordinates
+        for PlacementInfo { caret, str_index, .. } in iter {
+            if caret.x < start {
+                range.start = str_index;
+            }
+            if caret.x > end {
+                range.end = str_index;
+                break;
+            }
+        }
+
+        range
     }
 
     /// Retrieves the total height of a line drawn with this font at the given size. This is the
@@ -105,27 +165,21 @@ impl Font {
     /// text can be written into the render cache before rendering it. This allows for efficient
     /// rendering of large sets of text.
     pub fn cache(&mut self, draw_cache: &mut DrawCache, text: &str, text_size: f32, offset: Vec2<f32>) {
-        let iter = PosGlyphIter::new(text, &self.font, Scale::uniform(text_size), offset);
-
-        // Push textures to GPU
-        {
-            for glyph in iter.clone() {
-                self.cache.queue_glyph(0, glyph);
-            }
-            let ref mut tex = self.cache_texture;
-            self.cache.cache_queued(|rect, data| {
-                tex.load_data_to_region(data,
-                                        rect.min.x, rect.min.y,
-                                        rect.width(), rect.height());
-            }).unwrap();
-        }
-
-        // Push render data to GPU
-        for glyph in iter {
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
+        for PlacementInfo { glyph, .. } in iter {
             if let Ok(Some((uv, pos))) = self.cache.rect_for(0, &glyph) {
                 FontVert::to_buffer(&mut draw_cache.buffer_data, pos, uv);
             }
+
+            self.cache.queue_glyph(0, glyph);
         }
+
+        let ref mut tex = self.cache_texture;
+        self.cache.cache_queued(|rect, data| {
+            tex.load_data_to_region(data,
+                                    rect.min.x, rect.min.y,
+                                    rect.width(), rect.height());
+        }).unwrap();
     }
 
     /// Draws teh data stored in the given draw cache. Note that you should call
@@ -363,8 +417,9 @@ impl FontVert {
 }
 
 #[derive(Clone)]
-struct PosGlyphIter<'a> {
+struct PlacementIter<'a> {
     text: Chars<'a>,
+    str_index: usize,
 
     font: &'a rusttype::Font<'a>,
     scale: Scale,
@@ -374,29 +429,39 @@ struct PosGlyphIter<'a> {
     last_glyph: Option<GlyphId>,
     vertical_advance: f32,
 }
-impl<'a> PosGlyphIter<'a> {
-    fn new(text: &'a str, font: &'a rusttype::Font, scale: Scale, offset: Vec2<f32>) -> PosGlyphIter<'a> {
+struct PlacementInfo<'a> {
+    glyph: PositionedGlyph<'a>, 
+    caret: Vec2<f32>,
+    str_index: usize,
+}
+
+impl<'a> PlacementIter<'a> {
+    fn new(text: &'a str, font: &'a rusttype::Font, scale: Scale, offset: Vec2<f32>) -> PlacementIter<'a> {
         let v_metrics = font.v_metrics(scale);
         let vertical_advance = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
 
-        PosGlyphIter {
+        PlacementIter {
             text: text.chars(),
+            str_index: 0,
 
             font: font,
             scale: scale,
 
-            caret: offset,
             offset: offset,
+            caret: offset,
             last_glyph: None,
             vertical_advance: vertical_advance,
         }
     }
 }
-impl<'a> Iterator for PosGlyphIter<'a> {
-    type Item = PositionedGlyph<'a>;
+
+impl<'a> Iterator for PlacementIter<'a> {
+    type Item = PlacementInfo<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(c) = self.text.next() {
+            self.str_index += c.len_utf8();
+
             // Move to new line
             if c.is_control() {
                 if c == '\n' {
@@ -423,9 +488,14 @@ impl<'a> Iterator for PosGlyphIter<'a> {
                 .scaled(self.scale)
                 .positioned(point(self.caret.x, self.caret.y));
             self.caret.x += glyph.unpositioned().h_metrics().advance_width;
-            return Some(glyph);
+
+            return Some(PlacementInfo {
+                glyph: glyph,
+                caret: self.caret,
+                str_index: self.str_index,
+            });
         }
         None
-    }
+    } 
 }
 
