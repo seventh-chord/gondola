@@ -34,7 +34,7 @@ pub struct Ui {
     line_dir: LineDir,
     held: Option<Id>,
 
-    internal_format_string: String,
+    internal_fmt_string: String,
     slider_map: HashMap<Id, f32>,
 
     // Input state
@@ -62,7 +62,7 @@ impl Ui {
             line_dir: LineDir::Vertical,
             held: None,
 
-            internal_format_string: String::new(),
+            internal_fmt_string: String::new(),
             slider_map: HashMap::new(),
 
             mouse_pos: Vec2::zero(),
@@ -128,23 +128,6 @@ impl Ui {
         }
     }
 
-    fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
-        match self.line_dir {
-            LineDir::Horizontal => {
-                self.caret.x += comp_width + self.style.line_spacing;
-                self.line_size = f32::max(comp_height, self.line_size);
-            },
-            LineDir::Vertical => {
-                self.caret.y += comp_height + self.style.line_spacing;
-                self.line_size = f32::max(comp_width, self.line_size);
-            },
-        }
-    }
-
-    fn default_height(&self) -> f32 {
-        self.font.font().line_height(FONT_SIZE) + self.style.internal_padding.y
-    }
-
     /// Shows a new button with the given text at the given location. Returns true if the button
     /// was pressed. Note that this function needs to be called every frame you want to see the
     /// button.
@@ -156,8 +139,6 @@ impl Ui {
         let pos = self.caret;
         self.advance_caret(width, height);
 
-        let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-        
         let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
                       self.mouse_pos.x < pos.x + width && self.mouse_pos.y < pos.y + height;
         if hovered && self.mouse_state.pressed() {
@@ -171,14 +152,12 @@ impl Ui {
         } else {
             self.style.base_color
         };
-        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
-        self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start));
-
+        self.draw_comp(pos, width, height, color, text, Alignment::Left);
 
         self.held == Some(id) && hovered && self.mouse_state.released()
     }
 
-    // TODO: Maybe make this generic over different number types
+    /// Creates a new slider that allows selecting values from the given range 
     pub fn slider(&mut self, text: &str, range: Range<f32>) -> f32 {
         let id = Id::from_str(text, CompType::Slider);
         let mut value = *self.slider_map.entry(id).or_insert((range.start + range.end) / 2.0);
@@ -204,14 +183,8 @@ impl Ui {
             pos + Vec2::new(self.style.internal_padding.x/2.0 + norm_value*slide_distance, self.style.internal_padding.y/2.0)
         };
 
-        self.internal_format_string.clear();
-        write!(self.internal_format_string, "{}: {:.*}", text, 2, value).unwrap();
-
-        let text_pos = {
-            let text_width = self.font.font().width(&self.internal_format_string, FONT_SIZE);
-            let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-            pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
-        }; 
+        self.internal_fmt_string.clear();
+        write!(self.internal_fmt_string, "{}: {:.*}", text, 2, value).unwrap();
 
         if self.held == Some(id) {
             value = (self.mouse_pos.x - pos.x - self.style.internal_padding.x/2.0 - slider_size.x/2.0) /
@@ -225,13 +198,56 @@ impl Ui {
 
         // Main bar
         let color = if hovered { self.style.hover_color } else { self.style.base_color };
-        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
-        self.font.cache(&self.internal_format_string, FONT_SIZE, text_pos);
+        let text = &self.internal_fmt_string.clone();
+        self.draw_comp(pos, width, height, color, text, Alignment::Center);
         // Slidy thing
         let color = if self.held == Some(id) { self.style.top_hold_color } else { self.style.top_color };
         quad(&mut self.draw_data, slider_pos, slider_size, color);
 
         value
+    }
+
+    fn draw_comp(&mut self, pos: Vec2<f32>, width: f32, height: f32, color: Color, text: &str, alignment: Alignment) {
+        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
+        match alignment {
+            Alignment::Left => {
+                let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                self.font.cache(text, FONT_SIZE, pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start));
+            },
+            Alignment::Right => {
+                let text_pos = {
+                    let text_width = self.font.font().width(&self.internal_fmt_string, FONT_SIZE);
+                    let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                    pos + Vec2::new(width - self.style.internal_padding.x/2.0 - text_width, height - text_v_offset)
+                }; 
+                self.font.cache(text, FONT_SIZE, text_pos);
+            },
+            Alignment::Center => {
+                let text_pos = {
+                    let text_width = self.font.font().width(&self.internal_fmt_string, FONT_SIZE);
+                    let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                    pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
+                }; 
+                self.font.cache(text, FONT_SIZE, text_pos);
+            },
+        }
+    }
+
+    fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
+        match self.line_dir {
+            LineDir::Horizontal => {
+                self.caret.x += comp_width + self.style.line_spacing;
+                self.line_size = f32::max(comp_height, self.line_size);
+            },
+            LineDir::Vertical => {
+                self.caret.y += comp_height + self.style.line_spacing;
+                self.line_size = f32::max(comp_width, self.line_size);
+            },
+        }
+    }
+
+    fn default_height(&self) -> f32 {
+        self.font.font().line_height(FONT_SIZE) + self.style.internal_padding.y
     }
 }
 
@@ -268,6 +284,10 @@ pub enum LineDir {
     Vertical,
     /// Components are layed out side by side
     Horizontal,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Alignment {
+    Left, Center, Right,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
