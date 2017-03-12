@@ -104,9 +104,8 @@ impl Font {
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
 
         // Find the location within the text, in draw space coordinates, which should be in focus
-        for PlacementInfo { caret, glyph, str_index } in iter.clone() {
+        for PlacementInfo { caret, str_index, .. } in iter.clone() {
             if str_index == focus {
-//                focus_pos = caret.x - glyph.unpositioned().h_metrics().advance_width/2.0;
                 focus_pos = caret.x;
             }
             if caret.x > text_width { text_width = caret.x; }
@@ -142,6 +141,20 @@ impl Font {
         }
 
         (range, caret_pos)
+    }
+
+    /// Finds the index of the character that would be under the cursor if the cursor is at the
+    /// given x-offset (`pos`) from the start of where the text is drawn. The returned index is
+    /// a byte index to the given piece of text.
+    pub fn hovered_char(&self, text: &str, text_size: f32, pos: f32) -> Option<usize> {
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        for PlacementInfo { caret, glyph, str_index } in iter {
+            let width = glyph.unpositioned().h_metrics().advance_width;
+            if caret.x + width/2.0 >= pos {
+                return Some(str_index);
+            }
+        }
+        None
     }
 
     /// Retrieves the total height of a line drawn with this font at the given size. This is the

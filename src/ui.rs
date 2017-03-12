@@ -252,15 +252,28 @@ impl Ui {
         let (width, height, pressed) = self.button_internal("", id);
         if pressed {
             if self.focused == Some(id) {
-                self.focused = None;
             } else {
                 self.focused = Some(id);
                 self.caret_blink_time = 0.0;
+
+                let TextboxInfo { ref mut text, ref mut caret } = *self.textbox_map.entry(id).or_insert(Default::default());
+                *caret = text.len();
+            }
+
+            // Place caret at correct location
+            let click_pos = self.mouse_pos.x - pos.x - self.style.padding.x/2.0;
+            let TextboxInfo { ref mut text, ref mut caret } = *self.textbox_map.entry(id).or_insert(Default::default());
+            let (visible_range, _) = self.font.font().visible_area(&text, FONT_SIZE, width - self.style.padding.x, *caret);
+            if let Some(clicked) = self.font.font().hovered_char(&text[visible_range.clone()], FONT_SIZE, click_pos) {
+                *caret = visible_range.start + clicked;
+            } else {
+                *caret = text.len();
             }
         }
 
+        // Editing
         if self.focused == Some(id) {
-            let &mut TextboxInfo { ref mut text, ref mut caret } = self.textbox_map.entry(id).or_insert(Default::default());
+            let TextboxInfo { ref mut text, ref mut caret } = *self.textbox_map.entry(id).or_insert(Default::default());
 
             if self.move_left && *caret > 0 {
                 *caret -= 1;
@@ -313,6 +326,7 @@ impl Ui {
             }
         }
 
+        // Drawing
         if let Some(&TextboxInfo { ref text, ref caret }) = self.textbox_map.get(&id) {
             let caret = if self.focused == Some(id) { *caret } else { text.len() };
 
