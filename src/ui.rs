@@ -40,8 +40,7 @@ pub struct Ui {
     internal_fmt_string: String,
     slider_map: HashMap<Id, f32>,
 
-    textbox_map: HashMap<Id, String>,
-    textbox_caret_pos: Option<usize>,
+    textbox_map: HashMap<Id, TextboxInfo>,
     caret_blink_time: f32,
 
     // Input state
@@ -76,7 +75,6 @@ impl Ui {
             internal_fmt_string: String::new(),
             slider_map: HashMap::new(),
             textbox_map: HashMap::new(),
-            textbox_caret_pos: None,
             caret_blink_time: 0.0,
 
             mouse_pos: Vec2::zero(),
@@ -107,7 +105,6 @@ impl Ui {
         if let Some(held) = self.held {
             if Some(held) != self.focused {
                 self.focused = None;
-                self.textbox_caret_pos = None;
             }
         }
 
@@ -263,27 +260,21 @@ impl Ui {
         }
 
         if self.focused == Some(id) {
-            let ref mut text = self.textbox_map.entry(id).or_insert(String::new());
-            if self.textbox_caret_pos == None {
-                self.textbox_caret_pos = Some(text.len());
-            }
-            let caret_pos = if let Some(ref mut caret_pos) = self.textbox_caret_pos {
-                caret_pos
-            } else { unreachable!() };
+            let &mut TextboxInfo { ref mut text, ref mut caret } = self.textbox_map.entry(id).or_insert(Default::default());
 
-            if self.move_left && *caret_pos > 0 {
-                *caret_pos -= 1;
+            if self.move_left && *caret > 0 {
+                *caret -= 1;
                 // Align to char boundary
-                while !text.is_char_boundary(*caret_pos) && *caret_pos > 0 { *caret_pos -= 1; }
+                while !text.is_char_boundary(*caret) && *caret > 0 { *caret -= 1; }
                 self.caret_blink_time = 0.0;
             }
             if self.move_right {
-                *caret_pos += 1;
-                if *caret_pos > text.len() {
-                    *caret_pos = text.len();
+                *caret += 1;
+                if *caret > text.len() {
+                    *caret = text.len();
                 } else {
                     // Align to char boundary
-                    while !text.is_char_boundary(*caret_pos) && *caret_pos < text.len() { *caret_pos += 1; }
+                    while !text.is_char_boundary(*caret) && *caret < text.len() { *caret += 1; }
                 }
                 self.caret_blink_time = 0.0;
             }
@@ -293,28 +284,28 @@ impl Ui {
                 match c {
                     // Backspace
                     '\x08' => {
-                        if *caret_pos == text.len() {
+                        if *caret == text.len() {
                             if let Some(removed) = text.pop() {
-                                *caret_pos -= removed.len_utf8();
+                                *caret -= removed.len_utf8();
                             }
-                        } else if *caret_pos > 0 {
-                            let mut remove_index = *caret_pos - 1;
+                        } else if *caret > 0 {
+                            let mut remove_index = *caret - 1;
                             while !text.is_char_boundary(remove_index) && remove_index > 0 { remove_index -= 1 }
                             let removed = text.remove(remove_index);
-                            *caret_pos -= removed.len_utf8();
+                            *caret -= removed.len_utf8();
                         }
                     }, 
                     // Delete
                     '\x7f' => {
-                        if *caret_pos < text.len() {
-                            text.remove(*caret_pos);
+                        if *caret < text.len() {
+                            text.remove(*caret);
                         }
                     },
                     // Ignore all other control characters
                     e if e <= '\x1f' => {}, 
                     _ => {
-                        text.insert(*caret_pos, c);
-                        *caret_pos += c.len_utf8();
+                        text.insert(*caret, c);
+                        *caret += c.len_utf8();
                     },
                 }
 
@@ -322,19 +313,13 @@ impl Ui {
             }
         }
 
-        if let Some(text) = self.textbox_map.get(&id) {
-            let caret_pos = if self.focused == Some(id) {
-                if let Some(caret_pos) = self.textbox_caret_pos {
-                    caret_pos
-                } else { unreachable!() } // We allways set the caret pos if focused
-            } else {
-                text.len()
-            };
+        if let Some(&TextboxInfo { ref text, ref caret }) = self.textbox_map.get(&id) {
+            let caret = if self.focused == Some(id) { *caret } else { text.len() };
 
             let (visible_range, draw_caret_pos) =
-                self.font.font().visible_area(text, FONT_SIZE,
+                self.font.font().visible_area(&text, FONT_SIZE,
                                               width - self.style.padding.x,
-                                              caret_pos);
+                                              caret);
             let slice = &text[visible_range];
 
             // Draw text
@@ -345,14 +330,14 @@ impl Ui {
             self.font.cache(slice, FONT_SIZE, text_pos);
 
             // Draw caret
-            if self.caret_blink_time % (2.0*CARET_BLINK_RATE) < CARET_BLINK_RATE {
+            if self.focused == Some(id) && self.caret_blink_time % (2.0*CARET_BLINK_RATE) < CARET_BLINK_RATE {
                 quad(&mut self.draw_data,
                      pos + Vec2::new(draw_caret_pos + self.style.padding.x/2.0 - self.style.caret_width/2.0, self.style.padding.y/4.0),
                      Vec2::new(self.style.caret_width/2.0, height - self.style.padding.y/2.0),
                      self.style.caret_color);
             }
 
-            text
+            &text
         } else {
             ""
         }
@@ -395,6 +380,12 @@ impl Ui {
     fn default_height(&self) -> f32 {
         self.font.font().line_height(FONT_SIZE) + self.style.padding.y
     }
+} 
+
+#[derive(Clone, Debug, Default)]
+struct TextboxInfo {
+    text: String,
+    caret: usize,
 }
 
 #[derive(Clone, Debug)]
