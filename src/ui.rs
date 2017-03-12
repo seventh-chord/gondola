@@ -11,12 +11,13 @@ use cable_math::Vec2;
 
 use color::Color;
 use font::{Font, CachedFont};
-use input::{InputManager, State};
+use input::{InputManager, Key, State};
 use matrix_stack::MatrixStack;
 use shader::{Shader, ShaderPrototype};
 use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
 
 const FONT_SIZE: f32 = 14.0;
+const CARET_BLINK_RATE: f32 = 0.53;
 
 /// A struct for using a imediate mode gui. 
 pub struct Ui {
@@ -38,11 +39,15 @@ pub struct Ui {
 
     internal_fmt_string: String,
     slider_map: HashMap<Id, f32>,
+
     textbox_map: HashMap<Id, String>,
+    textbox_caret_pos: Option<usize>,
+    caret_blink_time: f32,
 
     // Input state
     mouse_pos: Vec2<f32>,
     mouse_state: State,
+    move_left: bool, move_right: bool,
     typed: String,
 }
 
@@ -71,22 +76,29 @@ impl Ui {
             internal_fmt_string: String::new(),
             slider_map: HashMap::new(),
             textbox_map: HashMap::new(),
+            textbox_caret_pos: None,
+            caret_blink_time: 0.0,
 
             mouse_pos: Vec2::zero(),
             mouse_state: State::Up,
+            move_left: false, move_right: false,
             typed: String::new(),
         }
     }
 
     /// Updates this imgui system. This should be called once per frame, before using any of the
     /// gui creation functions.
-    pub fn update(&mut self, input: &InputManager, window_size: Vec2<u32>) {
+    ///
+    /// `delta` should be the time since the last call to `update`, in seconds.
+    pub fn update(&mut self, delta: f32, input: &InputManager, window_size: Vec2<u32>) {
         self.mat_stack.ortho(0.0, window_size.x as f32, 0.0, window_size.y as f32, -1.0, 1.0);
 
         self.mouse_pos = input.mouse_pos();
         self.mouse_state = input.mouse_key(0);
         self.typed.clear();
         self.typed.push_str(input.typed());
+        self.move_left = input.key(Key::Left).pressed_repeat();
+        self.move_right = input.key(Key::Right).pressed_repeat();
 
         if self.mouse_state.up() && !self.mouse_state.released() {
             self.held = None;
@@ -95,10 +107,12 @@ impl Ui {
         if let Some(held) = self.held {
             if Some(held) != self.focused {
                 self.focused = None;
+                self.textbox_caret_pos = None;
             }
         }
 
         self.caret = Vec2::zero();
+        self.caret_blink_time += delta;
     }
 
     /// Shows all components added since the last call to `draw`. This function update the matrix
@@ -132,12 +146,12 @@ impl Ui {
     pub fn next_line(&mut self) {
         match self.line_dir {
             LineDir::Horizontal => {
-                self.caret.y += self.line_size + self.style.line_spacing;
+                self.caret.y += self.line_size + self.style.margin.y;
                 self.caret.x = self.caret_start.x;
                 self.line_size = 0.0;
             },
             LineDir::Vertical => {
-                self.caret.x += self.line_size + self.style.line_spacing;
+                self.caret.x += self.line_size + self.style.margin.x;
                 self.caret.y = self.caret_start.y;
                 self.line_size = 0.0;
             },
@@ -199,21 +213,21 @@ impl Ui {
         } 
 
         let slider_size = {
-            let size = height - self.style.internal_padding.y;
+            let size = height - self.style.padding.y;
             Vec2::new(size, size)
         };
         let slider_pos = {
             let norm_value = (value - range.start) / (range.end - range.start);
-            let slide_distance = width - self.style.internal_padding.x - slider_size.x;
-            pos + Vec2::new(self.style.internal_padding.x/2.0 + norm_value*slide_distance, self.style.internal_padding.y/2.0)
+            let slide_distance = width - self.style.padding.x - slider_size.x;
+            pos + Vec2::new(self.style.padding.x/2.0 + norm_value*slide_distance, self.style.padding.y/2.0)
         };
 
         self.internal_fmt_string.clear();
         write!(self.internal_fmt_string, "{}: {:.*}", text, 2, value).unwrap();
 
         if self.held == Some(id) {
-            value = (self.mouse_pos.x - pos.x - self.style.internal_padding.x/2.0 - slider_size.x/2.0) /
-                    (width - self.style.internal_padding.x - slider_size.x);
+            value = (self.mouse_pos.x - pos.x - self.style.padding.x/2.0 - slider_size.x/2.0) /
+                    (width - self.style.padding.x - slider_size.x);
             if value > 1.0 { value = 1.0 }
             if value < 0.0 { value = 0.0 }
             value = range.start + value*(range.end - range.start);
@@ -244,45 +258,101 @@ impl Ui {
                 self.focused = None;
             } else {
                 self.focused = Some(id);
+                self.caret_blink_time = 0.0;
             }
         }
 
         if self.focused == Some(id) {
-            let ref mut value = self.textbox_map.entry(id).or_insert(String::new());
+            let ref mut text = self.textbox_map.entry(id).or_insert(String::new());
+            if self.textbox_caret_pos == None {
+                self.textbox_caret_pos = Some(text.len());
+            }
+            let caret_pos = if let Some(ref mut caret_pos) = self.textbox_caret_pos {
+                caret_pos
+            } else { unreachable!() };
 
-            value.reserve(self.typed.len());
+            if self.move_left && *caret_pos > 0 {
+                *caret_pos -= 1;
+                // Align to char boundary
+                while !text.is_char_boundary(*caret_pos) && *caret_pos > 0 { *caret_pos -= 1; }
+                self.caret_blink_time = 0.0;
+            }
+            if self.move_right {
+                *caret_pos += 1;
+                if *caret_pos > text.len() {
+                    *caret_pos = text.len();
+                } else {
+                    // Align to char boundary
+                    while !text.is_char_boundary(*caret_pos) && *caret_pos < text.len() { *caret_pos += 1; }
+                }
+                self.caret_blink_time = 0.0;
+            }
 
+            text.reserve(self.typed.len());
             for c in self.typed.chars() {
                 match c {
                     // Backspace
                     '\x08' => {
-                        value.pop();
+                        if *caret_pos == text.len() {
+                            if let Some(removed) = text.pop() {
+                                *caret_pos -= removed.len_utf8();
+                            }
+                        } else if *caret_pos > 0 {
+                            let mut remove_index = *caret_pos - 1;
+                            while !text.is_char_boundary(remove_index) && remove_index > 0 { remove_index -= 1 }
+                            let removed = text.remove(remove_index);
+                            *caret_pos -= removed.len_utf8();
+                        }
                     }, 
-                    '\n' | '\r' => {},
+                    // Delete
+                    '\x7f' => {
+                        if *caret_pos < text.len() {
+                            text.remove(*caret_pos);
+                        }
+                    },
+                    // Ignore all other control characters
+                    e if e <= '\x1f' => {}, 
                     _ => {
-                        value.push(c);
+                        text.insert(*caret_pos, c);
+                        *caret_pos += c.len_utf8();
                     },
                 }
+
+                self.caret_blink_time = 0.0;
             }
         }
 
         if let Some(text) = self.textbox_map.get(&id) {
-            if !text.is_empty() {
-                let visible_range =
-                    self.font.font().visible_area(text, FONT_SIZE,
-                                                  width - self.style.internal_padding.x,
-                                                  text.len() - 1);
-                let slice = &text[visible_range];
-
-                let text_pos = {
-                    let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                    pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start)
-                };
-                self.font.cache(slice, FONT_SIZE, text_pos);
-                text
+            let caret_pos = if self.focused == Some(id) {
+                if let Some(caret_pos) = self.textbox_caret_pos {
+                    caret_pos
+                } else { unreachable!() } // We allways set the caret pos if focused
             } else {
-                ""
+                text.len()
+            };
+
+            let (visible_range, draw_caret_pos) =
+                self.font.font().visible_area(text, FONT_SIZE,
+                                              width - self.style.padding.x,
+                                              caret_pos);
+            let slice = &text[visible_range];
+
+            // Draw text
+            let text_pos = {
+                let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                pos + Vec2::new(self.style.padding.x/2.0, height - text_start)
+            };
+            self.font.cache(slice, FONT_SIZE, text_pos);
+
+            // Draw caret
+            if self.caret_blink_time % (2.0*CARET_BLINK_RATE) < CARET_BLINK_RATE {
+                quad(&mut self.draw_data,
+                     pos + Vec2::new(draw_caret_pos + self.style.padding.x/2.0 - self.style.caret_width/2.0, self.style.padding.y/4.0),
+                     Vec2::new(self.style.caret_width/2.0, height - self.style.padding.y/2.0),
+                     self.style.caret_color);
             }
+
+            text
         } else {
             ""
         }
@@ -292,17 +362,17 @@ impl Ui {
         quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
         let text_pos = match alignment {
             Alignment::Left => {
-                let text_start = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                pos + Vec2::new(self.style.internal_padding.x/2.0, height - text_start)
+                let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                pos + Vec2::new(self.style.padding.x/2.0, height - text_start)
             },
             Alignment::Right => {
                 let text_width = self.font.font().width(text, FONT_SIZE);
-                let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                pos + Vec2::new(width - self.style.internal_padding.x/2.0 - text_width, height - text_v_offset)
+                let text_v_offset = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                pos + Vec2::new(width - self.style.padding.x/2.0 - text_width, height - text_v_offset)
             },
             Alignment::Center => {
                 let text_width = self.font.font().width(text, FONT_SIZE);
-                let text_v_offset = self.style.internal_padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                let text_v_offset = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
                 pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
             },
         };
@@ -312,18 +382,18 @@ impl Ui {
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
         match self.line_dir {
             LineDir::Horizontal => {
-                self.caret.x += comp_width + self.style.line_spacing;
+                self.caret.x += comp_width + self.style.margin.x;
                 self.line_size = f32::max(comp_height, self.line_size);
             },
             LineDir::Vertical => {
-                self.caret.y += comp_height + self.style.line_spacing;
+                self.caret.y += comp_height + self.style.margin.y;
                 self.line_size = f32::max(comp_width, self.line_size);
             },
         }
     }
 
     fn default_height(&self) -> f32 {
-        self.font.font().line_height(FONT_SIZE) + self.style.internal_padding.y
+        self.font.font().line_height(FONT_SIZE) + self.style.padding.y
     }
 }
 
@@ -334,9 +404,11 @@ pub struct Style {
     pub hold_color: Color,
     pub top_color: Color,
     pub top_hold_color: Color,
+    pub caret_color: Color,
 
-    pub internal_padding: Vec2<f32>,
-    pub line_spacing: f32,
+    pub padding: Vec2<f32>,
+    pub margin: Vec2<f32>,
+    pub caret_width: f32,
     pub comp_width: f32,
 }
 impl Default for Style {
@@ -347,9 +419,11 @@ impl Default for Style {
             hold_color:      Color::hex("413c56"),
             top_color:       Color::hex("403147"),
             top_hold_color:  Color::hex("2a2738"),
+            caret_color:     Color::hex("ffffff"),
 
-            internal_padding: Vec2::new(10.0, 6.0),
-            line_spacing: 5.0,
+            padding: Vec2::new(10.0, 6.0),
+            caret_width: 2.0,
+            margin: Vec2::new(5.0, 5.0),
             comp_width: 150.0,
         }
     }

@@ -90,17 +90,17 @@ impl Font {
     /// Panics if `focus` is not a valid index to `text`. A valid index is within
     /// the length of the text and on a character boundary. Keep in mind that
     /// `focus` is a byte index, not a char index.  Returns a range that can be used 
-    /// to take a valid slice of `text`.
+    /// to take a valid slice of `text`, and the draw space coordinate of where the
+    /// caret should be drawn if this text slice is drawn.
     ///
     /// This function has not been tested with multiline strings.
-    pub fn visible_area(&self, text: &str, text_size: f32, width: f32, focus: usize) -> Range<usize> {
-        if focus >= text.len() && text.is_char_boundary(focus) { 
+    pub fn visible_area(&self, text: &str, text_size: f32, width: f32, focus: usize) -> (Range<usize>, f32) {
+        if focus > text.len() && text.is_char_boundary(focus) { 
             panic!("`focus` is not a valid index (focus = {})", focus);
         }
 
         let mut focus_pos = 0.0;
-        let mut total_width = 0.0;
-
+        let mut text_width = 0.0; 
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
 
         // Find the location within the text, in draw space coordinates, which should be in focus
@@ -109,31 +109,39 @@ impl Font {
 //                focus_pos = caret.x - glyph.unpositioned().h_metrics().advance_width/2.0;
                 focus_pos = caret.x;
             }
-            if caret.x > total_width { total_width = caret.x; }
+            if caret.x > text_width { text_width = caret.x; }
         }
 
         // Calculate the start and end, in draw space coordinates, of the visible region
-        let (start, end) = if focus_pos < width {
-            (0.0, width)
-        } else {
-            let end = f32::max(focus_pos, total_width);
-            (end - width, total_width)
+        let (start, end) = {
+            let start = f32::min(focus_pos + width/2.0, text_width) - width;
+            if start < 0.0 {
+                (0.0, f32::min(width, text_width))
+            } else {
+                (start, start + width)
+            }
         };
 
         let mut range = 0..text.len();
+        let mut caret_pos = 0.0;
+        let mut actual_start = 0.0;
 
         // Find the byte indices of the start and end coordinates
         for PlacementInfo { caret, str_index, .. } in iter {
             if caret.x < start {
                 range.start = str_index;
+                actual_start = caret.x;
             }
-            if caret.x > end {
+            if str_index == focus {
+                caret_pos = caret.x - actual_start;
+            }
+            if caret.x > actual_start + (end - start) {
                 range.end = str_index;
                 break;
             }
         }
 
-        range
+        (range, caret_pos)
     }
 
     /// Retrieves the total height of a line drawn with this font at the given size. This is the
