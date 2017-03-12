@@ -18,9 +18,10 @@ use std::fs::File;
 use std::str::Chars;
 use std::ops::Range;
 use cable_math::Vec2;
-use texture::*;
-use buffer::*;
-use shader::*;
+use texture::{Texture, SwizzleComp, TextureFormat};
+use buffer::{Vertex, VertexBuffer, BufferUsage, PrimitiveMode};
+use shader::{ShaderPrototype, Shader};
+use color::Color;
 use util::graphics;
 
 const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture size: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_TEXTURE_SIZE
@@ -185,11 +186,11 @@ impl Font {
     /// Writes data needed to render the given text into the given render cache. Multiple pieces of
     /// text can be written into the render cache before rendering it. This allows for efficient
     /// rendering of large sets of text.
-    pub fn cache(&mut self, draw_cache: &mut DrawCache, text: &str, text_size: f32, offset: Vec2<f32>) {
+    pub fn cache(&mut self, draw_cache: &mut DrawCache, text: &str, text_size: f32, offset: Vec2<f32>, color: Color) {
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
         for PlacementInfo { glyph, .. } in iter {
             if let Ok(Some((uv, pos))) = self.cache.rect_for(0, &glyph) {
-                FontVert::to_buffer(&mut draw_cache.buffer_data, pos, uv);
+                FontVert::to_buffer(&mut draw_cache.buffer_data, pos, uv, color);
             }
 
             self.cache.queue_glyph(0, glyph);
@@ -327,8 +328,8 @@ impl CachedFont {
     /// Adds the given piece of text to the internal draw cache. Cached text can be drawn with 
     /// [`draw`](struct.CachedFont.html#method.draw). Usually you want to cache all text you want
     /// to draw in a given frame and then draw it all in a single call.
-    pub fn cache(&mut self, text: &str, size: f32, pos: Vec2<f32>) {
-        self.font.cache(&mut self.draw_cache, text, size, pos);
+    pub fn cache(&mut self, text: &str, size: f32, pos: Vec2<f32>, color: Color) {
+        self.font.cache(&mut self.draw_cache, text, size, pos, color);
     }
 
     /// Draws all text in the internal cache and then clears the cache
@@ -346,20 +347,26 @@ impl CachedFont {
 struct FontVert {
     pos: Vec2<f32>,
     uv: Vec2<f32>,
+    color: Color,
 }
 // We cannot use the custom derive from within this crate
 impl Vertex for FontVert {
-    fn bytes_per_vertex() -> usize { 16 }
+    fn bytes_per_vertex() -> usize { ::std::mem::size_of::<FontVert>() }
     fn setup_attrib_pointers() {
+        let stride = Self::bytes_per_vertex();
         unsafe {
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(0, 2, gl::FLOAT,
                                     false as GLboolean,
-                                    16 as GLsizei, 0 as *const GLvoid);
+                                    stride as GLsizei, 0 as *const GLvoid);
             gl::EnableVertexAttribArray(1);
             gl::VertexAttribPointer(1, 2, gl::FLOAT,
                                     false as GLboolean,
-                                    16 as GLsizei, 8 as *const GLvoid);
+                                    stride as GLsizei, 8 as *const GLvoid);
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribPointer(2, 4, gl::FLOAT,
+                                    false as GLboolean,
+                                    stride as GLsizei, 16 as *const GLvoid);
         }
     }
     // Not used, we manualy declare inputs in the shader
@@ -370,26 +377,30 @@ const VERT_SRC: &'static str = "
 
     layout(location = 0) in vec2 pos;
     layout(location = 1) in vec2 uv;
+    layout(location = 2) in vec4 color;
 
     out vec2 vert_uv;
+    out vec4 vert_color;
 
     // Matrix block is inserted automatically
 
     void main() {
         gl_Position = mvp * vec4(pos, 0.0, 1.0);
         vert_uv = uv;
+        vert_color = color;
     }
 ";
 const FRAG_SRC: &'static str = "
     #version 330 core
 
     in vec2 vert_uv;
+    in vec4 vert_color;
     out vec4 color;
 
     uniform sampler2D tex_sampler;
 
     void main() {
-        color = texture2D(tex_sampler, vert_uv);
+        color = vert_color * texture2D(tex_sampler, vert_uv);
     }
 ";
 fn build_shader() -> Shader {
@@ -404,7 +415,7 @@ fn build_shader() -> Shader {
     }
 }
 impl FontVert {
-    fn to_buffer(data: &mut Vec<FontVert>, pos: Rect<i32>, uv: Rect<f32>) {
+    fn to_buffer(data: &mut Vec<FontVert>, pos: Rect<i32>, uv: Rect<f32>, color: Color,) {
         let x1 = pos.min.x as f32;
         let x2 = pos.max.x as f32;
         let y1 = pos.min.y as f32;
@@ -412,27 +423,33 @@ impl FontVert {
         data.push(FontVert {
             pos: Vec2::new(x1, y1),
             uv: Vec2::new(uv.min.x, uv.min.y),
+            color: color,
         });
         data.push(FontVert {
             pos: Vec2::new(x2, y1),
             uv: Vec2::new(uv.max.x, uv.min.y),
+            color: color,
         });
         data.push(FontVert {
             pos: Vec2::new(x2, y2),
             uv: Vec2::new(uv.max.x, uv.max.y),
+            color: color,
         });
 
         data.push(FontVert {
             pos: Vec2::new(x1, y1),
             uv: Vec2::new(uv.min.x, uv.min.y),
+            color: color,
         });
         data.push(FontVert {
             pos: Vec2::new(x2, y2),
             uv: Vec2::new(uv.max.x, uv.max.y),
+            color: color,
         });
         data.push(FontVert {
             pos: Vec2::new(x1, y2),
             uv: Vec2::new(uv.min.x, uv.max.y),
+            color: color,
         });
     }
 }

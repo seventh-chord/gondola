@@ -193,10 +193,22 @@ impl Ui {
         (width, height, pressed)
     }
 
-    /// Creates a new slider that allows selecting values from the given range 
+
+    /// Creates a new slider that allows selecting values from the given range. Returns a value
+    /// from within the range.
     pub fn slider(&mut self, text: &str, range: Range<f32>) -> f32 {
         let id = Id::from_str(text, CompType::Slider);
         let mut value = *self.slider_map.entry(id).or_insert((range.start + range.end) / 2.0);
+        self.slider_ptr(text, range, &mut value);
+        self.slider_map.insert(id, value);
+        value
+    }
+
+    /// Creates a new slider that allows selecting values from the given range. The initial value
+    /// is taken from `vaule`, and the selected value will be stored in that variable as well.
+    /// Returns true if the value was changed.
+    pub fn slider_ptr(&mut self, text: &str, range: Range<f32>, value: &mut f32) -> bool {
+        let id = Id::from_str(text, CompType::Slider);
 
         let width = self.style.comp_width;
         let height = self.default_height();
@@ -214,7 +226,7 @@ impl Ui {
             Vec2::new(size, size)
         };
         let slider_pos = {
-            let norm_value = (value - range.start) / (range.end - range.start);
+            let norm_value = (*value - range.start) / (range.end - range.start);
             let slide_distance = width - self.style.padding.x - slider_size.x;
             pos + Vec2::new(self.style.padding.x/2.0 + norm_value*slide_distance, self.style.padding.y/2.0)
         };
@@ -222,15 +234,23 @@ impl Ui {
         self.internal_fmt_string.clear();
         write!(self.internal_fmt_string, "{}: {:.*}", text, 2, value).unwrap();
 
-        if self.held == Some(id) {
-            value = (self.mouse_pos.x - pos.x - self.style.padding.x/2.0 - slider_size.x/2.0) /
-                    (width - self.style.padding.x - slider_size.x);
-            if value > 1.0 { value = 1.0 }
-            if value < 0.0 { value = 0.0 }
-            value = range.start + value*(range.end - range.start);
+        let changed = if self.held == Some(id) {
+            let new_value = {
+                let new_value = (self.mouse_pos.x - pos.x - self.style.padding.x/2.0 - slider_size.x/2.0) /
+                                (width - self.style.padding.x - slider_size.x);
+                range.start + new_value*(range.end - range.start)
+            };
 
-            self.slider_map.insert(id, value);
-        }
+            if new_value != *value {
+                *value = new_value;
+                true
+            } else {
+                false
+            }
+        } else { false };
+
+        if *value < range.start { *value = range.start; }
+        if *value > range.end   { *value = range.end; }
 
         // Main bar
         let color = if hovered { self.style.hover_color } else { self.style.base_color };
@@ -240,7 +260,7 @@ impl Ui {
         let color = if self.held == Some(id) { self.style.top_hold_color } else { self.style.top_color };
         quad(&mut self.draw_data, slider_pos, slider_size, color);
 
-        value
+        changed
     }
 
     /// Creates a new textbox. The title will not be displayed, but should be a unique identifier
@@ -341,7 +361,7 @@ impl Ui {
                 let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
                 pos + Vec2::new(self.style.padding.x/2.0, height - text_start)
             };
-            self.font.cache(slice, FONT_SIZE, text_pos);
+            self.font.cache(slice, FONT_SIZE, text_pos, self.style.text_color);
 
             // Draw caret
             if self.focused == Some(id) && self.caret_blink_time % (2.0*CARET_BLINK_RATE) < CARET_BLINK_RATE {
@@ -375,7 +395,7 @@ impl Ui {
                 pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
             },
         };
-        self.font.cache(text, FONT_SIZE, text_pos);
+        self.font.cache(text, FONT_SIZE, text_pos, self.style.text_color);
     }
 
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
@@ -410,6 +430,7 @@ pub struct Style {
     pub top_color: Color,
     pub top_hold_color: Color,
     pub caret_color: Color,
+    pub text_color: Color,
 
     pub padding: Vec2<f32>,
     pub margin: Vec2<f32>,
@@ -425,6 +446,7 @@ impl Default for Style {
             top_color:       Color::hex("403147"),
             top_hold_color:  Color::hex("2a2738"),
             caret_color:     Color::hex("ffffff"),
+            text_color:      Color::hex("ffffff"),
 
             padding: Vec2::new(10.0, 6.0),
             caret_width: 2.0,
