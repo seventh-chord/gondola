@@ -2,33 +2,47 @@
 //! Provides utilities for tracking the state of various input devices
 
 use cable_math::Vec2;
-use glutin::*;
+use std::sync::mpsc;
+use glutin::{Event, MouseButton, ElementState};
 
 const MOUSE_KEYS: usize = 5;
 const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
 
-/// Manages keyboard and mouse input
+/// Manages keyboard and mouse input. This manager receives events from a
+/// `mpsc::Receiver`. This means it can be created and used in other threads.
+/// Note that [`InputManager::refresh`] should be called once per frame.
+///
+/// `InputManager`s are created by [`GameState::gen_input_manager`]
+///
+/// [`GameState::gen_input_manager`]: ../struct.GameState.html#method.gen_input_manager
+/// [`InputManager::refresh`]:        struct.InputManager.html#method.refresh
 pub struct InputManager {
     mouse_pos: Vec2<f32>,
     mouse_delta: Vec2<f32>,
     mouse_states: [State; MOUSE_KEYS],
     keyboard_states: [State; KEYBOARD_KEYS],
     type_buffer: String,
+
+    event_source: mpsc::Receiver<Event>,
 }
 
 impl InputManager {
-    pub fn new() -> InputManager {
+    pub fn new(event_source: mpsc::Receiver<Event>) -> InputManager {
         InputManager {
             mouse_pos: Vec2::zero(),
             mouse_delta: Vec2::zero(),
             mouse_states: [State::Up; MOUSE_KEYS],
             keyboard_states: [State::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
+
+            event_source: event_source,
         }
     }
 
-    pub fn update(&mut self) {
-        self.mouse_delta = Vec2::zero();
+    /// Pulls new data from this input managers source. This should be called once per frame.
+    pub fn refresh(&mut self) {
+        self.mouse_delta = Vec2::zero(); 
+        self.type_buffer.clear();
 
         for state in self.mouse_states.iter_mut() {
             if *state == State::Released { *state = State::Up; }
@@ -37,48 +51,47 @@ impl InputManager {
         for state in self.keyboard_states.iter_mut() {
             if *state == State::Released { *state = State::Up; }
             if *state == State::Pressed  { *state = State::Down; }
-        }
+        } 
 
-        self.type_buffer.clear();
-    }
-    pub fn handle_event(&mut self, event: Event) {
-        match event {
-            Event::MouseMoved(x, y) => {
-                let old_mouse_pos = self.mouse_pos;
-                self.mouse_pos = Vec2::new(x as f32, y as f32);
-                self.mouse_delta = self.mouse_pos - old_mouse_pos;
-            },
-            Event::MouseInput(state, button) => {
-                let index = match button {
-                    MouseButton::Left => 0,
-                    MouseButton::Right => 1,
-                    MouseButton::Middle => 2,
-                    MouseButton::Other(index) => index,
-                } as usize;
-                if index < self.mouse_states.len() {
-                    self.mouse_states[index] = match state {
-                        ElementState::Pressed => State::Pressed,
-                        ElementState::Released => State::Released,
+        for event in self.event_source.try_iter() {
+            match event {
+                Event::MouseMoved(x, y) => {
+                    let old_mouse_pos = self.mouse_pos;
+                    self.mouse_pos = Vec2::new(x as f32, y as f32);
+                    self.mouse_delta = self.mouse_pos - old_mouse_pos;
+                },
+                Event::MouseInput(state, button) => {
+                    let index = match button {
+                        MouseButton::Left => 0,
+                        MouseButton::Right => 1,
+                        MouseButton::Middle => 2,
+                        MouseButton::Other(index) => index,
+                    } as usize;
+                    if index < self.mouse_states.len() {
+                        self.mouse_states[index] = match state {
+                            ElementState::Pressed => State::Pressed,
+                            ElementState::Released => State::Released,
+                        };
+                    }
+                },
+                Event::KeyboardInput(state, key, _) => {
+    //                if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
+                    let ref mut internal_state = self.keyboard_states[key as usize];
+                    match state {
+                        ElementState::Pressed => {
+                            *internal_state = if internal_state.down() {
+                                State::PressedRepeat
+                            } else {
+                                State::Pressed
+                            }
+                        },
+                        ElementState::Released => *internal_state = State::Released,
                     };
-                }
-            },
-            Event::KeyboardInput(state, key, _) => {
-//                if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
-                let ref mut internal_state = self.keyboard_states[key as usize];
-                match state {
-                    ElementState::Pressed => {
-                        *internal_state = if internal_state.down() {
-                            State::PressedRepeat
-                        } else {
-                            State::Pressed
-                        }
-                    },
-                    ElementState::Released => *internal_state = State::Released,
-                };
-            },
-            Event::ReceivedCharacter(c) => self.type_buffer.push(c),
-            _ => {},
-        }
+                },
+                Event::ReceivedCharacter(c) => self.type_buffer.push(c),
+                _ => {},
+            }
+        } 
     }
     
     // Getters

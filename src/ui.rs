@@ -253,7 +253,7 @@ impl Ui {
         if *value > range.end   { *value = range.end; }
 
         // Main bar
-        let color = if hovered { self.style.hover_color } else { self.style.base_color };
+        let color = if hovered && self.held != Some(id) { self.style.hover_color } else { self.style.base_color };
         let text = &self.internal_fmt_string.clone();
         self.draw_comp(pos, width, height, color, text, Alignment::Center);
         // Slidy thing

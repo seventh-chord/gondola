@@ -23,9 +23,9 @@ pub use matrix_stack::*;
 pub use util::graphics;
 
 use cable_math::Vec2;
-use glutin::*;
 use std::io;
 use std::time::{Instant, Duration};
+use std::sync::mpsc;
 
 /// Creates a new window and runs the given game in this window. This function does 
 /// not return until the game exits.
@@ -45,7 +45,7 @@ use std::time::{Instant, Duration};
 ///         Ok(Pong {})
 ///     }
 ///
-///     fn update(&mut self, delta: u32, state: &mut GameState, input: &InputManager) {
+///     fn update(&mut self, delta: u32, state: &mut GameState) {
 ///         // All logic goes here.
 ///     }
 ///
@@ -65,13 +65,11 @@ pub fn run<T: Game + Sized>() {
 
     // Set up game state
     let mut state = GameState::new();
-    state.window_size = {
+    state.win_size = {
         let (width, height) = window.get_inner_size_pixels().unwrap();
         Vec2::new(width, height)
     };
-    graphics::viewport(0, 0, state.window_size.x, state.window_size.y);
-
-    let mut input = InputManager::new();
+    graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
 
     let mut mat_stack = MatrixStack::new();
 
@@ -91,24 +89,28 @@ pub fn run<T: Game + Sized>() {
         let start_time = Instant::now();
 
         // Events
-        input.update();
         for event in window.poll_events() {
             match event {
-                Event::Closed => break 'main_loop,
-                Event::Resized(..) => {
+                glutin::Event::Closed => break 'main_loop,
+                glutin::Event::Resized(..) => {
                     let (width, height) = window.get_inner_size_pixels().unwrap();
                     if width != 0 && height != 0 {
-                        state.window_size = Vec2::new(width, height);
-                        graphics::viewport(0, 0, state.window_size.x, state.window_size.y);
+                        state.win_size = Vec2::new(width, height);
+                        graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
                         game.on_resize(&state);
                     }
                 }
-                other => input.handle_event(other),
+                other => {
+                    // Send events to receivers, and remove those which are unable to receive.
+                    state.event_sinks.retain(|sink| {
+                        sink.send(other.clone()).is_ok()
+                    });
+                },
             }
         }
 
         // Logic and rendering
-        game.update(delta as u32, &mut state, &input);
+        game.update(delta as u32, &mut state);
         game.draw(&state, &mut mat_stack);
         window.swap_buffers().unwrap();
         graphics::print_errors();
@@ -134,7 +136,7 @@ pub fn run<T: Game + Sized>() {
 /// most [`Game`](trait.Game.html) methods.
 pub struct GameState {
     /// The size of the window in which this game is running, in pixels.
-    pub window_size: Vec2<u32>,
+    pub win_size: Vec2<u32>,
     /// If set to true the game will exit after rendering.
     pub exit: bool,
     /// The number of milliseconds per frame this game should aim to run at. Set to 16
@@ -142,6 +144,8 @@ pub struct GameState {
     /// sleep until a total of `target_delta` has ellapsed. If set to `0` the game will
     /// never sleep.
     pub target_delta: u32,
+
+    event_sinks: Vec<mpsc::Sender<glutin::Event>>,
 }
 
 /// Used with [`gondola::run`](fn.run.html)
@@ -149,7 +153,7 @@ pub trait Game: Sized {
     /// Called before the main loop. Resources and initial state should be set up here.
     fn setup(state: &mut GameState) -> io::Result<Self>;
     /// Called once every frame, before drawing.
-    fn update(&mut self, delta: u32, state: &mut GameState, input: &InputManager);
+    fn update(&mut self, delta: u32, state: &mut GameState);
     /// Called once every frame, after updating.
     fn draw(&mut self, state: &GameState, mat_stack: &mut MatrixStack);
 
@@ -163,12 +167,29 @@ pub trait Game: Sized {
 }
 
 impl GameState {
-    pub fn new() -> GameState {
+    fn new() -> GameState {
         GameState {
-            window_size: Vec2::zero(),
+            win_size: Vec2::zero(),
             exit: false,
             target_delta: 15,
+
+            event_sinks: Vec::new(),
         }
+    }
+
+    /// Generates a new receiver for glutin events. All events not consumed by the
+    /// game itself will be received by this receiver. Note that all receiver receive
+    /// all events, there is no notion of event consumption.
+    pub fn gen_event_receiver(&mut self) -> mpsc::Receiver<glutin::Event> {
+        let (sender, receiver) = mpsc::channel();
+        self.event_sinks.push(sender);
+        receiver
+    }
+
+    /// Creates a new input manager which can be used to access the state of input devices.
+    pub fn gen_input_manager(&mut self) -> InputManager {
+        let receiver = self.gen_event_receiver();
+        InputManager::new(receiver)
     }
 }
 
