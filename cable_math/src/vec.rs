@@ -5,14 +5,14 @@ use std::ops::*;
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 #[repr(C)]
-pub struct Vec2<T: Num + Copy> {
+pub struct Vec2<T: Copy> {
     pub x: T,
     pub y: T
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 #[repr(C)]
-pub struct Vec3<T: Num + Copy> {
+pub struct Vec3<T: Copy> {
     pub x: T,
     pub y: T,
     pub z: T
@@ -20,7 +20,7 @@ pub struct Vec3<T: Num + Copy> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 #[repr(C)]
-pub struct Vec4<T: Num + Copy> {
+pub struct Vec4<T: Copy> {
     pub x: T,
     pub y: T,
     pub z: T,
@@ -475,6 +475,25 @@ impl<T: Num + Copy> DivAssign<T> for Vec4<T> {
         self.y = self.y / scalar;
         self.z = self.z / scalar;
         self.w = self.w / scalar;
+    }
+}
+
+impl<T: Num + Copy> Neg for Vec2<T> {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Vec2 { x: T::zero()-self.x, y: T::zero()-self.y }
+    }
+}
+impl<T: Num + Copy> Neg for Vec3<T> {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Vec3 { x: T::zero()-self.x, y: T::zero()-self.y, z: T::zero()-self.z }
+    }
+}
+impl<T: Num + Copy> Neg for Vec4<T> {
+    type Output = Self;
+    fn neg(self) -> Self {
+        Vec4 { x: T::zero()-self.x, y: T::zero()-self.y, z: T::zero()-self.z, w: T::zero()-self.w }
     }
 }
 

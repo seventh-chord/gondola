@@ -66,7 +66,7 @@ impl Texture {
                     "Unsuported texture format ({:?}, {:?}) in \"{}\" ({}:{})",
                     other.0, other.1,
                     path.as_ref().to_string_lossy(),
-                    module_path!(), line!()
+                    file!(), line!()
                 );
                 return Err(io::Error::new(io::ErrorKind::Other, message));
             }
@@ -100,7 +100,7 @@ impl Texture {
     pub fn load_data_to_region(&mut self, data: &[u8], x: u32, y: u32, width: u32, height: u32) {
         if x + width > self.width && y + height > self.height {
             debug_assert!(false, "Invalid region passed ({}:{}) Region: (x: {}, y: {}, width: {}, height: {})",
-                          module_path!(), line!(),
+                          file!(), line!(),
                           x, y, width, height);
             return;
         }
