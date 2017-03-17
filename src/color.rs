@@ -9,7 +9,7 @@ use buffer::VertexComponent;
 
 /// A color with red, green, blue and alpha components. All components are expected to be
 /// between 0 and 1, both inclusinve.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -45,17 +45,34 @@ impl Color {
     /// Creates a color from a hex string. The string should be
     /// of the format "#rrggbb" or "rrggbb", where each of r, g
     /// and b is a hexadecimal digit.
+    ///
+    /// If the string is not valid, this returns solid white.
     pub fn hex(string: &str) -> Color {
         let value = {
             if string.len() == 6 {
-                i32::from_str_radix(string, 16)
+                u32::from_str_radix(string, 16)
             } else if string.len() == 7 {
-                i32::from_str_radix(&string[1..], 16)
+                u32::from_str_radix(&string[1..], 16)
             } else {
                 Ok(0xffffff) // White
             }
         }.unwrap_or(0xffffff);
 
+        Color::hex_int(value)
+    }
+
+    /// Creates a color from a hex int. Bit `0..8` (The eight least significant bits) are the
+    /// red channel. Bit `8..16` are the green channel. Bit `16..24` are the blue channel. Note
+    /// that this function currently ignores the alpha channel.
+    ///
+    /// # Example
+    /// ```rust
+    /// # use gondola::color::Color;
+    /// let color = Color::hex_int(0xff00ff);
+    ///
+    /// assert_eq!(color, Color::rgb(1.0, 0.0, 1.0));
+    /// ```
+    pub fn hex_int(value: u32) -> Color {
         let r = value >> 16 & 0xff;
         let g = value >> 8 & 0xff;
         let b = value & 0xff;
