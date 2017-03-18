@@ -31,7 +31,7 @@ use std::sync::mpsc;
 /// not return until the game exits.
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
 /// fn main() {
 ///     gondola::run::<Pong>();
 /// }

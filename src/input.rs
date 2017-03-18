@@ -74,8 +74,8 @@ impl InputManager {
                         };
                     }
                 },
-                Event::KeyboardInput(state, key, _) => {
-    //                if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
+                Event::KeyboardInput(state, key, _name) => {
+//                    if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
                     let ref mut internal_state = self.keyboard_states[key as usize];
                     match state {
                         ElementState::Pressed => {
@@ -170,6 +170,7 @@ pub enum Key {
     Q = 0x18, W = 0x19, E = 0x1a, R = 0x1b, T = 0x1c, Y = 0x1d, U = 0x1e, I = 0x1f, P = 0x20,
     A = 0x26, S = 0x27, D = 0x28, F = 0x29, G = 0x2a, H = 0x2b, J = 0x2c, K = 0x2d, L = 0x2e,
     Z = 0x34, X = 0x35, C = 0x36, V = 0x37, B = 0x38, N = 0x39, M = 0x3a,
+    Space = 0x41,
 
     Escape = 0x9, Grave  = 0x31, Tab = 0x17, CapsLock  = 0x42,
     LShift = 0x32, LCtrl = 0x25, LAlt = 0x40,
