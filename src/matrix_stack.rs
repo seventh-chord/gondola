@@ -16,14 +16,12 @@ pub struct MatrixStack {
     projection: Mat4<f32>,
 
     uniform_buffer_index: GLuint,
-    uniform_buffer: PrimitiveBuffer,
+    uniform_buffer: PrimitiveBuffer<Mat4<f32>>,
 }
 
 impl MatrixStack {
     pub fn new() -> MatrixStack {
-        let uniform_buffer = PrimitiveBuffer::new(BufferTarget::Uniform,
-                                                  BufferUsage::DynamicDraw,
-                                                  DataType::Float);
+        let uniform_buffer = PrimitiveBuffer::<Mat4<f32>>::new(BufferTarget::Uniform, BufferUsage::DynamicDraw);
 
         MatrixStack {
             modelview_stack: [Mat4::identity(); STACK_SIZE],
@@ -152,7 +150,7 @@ impl MatrixStack {
     /// `ShaderPrototype` before building a shader from it.
     pub fn update_buffer(&mut self) {
         let mvp = self.mvp();
-        self.uniform_buffer.put_floats(mvp.as_ref());
+        self.uniform_buffer.put_at_start(&[mvp]);
         self.uniform_buffer.bind_base(self.uniform_buffer_index);
     }
 }

@@ -34,7 +34,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|ty| {
                     quote! {
                         let primitives = <#ty as ::gondola::buffer::VertexComponent>::primitives();
-                        let data_type = <#ty as ::gondola::buffer::VertexComponent>::data_type();
+                        let data_type = <#ty as ::gondola::buffer::VertexComponent>::data_type() as GLenum;
 
                         unsafe {
                             gl::EnableVertexAttribArray(index);
