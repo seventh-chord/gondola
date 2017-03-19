@@ -660,36 +660,6 @@ macro_rules! impl_vertex_component {
             fn primitives() -> usize { 4 }
             fn data_type() -> DataType { $data_type }
         }
-        impl VertexComponent for Vec2<$primitive> {
-            fn bytes() -> usize { std::mem::size_of::<Vec2<$primitive>>() }
-            fn primitives() -> usize { 2 }
-            fn data_type() -> DataType { $data_type }
-        }
-        impl VertexComponent for Vec3<$primitive> {
-            fn bytes() -> usize { std::mem::size_of::<Vec3<$primitive>>() }
-            fn primitives() -> usize { 3 }
-            fn data_type() -> DataType { $data_type }
-        }
-        impl VertexComponent for Vec4<$primitive> {
-            fn bytes() -> usize { std::mem::size_of::<Vec4<$primitive>>() }
-            fn primitives() -> usize { 4 }
-            fn data_type() -> DataType { $data_type }
-        }
-        impl VertexComponent for [$primitive; 2] {
-            fn bytes() -> usize { std::mem::size_of::<[$primitive; 2]>() }
-            fn primitives() -> usize { 2 }
-            fn data_type() -> DataType { $data_type }
-        }
-        impl VertexComponent for [$primitive; 3] {
-            fn bytes() -> usize { std::mem::size_of::<[$primitive; 3]>() }
-            fn primitives() -> usize { 3 }
-            fn data_type() -> DataType { $data_type }
-        }
-        impl VertexComponent for [$primitive; 4] {
-            fn bytes() -> usize { std::mem::size_of::<[$primitive; 4]>() }
-            fn primitives() -> usize { 4 }
-            fn data_type() -> DataType { $data_type }
-        }
     }
 }
 impl_vertex_component!(f32, DataType::Float);
@@ -698,9 +668,46 @@ impl_vertex_component!(u32, DataType::UnsignedInt);
 impl_vertex_component!(i8, DataType::Byte);
 impl_vertex_component!(u8, DataType::UnsignedByte);
 
+// Recursive generics woo!!!
+
 impl<T: VertexComponent + Copy> VertexComponent for Mat4<T> {
     fn bytes() -> usize { std::mem::size_of::<Mat4<T>>() }
     fn primitives() -> usize { 16 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for Vec2<T> {
+    fn bytes() -> usize { std::mem::size_of::<Vec2<T>>() }
+    fn primitives() -> usize { 2 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for Vec3<T> {
+    fn bytes() -> usize { std::mem::size_of::<Vec3<T>>() }
+    fn primitives() -> usize { 3 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for Vec4<T> {
+    fn bytes() -> usize { std::mem::size_of::<Vec4<T>>() }
+    fn primitives() -> usize { 4 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for [T; 1] {
+    fn bytes() -> usize { std::mem::size_of::<[T; 1]>() }
+    fn primitives() -> usize { 1 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for [T; 2] {
+    fn bytes() -> usize { std::mem::size_of::<[T; 2]>() }
+    fn primitives() -> usize { 2 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for [T; 3] {
+    fn bytes() -> usize { std::mem::size_of::<[T; 3]>() }
+    fn primitives() -> usize { 3 * T::primitives() }
+    fn data_type() -> DataType { T::data_type() }
+}
+impl<T: VertexComponent + Copy> VertexComponent for [T; 4] {
+    fn bytes() -> usize { std::mem::size_of::<[T; 4]>() }
+    fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 
