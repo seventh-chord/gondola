@@ -4,9 +4,9 @@ use vec::{Vec3, Vec4};
 use std::ops::*;
 
 /// A matrix which is layed out in column major format in memory
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
-pub struct Mat4<T: Copy> {
+pub struct Mat4<T> {
     // The order in which the components are defined here is inverse of
     // the way they are typically would be used, as the matrix should
     // be stored in collumn major format for opengl interoparability
@@ -15,6 +15,8 @@ pub struct Mat4<T: Copy> {
     pub a13: T, pub a23: T, pub a33: T, pub a43: T,
     pub a14: T, pub a24: T, pub a34: T, pub a44: T,
 }
+
+impl<T: Copy> Copy for Mat4<T> {}
 
 impl<T: Num + Copy> Default for Mat4<T> {
     fn default() -> Mat4<T> {

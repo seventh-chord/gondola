@@ -3,29 +3,34 @@ use num::*;
 use std::fmt;
 use std::ops::*;
 
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[repr(C)]
-pub struct Vec2<T: Copy> {
+pub struct Vec2<T> {
     pub x: T,
     pub y: T
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[repr(C)]
-pub struct Vec3<T: Copy> {
+pub struct Vec3<T> {
     pub x: T,
     pub y: T,
     pub z: T
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[repr(C)]
-pub struct Vec4<T: Copy> {
+pub struct Vec4<T> {
     pub x: T,
     pub y: T,
     pub z: T,
     pub w: T
 }
+
+// Copy
+impl<T: Copy> Copy for Vec2<T> {}
+impl<T: Copy> Copy for Vec3<T> {}
+impl<T: Copy> Copy for Vec4<T> {}
 
 // General functions
 impl<T: Num + Copy> Vec2<T> {

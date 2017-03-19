@@ -656,57 +656,57 @@ impl_vertex_component!(i8, DataType::Byte);
 impl_vertex_component!(u8, DataType::UnsignedByte);
 
 // Recursive generics woo!!!
-impl<T: VertexComponent + Copy> VertexComponent for Mat4<T> {
+impl<T: VertexComponent> VertexComponent for Mat4<T> {
     fn bytes() -> usize { size_of::<Mat4<T>>() }
     fn primitives() -> usize { 16 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for Vec2<T> {
+impl<T: VertexComponent> VertexComponent for Vec2<T> {
     fn bytes() -> usize { size_of::<Vec2<T>>() }
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for Vec3<T> {
+impl<T: VertexComponent> VertexComponent for Vec3<T> {
     fn bytes() -> usize { size_of::<Vec3<T>>() }
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for Vec4<T> {
+impl<T: VertexComponent> VertexComponent for Vec4<T> {
     fn bytes() -> usize { size_of::<Vec4<T>>() }
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for [T; 1] {
+impl<T: VertexComponent> VertexComponent for [T; 1] {
     fn bytes() -> usize { size_of::<[T; 1]>() }
     fn primitives() -> usize { 1 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for [T; 2] {
+impl<T: VertexComponent> VertexComponent for [T; 2] {
     fn bytes() -> usize { size_of::<[T; 2]>() }
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for [T; 3] {
+impl<T: VertexComponent> VertexComponent for [T; 3] {
     fn bytes() -> usize { size_of::<[T; 3]>() }
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for [T; 4] {
+impl<T: VertexComponent> VertexComponent for [T; 4] {
     fn bytes() -> usize { size_of::<[T; 4]>() }
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for (T, T) {
+impl<T: VertexComponent> VertexComponent for (T, T) {
     fn bytes() -> usize { size_of::<(T, T)>() }
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for (T, T, T) {
+impl<T: VertexComponent> VertexComponent for (T, T, T) {
     fn bytes() -> usize { size_of::<(T, T, T)>() }
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent + Copy> VertexComponent for (T, T, T, T) {
+impl<T: VertexComponent> VertexComponent for (T, T, T, T) {
     fn bytes() -> usize { size_of::<(T, T, T, T)>() }
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
