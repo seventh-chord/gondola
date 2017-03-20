@@ -468,6 +468,18 @@ impl VertexArray {
     }
 
     /// Adds a buffer from which this vertex array will pull data when drawing
+    ///
+    /// # Parameters
+    /// - `index`:  The vertex attribute index to which this data source will be bound. This is
+    ///             used from glsl through `layout(location = index) in ...;`
+    /// - `size`:   The number of primitives per vertex to use. e.g.: `3` means pull sets of three
+    ///             vertices from the source and present them as a `vec3` in glsl.
+    /// - `stride`: The distance from the start of the first vertex to the start of the next
+    ///             vertex. e.g.: If you have a buffer with the contents 
+    ///             `[x, y, z, r, g, b, x, y, z, r, g, b]`, you could use a stride of `6` to
+    ///             indicate that you have to advance 6 primitives to get from one color to the
+    ///             next color.
+    /// - `offset`: The number of primitives at the beginning of the source to skip.
     pub fn add_data_source<T>(&self, source: &PrimitiveBuffer<T>, 
                               index: usize, size: usize, 
                               stride: usize, offset: usize) 
@@ -479,12 +491,10 @@ impl VertexArray {
             gl::BindVertexArray(self.array);
             gl::EnableVertexAttribArray(index as GLuint);
 
-            let data_type = source.data_type();
-            gl::VertexAttribPointer(
-                index as GLuint, size as GLint,
-                data_type as GLenum, false as GLboolean,
-                (stride * data_type.size()) as GLsizei, (offset * data_type.size()) as *const GLvoid
-            );
+            gl::VertexAttribPointer(index as GLuint, size as GLint,
+                                    T::data_type() as GLenum, false as GLboolean,
+                                    (stride * T::bytes()) as GLsizei, 
+                                    (offset * T::bytes()) as *const GLvoid);
         }
     }
 
