@@ -60,6 +60,16 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
+    /// Creates a new matrix from a 4x4 array
+    pub fn from_col_major(data: [[T; 4]; 4]) -> Mat4<T> {
+        Mat4 {
+            a11: data[0][0], a12: data[0][1], a13: data[0][2], a14: data[0][3],
+            a21: data[1][0], a22: data[1][1], a23: data[1][2], a24: data[1][3],
+            a31: data[2][0], a32: data[2][1], a33: data[2][2], a34: data[2][3],
+            a41: data[3][0], a42: data[3][1], a43: data[3][2], a44: data[3][3],
+        }
+    }
+
     /// Transposes this matrix, mirroring all its values along the diagonal
     pub fn transpose(self) -> Mat4<T> {
         Mat4 {
