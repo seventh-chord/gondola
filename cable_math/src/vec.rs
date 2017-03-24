@@ -130,7 +130,7 @@ impl <T: Num + Copy + Signed> Vec2<T> {
     /// let a = Vec2::new(-3, 2);
     /// assert_eq!(Vec2::new(3, 2), a.abs());
     /// ```
-    pub fn abs(self) -> Self {
+    pub fn abs(self) -> Vec2<T> {
         Vec2 { x: self.x.abs(), y: self.y.abs() }
     }
 }
@@ -142,7 +142,7 @@ impl <T: Num + Copy + Signed> Vec3<T> {
     /// let a = Vec3::new(-3, 2, -1);
     /// assert_eq!(Vec3::new(3, 2, 1), a.abs());
     /// ```
-    pub fn abs(self) -> Self {
+    pub fn abs(self) -> Vec3<T> {
         Vec3 { x: self.x.abs(), y: self.y.abs(), z: self.z.abs() }
     }
 }
@@ -154,7 +154,7 @@ impl <T: Num + Copy + Signed> Vec4<T> {
     /// let a = Vec4::new(-3, 2, -1, 7);
     /// assert_eq!(Vec4::new(3, 2, 1, 7), a.abs());
     /// ```
-    pub fn abs(self) -> Self {
+    pub fn abs(self) -> Vec4<T> {
         Vec4 { x: self.x.abs(), y: self.y.abs(), z: self.z.abs(), w: self.w.abs() }
     }
 }
@@ -230,11 +230,27 @@ impl<T: Float> Vec2<T> {
     /// let a = Vec2::new(4.0, 9.0);
     /// assert_eq!(1.0, a.normalize().len());
     /// ```
-    pub fn normalize(self) -> Self {
+    pub fn normalize(self) -> Vec2<T> {
         let len = self.len();
         Vec2 {
             x: self.x / len,
             y: self.y / len
+        }
+    }
+
+    /// Rounds all components of this vector to the nearest integer number.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    ///
+    /// let a = Vec2::new(3.4, 2.7);
+    /// let b = Vec2::new(3.0, 3.0);
+    ///
+    /// assert_eq!(a.round(), b);
+    pub fn round(self) -> Vec2<T> {
+        Vec2 {
+            x: self.x.round(),
+            y: self.y.round(),
         }
     }
 }
@@ -251,12 +267,29 @@ impl<T: Float> Vec3<T> {
     /// let a = Vec3::new(4.0, 9.0, 2.0);
     /// assert_eq!(1.0, a.normalize().len());
     /// ```
-    pub fn normalize(self) -> Self {
+    pub fn normalize(self) -> Vec3<T> {
         let len = self.len();
         Vec3 {
             x: self.x / len,
             y: self.y / len,
             z: self.z / len
+        }
+    }
+
+    /// Rounds all components of this vector to the nearest integer number.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec3;
+    ///
+    /// let a = Vec3::new(3.4, 2.7, -1.2);
+    /// let b = Vec3::new(3.0, 3.0, -1.0);
+    ///
+    /// assert_eq!(a.round(), b);
+    pub fn round(self) -> Vec3<T> {
+        Vec3 {
+            x: self.x.round(),
+            y: self.y.round(),
+            z: self.z.round(),
         }
     }
 }
@@ -273,13 +306,31 @@ impl<T: Float> Vec4<T> {
     /// let a = Vec4::new(4.0, 9.0, 2.0, 1.0);
     /// assert_eq!(1.0, a.normalize().len());
     /// ```
-    pub fn normalize(self) -> Self {
+    pub fn normalize(self) -> Vec4<T> {
         let len = self.len();
         Vec4 {
             x: self.x / len,
             y: self.y / len,
             z: self.z / len,
             w: self.w / len
+        }
+    }
+
+    /// Rounds all components of this vector to the nearest integer number.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec4;
+    ///
+    /// let a = Vec4::new(3.4, 2.7, -1.2, 0.1);
+    /// let b = Vec4::new(3.0, 3.0, -1.0, 0.0);
+    ///
+    /// assert_eq!(a.round(), b);
+    pub fn round(self) -> Vec4<T> {
+        Vec4 {
+            x: self.x.round(),
+            y: self.y.round(),
+            z: self.z.round(),
+            w: self.w.round(),
         }
     }
 }
