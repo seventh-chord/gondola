@@ -296,18 +296,20 @@ impl<T: VertexComponent> PrimitiveBuffer<T> {
 
     /// Stores the given data in a new buffer. The buffer will have its usage set to `BufferUsage::StaticDraw`
     pub fn with_data(target: BufferTarget, data: &[T]) -> PrimitiveBuffer<T> {
+        if data.is_empty() {
+            return PrimitiveBuffer::new(target, BufferUsage::StaticDraw);
+        }
+
         let mut buffer = 0;
         let byte_count = data.len() * T::bytes();
 
         unsafe {
             gl::GenBuffers(1, &mut buffer);
             gl::BindBuffer(target as GLenum, buffer);
-            gl::BufferData(
-                target as GLenum,
-                byte_count as GLsizeiptr,
-                std::mem::transmute(&data[0]),
-                BufferUsage::StaticDraw as GLenum
-            );
+            gl::BufferData(target as GLenum,
+                           byte_count as GLsizeiptr,
+                           std::mem::transmute(&data[0]),
+                           BufferUsage::StaticDraw as GLenum);
         }
 
         PrimitiveBuffer {
@@ -498,11 +500,31 @@ impl VertexArray {
         }
     }
 
+    /// Registers the given primitive buffer to be used as a element buffer for this vertex array.
+    /// After this call, calls to `draw_elements` are safe.
+    pub fn add_ebo<T>(&self, ebo: &PrimitiveBuffer<T>) 
+        where T: VertexComponent
+    {
+        unsafe {
+            gl::BindVertexArray(self.array);
+            ebo.bind();
+        } 
+    }
+
     /// Draws the given primitives with the graphics buffers bound to this vertex array 
     pub fn draw(&self, mode: PrimitiveMode, range: Range<usize>) {
         unsafe {
             gl::BindVertexArray(self.array);
             gl::DrawArrays(mode as GLenum, range.start as GLint, (range.end - range.start) as GLsizei);
+        }
+    }
+
+    /// Draws this vertex array using a previously set element buffer. `ebo_data_type` should be
+    /// the type of data that is in the element buffer.
+    pub fn draw_elements(&self, mode: PrimitiveMode, ebo_data_type: DataType, count: usize) {
+        unsafe {
+            gl::BindVertexArray(self.array);
+            gl::DrawElements(mode as GLenum, count as GLsizei, ebo_data_type as GLenum, std::ptr::null());
         }
     }
 }
