@@ -193,6 +193,27 @@ impl Ui {
         (width, height, pressed)
     }
 
+    /// Inserts the given string into the gui. If an alignment is given the label will have the
+    /// default component size, and the text in it will be drawn based on that alignment.
+    pub fn label(&mut self, text: &str, alignment: Option<Alignment>) {
+        if let Some(alignment) = alignment {
+            let width = self.style.comp_width;
+            let height = self.default_height();
+            let size = Vec2::new(width, height);
+
+            text_in_quad(&mut self.font, self.caret, size, self.style.padding, 
+                         text, alignment, self.style.text_color);
+            self.advance_caret(width, height);
+        } else {
+            let width = self.font.font().width(text, FONT_SIZE);
+            let height = self.default_height();
+            let size = Vec2::new(width, height);
+
+            text_in_quad(&mut self.font, self.caret, size, self.style.padding, 
+                         text, Alignment::Left, self.style.text_color);
+            self.advance_caret(width, height);
+        }
+    }
 
     /// Creates a new slider that allows selecting values from the given range. Returns a value
     /// from within the range.
@@ -378,25 +399,11 @@ impl Ui {
     }
 
     fn draw_comp(&mut self, pos: Vec2<f32>, width: f32, height: f32, color: Color, text: &str, alignment: Alignment) {
-        quad(&mut self.draw_data, pos, Vec2::new(width, height), color);
-        let text_pos = match alignment {
-            Alignment::Left => {
-                let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                pos + Vec2::new(self.style.padding.x/2.0, height - text_start)
-            },
-            Alignment::Right => {
-                let text_width = self.font.font().width(text, FONT_SIZE);
-                let text_v_offset = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                pos + Vec2::new(width - self.style.padding.x/2.0 - text_width, height - text_v_offset)
-            },
-            Alignment::Center => {
-                let text_width = self.font.font().width(text, FONT_SIZE);
-                let text_v_offset = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
-                pos + Vec2::new(width/2.0 - text_width/2.0, height - text_v_offset)
-            },
-        };
-        self.font.cache(text, FONT_SIZE, text_pos, self.style.text_color);
-    }
+        let size = Vec2::new(width, height);
+        quad(&mut self.draw_data, pos, size, color);
+        let display_text = text.split("##").next().unwrap();
+        text_in_quad(&mut self.font, pos, size, self.style.padding, display_text, alignment, self.style.text_color);
+    } 
 
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
         match self.line_dir {
@@ -462,9 +469,16 @@ pub enum LineDir {
     /// Components are layed out side by side
     Horizontal,
 }
+
+/// Defines how children is layed out within a parent
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Alignment {
-    Left, Center, Right,
+pub enum Alignment {
+    /// The left edge of the child is at the left edge of the parent
+    Left, 
+    /// The center of the child is at the center of the parent
+    Center, 
+    /// The right edge of the child is at the right edge of the parent
+    Right,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -507,6 +521,26 @@ fn quad(buf: &mut Vec<Vert>, pos: Vec2<f32>, size: Vec2<f32>, color: Color){
     buf.push(Vert { pos: Vec2::new(min.x, min.y), color: color });
     buf.push(Vert { pos: Vec2::new(max.x, max.y), color: color });
     buf.push(Vert { pos: Vec2::new(min.x, max.y), color: color });
+}
+
+fn text_in_quad(font: &mut CachedFont, pos: Vec2<f32>, size: Vec2<f32>, padding: Vec2<f32>, text: &str, alignment: Alignment, color: Color) {
+    let text_pos = match alignment {
+        Alignment::Left => {
+            let text_start = padding.y/2.0 - font.font().descent(FONT_SIZE);
+            pos + Vec2::new(padding.x/2.0, size.y - text_start)
+        },
+        Alignment::Right => {
+            let text_width = font.font().width(text, FONT_SIZE);
+            let text_v_offset = padding.y/2.0 - font.font().descent(FONT_SIZE);
+            pos + Vec2::new(size.x - padding.x/2.0 - text_width, size.y - text_v_offset)
+        },
+        Alignment::Center => {
+            let text_width = font.font().width(text, FONT_SIZE);
+            let text_v_offset = padding.y/2.0 - font.font().descent(FONT_SIZE);
+            pos + Vec2::new(size.x/2.0 - text_width/2.0, size.y - text_v_offset)
+        },
+    };
+    font.cache(text, FONT_SIZE, text_pos, color);
 }
 
 // We cannot use the custom derive from within this crate
