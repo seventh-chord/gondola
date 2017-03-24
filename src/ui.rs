@@ -158,8 +158,13 @@ impl Ui {
     /// Shows a new button with the given text at the given location. Returns true if the button
     /// was pressed. Note that this function needs to be called every frame you want to see the
     /// button.
+    ///
+    /// Every button should have a unique display text. Buttons with the same name will behave
+    /// like a singe button. If the text contains the character sequence "##", that sequence and
+    /// any subsequent characters will not be shown. Using this, you can have multiple buttons
+    /// show the same text.
     pub fn button(&mut self, text: &str) -> bool {
-        let id = Id::from_str(text, CompType::Button);
+        let (id, text) = id_and_text(text, CompType::Button);
         self.button_internal(text, id).2
     }
 
@@ -168,6 +173,9 @@ impl Ui {
     ///
     /// This function returns the width and height of this button, as well as true if the button
     /// was pressed.
+    ///
+    /// The text passed to this function will be displayed on the button directly, without checking
+    /// for a "##" sequence.
     fn button_internal(&mut self, text: &str, id: Id) -> (f32, f32, bool) {
         let width = self.style.comp_width;
         let height = self.default_height();
@@ -217,6 +225,11 @@ impl Ui {
 
     /// Creates a new slider that allows selecting values from the given range. Returns a value
     /// from within the range.
+    ///
+    /// Every slider should have a unique display text. Buttons with the same name will behave
+    /// like a singe slider. If the text contains the character sequence "##", that sequence and
+    /// any subsequent characters will not be shown. Using this, you can have multiple sliders
+    /// show the same text.
     pub fn slider(&mut self, text: &str, range: Range<f32>) -> f32 {
         let id = Id::from_str(text, CompType::Slider);
         let mut value = *self.slider_map.entry(id).or_insert((range.start + range.end) / 2.0);
@@ -228,8 +241,13 @@ impl Ui {
     /// Creates a new slider that allows selecting values from the given range. The initial value
     /// is taken from `vaule`, and the selected value will be stored in that variable as well.
     /// Returns true if the value was changed.
+    ///
+    /// Every slider should have a unique display text. Buttons with the same name will behave
+    /// like a singe slider. If the text contains the character sequence "##", that sequence and
+    /// any subsequent characters will not be shown. Using this, you can have multiple sliders
+    /// show the same text.
     pub fn slider_ptr(&mut self, text: &str, range: Range<f32>, value: &mut f32) -> bool {
-        let id = Id::from_str(text, CompType::Slider);
+        let (id, text) = id_and_text(text, CompType::Slider);
 
         let width = self.style.comp_width;
         let height = self.default_height();
@@ -401,8 +419,7 @@ impl Ui {
     fn draw_comp(&mut self, pos: Vec2<f32>, width: f32, height: f32, color: Color, text: &str, alignment: Alignment) {
         let size = Vec2::new(width, height);
         quad(&mut self.draw_data, pos, size, color);
-        let display_text = text.split("##").next().unwrap();
-        text_in_quad(&mut self.font, pos, size, self.style.padding, display_text, alignment, self.style.text_color);
+        text_in_quad(&mut self.font, pos, size, self.style.padding, text, alignment, self.style.text_color);
     } 
 
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
@@ -501,6 +518,11 @@ impl Id {
 
         Id(id, ty)
     }
+}
+fn id_and_text(text: &str, ty: CompType) -> (Id, &str) {
+    let id = Id::from_str(text, ty);
+    let name = text.split("##").next().unwrap();
+    (id, name)
 }
 
 #[derive(Debug)]
