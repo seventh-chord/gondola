@@ -139,7 +139,7 @@ impl Texture {
     /// Binds this texture to the given texture unit
     pub fn bind(&self, unit: u32) {
         unsafe {
-            gl::ActiveTexture(gl::TEXTURE0 + unit as GLenum);
+            gl::ActiveTexture(gl::TEXTURE0 + unit);
             gl::BindTexture(gl::TEXTURE_2D, self.texture);
         }
     }
@@ -199,11 +199,12 @@ fn load_image(path: &Path) -> io::Result<(png::OutputInfo, Vec<u8>)> {
     Ok((info, buf))
 }
 
-/// Represents an OpenGL texture filter. Use in OpenGL functions like ´TextureFilter::* as GLenum´
+/// Represents an OpenGL texture filter.
+#[repr(u32)] // GLenum is u32
 #[derive(Debug, Copy, Clone)]
 pub enum TextureFilter {
-    Nearest = gl::NEAREST as isize,
-    Linear  = gl::LINEAR  as isize,
+    Nearest = gl::NEAREST,
+    Linear  = gl::LINEAR
 }
 impl TextureFilter {
     /// Retrieves a OpenGL mipmap filter for mipmaping. The returned `GLenum` can
@@ -222,20 +223,21 @@ impl TextureFilter {
     }
 }
 
-/// Represents a OpenGL texture format. Use in OpenGL functions like `TextureFormat::* as GLenum`
+/// Represents a OpenGL texture format.
+#[repr(u32)] // GLenum is u32
 #[allow(non_camel_case_types, dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum TextureFormat {
-    RGBA_F32 = gl::RGBA32F as isize,
-    RGBA_F16 = gl::RGBA16F as isize,
-    RGB_F32  = gl::RGB32F as isize,
-    RGB_F16  = gl::RGB16F as isize,
-    R_F32    = gl::R32F as isize,
-    R_F16    = gl::R16F as isize,
+    RGBA_F32 = gl::RGBA32F,
+    RGBA_F16 = gl::RGBA16F,
+    RGB_F32  = gl::RGB32F,
+    RGB_F16  = gl::RGB16F,
+    R_F32    = gl::R32F,
+    R_F16    = gl::R16F,
 
-    RGBA_8   = gl::RGBA8 as isize,
-    RGB_8    = gl::RGB8 as isize,
-    R_8      = gl::R8 as isize,
+    RGBA_8   = gl::RGBA8,
+    RGB_8    = gl::RGB8,
+    R_8      = gl::R8,
 }
 impl TextureFormat {
     /// Retrives the unsized version of the given format
@@ -251,12 +253,13 @@ impl TextureFormat {
 /// Components that a texture can be mapped to through swizzling. See
 /// [`set_swizzle_mask`](struct.Texture.html#method.set_swizzle_mask)
 /// for more info.
+#[repr(u32)] // GLenum is u32
 #[derive(Debug, Copy, Clone)]
 pub enum SwizzleComp {
-    Red     = gl::RED as isize,
-    Green   = gl::GREEN as isize,
-    Blue    = gl::BLUE as isize,
-    Alpha   = gl::ALPHA as isize,
-    One     = gl::ONE as isize,
-    Zero    = gl::ZERO as isize,
+    Red     = gl::RED,
+    Green   = gl::GREEN,
+    Blue    = gl::BLUE,
+    Alpha   = gl::ALPHA,
+    One     = gl::ONE,
+    Zero    = gl::ZERO,
 }

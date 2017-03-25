@@ -538,19 +538,20 @@ impl Drop for VertexArray {
 }
 
 /// Represents different types of primitives which can be drawn on the GPU.
+#[repr(u32)] // GLenum is u32
 #[derive(Copy, Clone)]
 pub enum PrimitiveMode {
-    Points                      = gl::POINTS as isize,
-    LineStrip                   = gl::LINE_STRIP as isize,
-    LineLoop                    = gl::LINE_LOOP as isize,
-    Lines                       = gl::LINES as isize,
-    LineStripAdjacency          = gl::LINE_STRIP_ADJACENCY as isize,
-    LinesAdjacency              = gl::LINES_ADJACENCY as isize,
-    TriangleStrip               = gl::TRIANGLE_STRIP as isize,
-    TriangleFan                 = gl::TRIANGLE_FAN as isize,
-    Triangles                   = gl::TRIANGLES as isize,
-    TriangleStripAdjacency      = gl::TRIANGLE_STRIP_ADJACENCY as isize,
-    TrianglesAdjacency          = gl::TRIANGLES_ADJACENCY as isize,
+    Points                      = gl::POINTS,
+    LineStrip                   = gl::LINE_STRIP,
+    LineLoop                    = gl::LINE_LOOP,
+    Lines                       = gl::LINES,
+    LineStripAdjacency          = gl::LINE_STRIP_ADJACENCY,
+    LinesAdjacency              = gl::LINES_ADJACENCY,
+    TriangleStrip               = gl::TRIANGLE_STRIP,
+    TriangleFan                 = gl::TRIANGLE_FAN,
+    Triangles                   = gl::TRIANGLES,
+    TriangleStripAdjacency      = gl::TRIANGLE_STRIP_ADJACENCY,
+    TrianglesAdjacency          = gl::TRIANGLES_ADJACENCY,
 } 
 
 /// Represents different GL buffer usage hints. Note that these are hints,
@@ -567,44 +568,47 @@ pub enum PrimitiveMode {
 /// * Draw - Data will be set by the application and read by the GPU
 /// * Read - Data is set by the GPU and read by the application
 /// * Copy - Data is set and read by the GPU
+#[repr(u32)] // GLenum is u32
 #[derive(Copy, Clone)]
 pub enum BufferUsage {
-    StaticDraw  = gl::STATIC_DRAW as isize,
-    DynamicDraw = gl::DYNAMIC_DRAW as isize,
-    StreamDraw  = gl::STREAM_DRAW as isize,
-    StaticRead  = gl::STATIC_READ as isize,
-    DynamicRead = gl::DYNAMIC_READ as isize,
-    StreamRead  = gl::STREAM_READ as isize,
-    StaticCopy  = gl::STATIC_COPY as isize,
-    DynamicCopy = gl::DYNAMIC_COPY as isize,
-    StreamCopy  = gl::STREAM_COPY as isize,
+    StaticDraw  = gl::STATIC_DRAW,
+    DynamicDraw = gl::DYNAMIC_DRAW,
+    StreamDraw  = gl::STREAM_DRAW,
+    StaticRead  = gl::STATIC_READ,
+    DynamicRead = gl::DYNAMIC_READ,
+    StreamRead  = gl::STREAM_READ,
+    StaticCopy  = gl::STATIC_COPY,
+    DynamicCopy = gl::DYNAMIC_COPY,
+    StreamCopy  = gl::STREAM_COPY,
 }
 
 /// Reperesents a target to which a buffer can be bound
+#[repr(u32)] // GLenum is u32
 #[derive(Copy, Clone)]
 pub enum BufferTarget {
-    Array               = gl::ARRAY_BUFFER as isize,
-    ElementArray        = gl::ELEMENT_ARRAY_BUFFER as isize,
-    PixelPack           = gl::PIXEL_PACK_BUFFER as isize,
-    PixelUnpack         = gl::PIXEL_UNPACK_BUFFER as isize,
-    TransformFeedback   = gl::TRANSFORM_FEEDBACK_BUFFER as isize,
-    Uniform             = gl::UNIFORM_BUFFER as isize,
-    Texture             = gl::TEXTURE_BUFFER as isize,
-    CopyRead            = gl::COPY_READ_BUFFER as isize,
-    CopyWrite           = gl::COPY_WRITE_BUFFER as isize,
-    DrawIndirect        = gl::DRAW_INDIRECT_BUFFER as isize,
-    AtomicCounter       = gl::ATOMIC_COUNTER_BUFFER as isize,
-    DispatchIndirect    = gl::DISPATCH_INDIRECT_BUFFER as isize,
+    Array               = gl::ARRAY_BUFFER,
+    ElementArray        = gl::ELEMENT_ARRAY_BUFFER,
+    PixelPack           = gl::PIXEL_PACK_BUFFER,
+    PixelUnpack         = gl::PIXEL_UNPACK_BUFFER,
+    TransformFeedback   = gl::TRANSFORM_FEEDBACK_BUFFER,
+    Uniform             = gl::UNIFORM_BUFFER,
+    Texture             = gl::TEXTURE_BUFFER,
+    CopyRead            = gl::COPY_READ_BUFFER,
+    CopyWrite           = gl::COPY_WRITE_BUFFER,
+    DrawIndirect        = gl::DRAW_INDIRECT_BUFFER,
+    AtomicCounter       = gl::ATOMIC_COUNTER_BUFFER,
+    DispatchIndirect    = gl::DISPATCH_INDIRECT_BUFFER,
 }
 
 /// Represents different types of data which may be stored in a buffer
+#[repr(u32)] // GLenum is u32
 #[derive(Debug, Copy, Clone)]
 pub enum DataType {
-    Float        = gl::FLOAT as isize,
-    Int          = gl::INT as isize,
-    Byte         = gl::BYTE as isize,
-    UnsignedInt  = gl::UNSIGNED_INT as isize,
-    UnsignedByte = gl::UNSIGNED_BYTE as isize,
+    Float        = gl::FLOAT,
+    Int          = gl::INT,
+    Byte         = gl::BYTE,
+    UnsignedInt  = gl::UNSIGNED_INT,
+    UnsignedByte = gl::UNSIGNED_BYTE,
 }
 impl DataType {
     pub fn size(&self) -> usize {

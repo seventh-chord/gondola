@@ -125,36 +125,38 @@ pub mod graphics {
     }
 
     /// OpenGL blend functions
+    #[repr(u32)] // GLenum is u32
     #[derive(Copy, Clone, Debug)]
     pub enum BlendFactor {
-        Zero                    = gl::ZERO as isize,
-        One                     = gl::ONE as isize,
-        SrcColor                = gl::SRC_COLOR as isize,
-        OneMinusSrcColor        = gl::ONE_MINUS_SRC_COLOR as isize,
-        DstColor                = gl::DST_COLOR as isize,
-        OneMinusDstColor        = gl::ONE_MINUS_DST_COLOR as isize,
-        SrcAlpha                = gl::SRC_ALPHA as isize,
-        OneMinusSrcAlpha        = gl::ONE_MINUS_SRC_ALPHA as isize,
-        DstAlpha                = gl::DST_ALPHA as isize,
-        OneMinusDstAlpha        = gl::ONE_MINUS_DST_ALPHA as isize,
-        ConstantColor           = gl::CONSTANT_COLOR as isize,
-        OneMinusConstantColor   = gl::ONE_MINUS_CONSTANT_COLOR as isize,
-        ConstantAlpha           = gl::CONSTANT_ALPHA as isize,
-        OneMinusConstantAlpha   = gl::ONE_MINUS_CONSTANT_ALPHA as isize,
+        Zero                    = gl::ZERO,
+        One                     = gl::ONE,
+        SrcColor                = gl::SRC_COLOR,
+        OneMinusSrcColor        = gl::ONE_MINUS_SRC_COLOR,
+        DstColor                = gl::DST_COLOR,
+        OneMinusDstColor        = gl::ONE_MINUS_DST_COLOR,
+        SrcAlpha                = gl::SRC_ALPHA,
+        OneMinusSrcAlpha        = gl::ONE_MINUS_SRC_ALPHA,
+        DstAlpha                = gl::DST_ALPHA,
+        OneMinusDstAlpha        = gl::ONE_MINUS_DST_ALPHA,
+        ConstantColor           = gl::CONSTANT_COLOR,
+        OneMinusConstantColor   = gl::ONE_MINUS_CONSTANT_COLOR,
+        ConstantAlpha           = gl::CONSTANT_ALPHA,
+        OneMinusConstantAlpha   = gl::ONE_MINUS_CONSTANT_ALPHA,
     }
     /// OpenGL blend equations
+    #[repr(u32)] // GLenum is u32
     #[derive(Copy, Clone, Debug)]
     pub enum BlendFunction {
         /// `Src + Dst`
-        Add             = gl::FUNC_ADD as isize,
+        Add             = gl::FUNC_ADD,
         /// `Src - Dst`
-        Subtract        = gl::FUNC_SUBTRACT as isize,
+        Subtract        = gl::FUNC_SUBTRACT,
         /// `Dst - Src`
-        ReverseSubtract = gl::FUNC_REVERSE_SUBTRACT as isize,
+        ReverseSubtract = gl::FUNC_REVERSE_SUBTRACT,
         /// `min(Dst, Src)`
-        Min             = gl::MIN as isize,
+        Min             = gl::MIN,
         /// `max(Dst, Src)`
-        Max             = gl::MAX as isize,
+        Max             = gl::MAX,
     }
 }
 
