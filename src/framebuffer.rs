@@ -2,8 +2,8 @@
 //! Framebuffers are used to draw to off-screen render targets
 
 use gl;
-use std;
-use std::io;
+use std::fmt;
+use std::error;
 use gl::types::*;
 use texture::TextureFormat;
 
@@ -33,7 +33,7 @@ impl FramebufferProperties {
     }
 
     /// Creates a new framebuffer with these properties
-    pub fn build(&self) -> io::Result<Framebuffer> {
+    pub fn build(&self) -> Result<Framebuffer, FramebufferError> {
         Framebuffer::new(&self)
     }
 }
@@ -49,12 +49,12 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
-    fn new(properties: &FramebufferProperties) -> io::Result<Framebuffer> {
+    fn new(properties: &FramebufferProperties) -> Result<Framebuffer, FramebufferError> {
         let mut framebuffer: GLuint = 0;
         let mut texture: GLuint = 0;
         let mut depth_buffer: Option<GLuint> = None;
 
-        let mut error: Option<String> = None;
+        let mut error: Option<FramebufferError> = None;
 
         unsafe {
             gl::GenFramebuffers(1, &mut framebuffer);
@@ -76,7 +76,7 @@ impl Framebuffer {
                                0, // Level
                                properties.internal_format as GLint,
                                properties.width as GLint, properties.height as GLint, 0, //Size and border
-                               gl::RGBA, gl::UNSIGNED_BYTE, std::ptr::null()); // Data for texture
+                               gl::RGBA, gl::UNSIGNED_BYTE, ::std::ptr::null()); // Data for texture
                 gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                 gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                 gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
@@ -110,14 +110,14 @@ impl Framebuffer {
                 if let Some(depth_buffer) = depth_buffer {
                     gl::DeleteRenderbuffers(1, &depth_buffer);
                 }
-                error = Some(format!("Framebuffer error: {}", get_status_message(status)));
+                error = Some(From::from(status));
             }
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         }
 
         if let Some(error) = error {
-            return Err(io::Error::new(io::ErrorKind::Other, error));
+            return Err(error);
         } else {
             return Ok(
                 Framebuffer {
@@ -196,17 +196,65 @@ impl Drop for Framebuffer {
     }
 }
 
-fn get_status_message(message: GLenum) -> String {
-    String::from(match message {
-        gl::FRAMEBUFFER_UNDEFINED                     => "GL_FRAMEBUFFER_UNDEFINED",
-        gl::FRAMEBUFFER_INCOMPLETE_ATTACHMENT         => "GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT",
-        gl::FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT => "GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT",
-        gl::FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER        => "GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER",
-        gl::FRAMEBUFFER_INCOMPLETE_READ_BUFFER        => "GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER",
-        gl::FRAMEBUFFER_UNSUPPORTED                   => "GL_FRAMEBUFFER_UNSUPPORTED",
-        gl::FRAMEBUFFER_INCOMPLETE_MULTISAMPLE        => "GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE",
-        gl::FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS      => "GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS",
-        _ => return format!("Unkown error ({})", message)
-    })
+/// A error which can occure while constructing a framebuffer in OpenGL. The variants of this enum
+/// corespond to those `gl::FRAMEBUFFER_*` constants which are errors.
+#[derive(Debug, Clone)]
+pub enum FramebufferError {
+    Undefined,
+    IncompleteAttachment,
+    IncompleteMissingAttachment,
+    IncompleteDrawBuffer,
+    IncompleteReadBuffer,
+    Unsuported,
+    IncompleteMultisample,
+    IncompleteLayerTargets,
+    UnkownError(GLenum),
 }
 
+impl From<GLenum> for FramebufferError {
+    fn from(err: GLenum) -> FramebufferError {
+        match err {
+            gl::FRAMEBUFFER_UNDEFINED                     => FramebufferError::Undefined,
+            gl::FRAMEBUFFER_INCOMPLETE_ATTACHMENT         => FramebufferError::IncompleteAttachment,
+            gl::FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT => FramebufferError::IncompleteMissingAttachment,
+            gl::FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER        => FramebufferError::IncompleteDrawBuffer,
+            gl::FRAMEBUFFER_INCOMPLETE_READ_BUFFER        => FramebufferError::IncompleteReadBuffer,
+            gl::FRAMEBUFFER_UNSUPPORTED                   => FramebufferError::Unsuported,
+            gl::FRAMEBUFFER_INCOMPLETE_MULTISAMPLE        => FramebufferError::IncompleteMultisample,
+            gl::FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS      => FramebufferError::IncompleteLayerTargets,
+            _                                             => FramebufferError::UnkownError(err),
+        }
+    }
+}
+
+impl error::Error for FramebufferError {
+    fn description(&self) -> &str {
+        match *self {
+            FramebufferError::Undefined                     => "Framebuffer error: Undefined framebuffer",
+            FramebufferError::IncompleteAttachment          => "Framebuffer error: Incompelete attachment",
+            FramebufferError::IncompleteMissingAttachment   => "Framebuffer error: Incompelete missing attachment",
+            FramebufferError::IncompleteDrawBuffer          => "Framebuffer error: Incomplete draw buffer",
+            FramebufferError::IncompleteReadBuffer          => "Framebuffer error: Incomplete read buffer",
+            FramebufferError::Unsuported                    => "Framebuffer error: Unsuported",
+            FramebufferError::IncompleteMultisample         => "Framebuffer error: Incomplete multisample",
+            FramebufferError::IncompleteLayerTargets        => "Framebuffer error: Incomplete layer targets",
+            FramebufferError::UnkownError(_)                => "Framebuffer error: Unkown error code",
+        }
+    }
+}
+
+impl fmt::Display for FramebufferError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            FramebufferError::Undefined                     => write!(f, "Framebuffer error: Undefined framebuffer"),
+            FramebufferError::IncompleteAttachment          => write!(f, "Framebuffer error: Incompelete attachment"),
+            FramebufferError::IncompleteMissingAttachment   => write!(f, "Framebuffer error: Incompelete missing attachment"),
+            FramebufferError::IncompleteDrawBuffer          => write!(f, "Framebuffer error: Incomplete draw buffer"),
+            FramebufferError::IncompleteReadBuffer          => write!(f, "Framebuffer error: Incomplete read buffer"),
+            FramebufferError::Unsuported                    => write!(f, "Framebuffer error: Unsuported"),
+            FramebufferError::IncompleteMultisample         => write!(f, "Framebuffer error: Incomplete multisample"),
+            FramebufferError::IncompleteLayerTargets        => write!(f, "Framebuffer error: Incomplete layer targets"),
+            FramebufferError::UnkownError(code)             => write!(f, "Framebuffer error: Unkown error code: 0x{:x}", code),
+        }
+    }
+}

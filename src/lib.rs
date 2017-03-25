@@ -5,16 +5,17 @@ extern crate png;
 extern crate cable_math;
 extern crate rusttype;
 
-pub mod color;
+mod color;
+mod matrix_stack;
+mod input;
+
 pub mod texture;
 #[macro_use]
 pub mod shader;
 pub mod buffer;
-pub mod matrix_stack;
 pub mod util;
 pub mod framebuffer;
 pub mod font;
-pub mod input;
 pub mod ui;
 
 pub use color::*;
@@ -23,15 +24,21 @@ pub use matrix_stack::*;
 pub use util::graphics;
 
 use cable_math::Vec2;
-use std::io;
 use std::time::{Instant, Duration};
 use std::sync::mpsc;
+
+/// The most generic result type possible. Used in top-level
+pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 
 /// Creates a new window and runs the given game in this window. This function does 
 /// not return until the game exits.
 ///
 /// # Example
 /// ```rust,no_run
+/// extern crate gondola;
+///
+/// use gondola::{Game, GameResult, GameState, MatrixStack};
+///
 /// fn main() {
 ///     gondola::run::<Pong>();
 /// }
@@ -41,7 +48,7 @@ use std::sync::mpsc;
 /// }
 ///
 /// impl Game for Pong {
-///     fn setup(state: &mut GameState) -> io::Result<Pong> {
+///     fn setup(state: &mut GameState) -> GameResult<Pong> {
 ///         Ok(Pong {})
 ///     }
 ///
@@ -151,7 +158,7 @@ pub struct GameState {
 /// Used with [`gondola::run`](fn.run.html)
 pub trait Game: Sized {
     /// Called before the main loop. Resources and initial state should be set up here.
-    fn setup(state: &mut GameState) -> io::Result<Self>;
+    fn setup(state: &mut GameState) -> GameResult<Self>;
     /// Called once every frame, before drawing.
     fn update(&mut self, delta: u32, state: &mut GameState);
     /// Called once every frame, after updating.

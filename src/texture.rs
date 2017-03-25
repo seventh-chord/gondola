@@ -260,4 +260,3 @@ pub enum SwizzleComp {
     One     = gl::ONE as isize,
     Zero    = gl::ZERO as isize,
 }
-

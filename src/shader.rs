@@ -5,15 +5,13 @@
 //! modify the source of a shader. It can then be converted to an actual
 //! [`Shader`](struct.Shader.html) which can be used for rendering.
 
-use gl;
-use gl::types::*;
-use std::ptr;
-use std::str;
+use std::{ptr, str, fmt, error, io};
 use std::fs::File;
 use std::path::Path;
-use std::io;
 use std::io::{BufRead, BufReader};
 use std::ffi::CString;
+use gl;
+use gl::types::*;
 use buffer::Vertex;
 use cable_math::{Mat4, Vec2, Vec3, Vec4};
 
@@ -43,7 +41,7 @@ impl ShaderPrototype {
     ///     color = vec4(1.0, 0.0, 0.0, 1.0); // Draw in red
     /// }
     /// ```
-    pub fn from_file<P>(path: P) -> io::Result<ShaderPrototype> where P: AsRef<Path> {
+    pub fn from_file<P>(path: P) -> Result<ShaderPrototype, ShaderError> where P: AsRef<Path> {
         let mut vert_src = String::new();
         let mut frag_src = String::new();
         let mut geom_src = String::new();
@@ -65,7 +63,7 @@ impl ShaderPrototype {
                     "GEOM" => current = Some(Target::Geom),
                     _ => {
                         let message = format!("Expected 'VERT', 'FRAG' or 'GEOM', found {}", &line[2..]);
-                        return Err(io::Error::new(io::ErrorKind::Other, message));
+                        return Err(ShaderError::FileFormat(message));
                     }
                 }
             } else {
@@ -144,7 +142,7 @@ impl ShaderPrototype {
 
 
     /// Converts this prototype into a shader
-    pub fn build(&self) -> io::Result<Shader> {
+    pub fn build(&self) -> Result<Shader, ShaderError> {
         let vert_src = self.vert_src.as_str();
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
         let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
@@ -167,7 +165,7 @@ impl ShaderPrototype {
 
     /// Converts this prototype into a shader, inserting input declarations for the given
     /// vertex into the fragment shader
-    pub fn build_with_vert<T>(&self) -> io::Result<Shader> where T: Vertex {
+    pub fn build_with_vert<T>(&self) -> Result<Shader, ShaderError> where T: Vertex {
         let input_decl = <T as Vertex>::gen_shader_input_decl();
         let vert_src = &prepend_code(&self.vert_src, &input_decl);
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
@@ -205,7 +203,7 @@ impl Shader {
     pub fn new(vert_src: &str,
                geom_src: Option<&str>,
                frag_src: Option<&str>)
-               -> io::Result<Shader> {
+               -> Result<Shader, ShaderError> {
         let program;
         let vert_shader = 0;
         let frag_shader;
@@ -259,7 +257,7 @@ impl Shader {
                 }
 
                 let message = str::from_utf8(&buffer).expect("Shader log was not valid UTF-8").to_string();
-                return Err(io::Error::new(io::ErrorKind::Other, message));
+                return Err(ShaderError::Link(message));
             }
         }
 
@@ -417,7 +415,7 @@ pub fn create_inputs(src: &str, for_geom: bool) -> String {
     result
 }
 
-fn compile(src: &str, shader_type: GLenum) -> io::Result<GLuint> {
+fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, ShaderError> {
     unsafe {
         let shader = gl::CreateShader(shader_type);
 
@@ -441,7 +439,7 @@ fn compile(src: &str, shader_type: GLenum) -> io::Result<GLuint> {
             let message = str::from_utf8(&buffer).ok().expect("Shader log is not valid utf8").to_string();
             let message = format!("{}For source: \"\n{}\"",
                                   message, src);
-            return Err(io::Error::new(io::ErrorKind::Other, message));
+            return Err(ShaderError::Compile(message));
         } else {
             return Ok(shader);
         }
@@ -521,6 +519,51 @@ macro_rules! load_shader {
             prototype.build_with_vert::<$vert>()
         })
     };
+}
+
+/// Errors which can occur in the various stages of shader creation.
+#[derive(Debug)]
+pub enum ShaderError {
+    Compile(String),
+    Link(String),
+    FileFormat(String),
+    Io(io::Error),
+}
+
+impl error::Error for ShaderError {
+    fn description(&self) -> &str {
+        match *self {
+            ShaderError::Compile(ref log)       => log,
+            ShaderError::Link(ref log)          => log,
+            ShaderError::FileFormat(ref msg)    => msg,
+            ShaderError::Io(ref err)            => err.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        if let ShaderError::Io(ref err) = *self {
+            err.cause()
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Display for ShaderError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ShaderError::Compile(ref log)       => write!(f, "Compile error: \n{}\n", log),
+            ShaderError::Link(ref log)          => write!(f, "Link error: \n{}\n", log),
+            ShaderError::FileFormat(ref msg)    => write!(f, "File format error: {}", msg),
+            ShaderError::Io(ref err)            => write!(f, "Io error while loading shader: {}", err),
+        }
+    }
+}
+
+impl From<io::Error> for ShaderError {
+    fn from(err: io::Error) -> ShaderError {
+        ShaderError::Io(err)
+    }
 }
 
 #[cfg(test)]
