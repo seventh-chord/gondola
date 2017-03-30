@@ -5,7 +5,7 @@ use gl;
 use gl::types::*;
 use std;
 use std::mem::size_of;
-use std::ops::Range;
+use std::ops::{Range, Deref};
 use cable_math::{Vec2, Vec3, Vec4, Mat4};
 
 const DEFAULT_SIZE: usize = 100;
@@ -14,7 +14,7 @@ const DEFAULT_SIZE: usize = 100;
 /// for rendering the vertices as primitives.
 ///
 /// # Deriving [`Vertex`](trait.Vertex.html)
-/// A custom proc_macro is defined in `gondola_vertex_macro` that can be used to derive the
+/// A custom is defined in `gondola_derive` that can be used to derive the
 /// [`Vertex`](trait.Vertex.html) trait for custom structs. For this to work, all members of
 /// the struct need to implement [`VertexData`](trait.VertexData.html). See the
 /// trait documentation for a list of implementations.
@@ -69,11 +69,52 @@ pub struct VertexBuffer<T: Vertex> {
     usage: BufferUsage,
 
     vbo: GLuint,
-    vao: GLuint
+    vao: GLuint,
+}
+
+/// A GPU buffer which, similarly to [`VertexBuffer`], holds a list of a custom vertex type. Differently
+/// from [`VertexBuffer`] a `IndexedVertexBuffer` uses a element/index buffer to render the
+/// vertices in a non-default order. This is commonly used when rendering models or other complex
+/// geometry.
+///
+/// Note that this type has two generics parameters. `T` specifies the type of vertices which is
+/// stored in this buffer, while `E` specifies the type of indices used. It is important that
+/// [`E::data_type()`] is indexable (As specified by [`DataType::indexable`]).
+///
+/// This struct dereferences to [`VertexBuffer`], exposing methods to modify the data in this
+/// buffer. See its documentation for more information.
+///
+/// [`VertexBuffer`]:        struct.VertexBuffer.html
+/// [`E::data_type()`]:      trait.VertexData.html#tymethod.data_type
+/// [`DataType::indexable`]: enum.DataType.html#method.data_type
+pub struct IndexedVertexBuffer<T: Vertex, E: VertexData> {
+    data: VertexBuffer<T>,
+    indices: PrimitiveBuffer<E>,
+}
+
+/// A GPU buffer which holds a set of primitives (floats, bytes or integers). These primitives
+/// can be rendered using a [`VertexArray`](struct.VertexArray.html).
+pub struct PrimitiveBuffer<T: VertexData> {
+    phantom: std::marker::PhantomData<T>,
+
+    buffer: GLuint,
+    target: BufferTarget,
+    usage: BufferUsage,
+    allocated: usize,
+    used: usize,
+}
+
+/// Contains information on how to render a group of primitive buffers. In most cases simply using
+/// a [`VertexBuffer`], which combines information about rendering with data, is more adequate.
+///
+/// [`VertexBuffer`]: struct.VertexBuffer.html
+pub struct VertexArray {
+    array: GLuint,
+    index_type: Option<DataType>,
 }
 
 impl<T: Vertex> VertexBuffer<T> {
-    /// Creates a new vertex buffer, prealocating space for 100 vertices.
+    /// Creates a new vertex buffer, preallocating space for 100 vertices.
     pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> VertexBuffer<T> {
         VertexBuffer::with_capacity(primitive_mode, usage, DEFAULT_SIZE)
     }
@@ -155,7 +196,7 @@ impl<T: Vertex> VertexBuffer<T> {
         self.put(0, data);
     }
     /// Puts the given vertices at the end of this buffer, behind any data which is
-    /// allready in it. This resizes the underlying buffer if more space is needed
+    /// already in it. This resizes the underlying buffer if more space is needed
     /// to store the new data.
     pub fn put_at_end(&mut self, data: &[T]) {
         let vertex_count = self.vertex_count;
@@ -203,16 +244,16 @@ impl<T: Vertex> VertexBuffer<T> {
     }
 
     /// The number of vertices that can be stored in this buffer without
-    /// realocating memory. 
+    /// reallocating memory. 
     pub fn capacity(&self) -> usize {
         self.allocated
     }
 
     /// Sets the number of vertices that can be stored in this buffer without
-    /// realocating memory. If the buffer allready has capacity for the given
+    /// reallocating memory. If the buffer already has capacity for the given
     /// number of vertices no space will be allocated.
     pub fn ensure_allocated(&mut self, new_size: usize) {
-        // Only realocate if necessary
+        // Only reallocate if necessary
         if new_size > self.allocated {
             let mut new_buffer = 0;
             let bytes = new_size * T::bytes_per_vertex();
@@ -251,36 +292,101 @@ impl<T: Vertex> VertexBuffer<T> {
     }
 }
 
-impl <T: Vertex> Drop for VertexBuffer<T> {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteBuffers(1, &mut self.vbo);
-            gl::DeleteVertexArrays(1, &mut self.vao);
+impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E> {
+    /// Creates a new indexed vertex buffer, preallocating space for 100 vertices and 100 indices.
+    pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> IndexedVertexBuffer<T, E> {
+        IndexedVertexBuffer::with_capacity(primitive_mode, usage, DEFAULT_SIZE, DEFAULT_SIZE)
+    }
+
+    /// Creates a new indexed vertex buffer, preallocating space for the given number of vertices
+    /// and indices.
+    pub fn with_capacity(primitive_mode: PrimitiveMode, usage: BufferUsage, 
+                         vertex_capacity: usize, index_capacity: usize) -> IndexedVertexBuffer<T, E> {
+        assert!(E::data_type().indexable(), "Attempted to create IndexedVertexBuffer with {:?}, which is not indexable", E::data_type());
+        IndexedVertexBuffer {
+            data: VertexBuffer::with_capacity(primitive_mode, usage, vertex_capacity),
+            indices: PrimitiveBuffer::with_capacity(BufferTarget::ElementArray, usage, index_capacity),
         }
     }
-}
 
-/// A GPU buffer which holds a set of primitives (floats, bytes or integers). These primitives
-/// can be rendered using a [`VertexArray`](struct.VertexArray.html).
-pub struct PrimitiveBuffer<T: VertexData> {
-    phantom: std::marker::PhantomData<T>,
+    /// Creates a new vertex buffer, storing the given vertices and indices on the GPU.
+    pub fn with_data(primitive_mode: PrimitiveMode, data: &[T], indices: &[E]) -> IndexedVertexBuffer<T, E> {
+        assert!(E::data_type().indexable(), "Attempted to create IndexedVertexBuffer with {:?}, which is not indexable", E::data_type());
+        IndexedVertexBuffer {
+            data: VertexBuffer::with_data(primitive_mode, data),
+            indices: PrimitiveBuffer::with_data(BufferTarget::ElementArray, indices),
+        }
+    }
 
-    buffer: GLuint,
-    target: BufferTarget,
-    usage: BufferUsage,
-    allocated: usize,
-    used: usize,
+    /// Puts the given indices at the start of this buffer, replacing any indices
+    /// which where previously in that location. This resizes the underlying buffer
+    /// if more space is needed to store the new data.
+    pub fn put_indices_at_start(&mut self, data: &[E]) {
+        self.indices.put_at_start(data);
+    }
+    /// Puts the given indices at the end of this buffer, behind any data which is
+    /// already in it. This resizes the underlying buffer if more space is needed
+    /// to store the new data.
+    pub fn put_indices_at_end(&mut self, data: &[E]) {
+        self.indices.put_at_end(data);
+    }
+    /// Puts the given indices at the given index in this buffer, overwriting any
+    /// indices which where previously in that location. This resizes the underlying
+    /// buffer if more space is needed to store the new data.
+    pub fn put(&mut self, index: usize, data: &[E]) {
+        self.indices.put(index, data);
+    }
+
+    /// Empties this buffers index buffer, setting its length to 0. This does nothing to the data
+    /// stored in the buffer, it simply marks all current data as invalid.
+    pub fn clear_indices(&mut self) {
+        self.indices.clear();
+    }
+
+    /// The number of indices that are stored in GPU memory.
+    pub fn index_len(&self) -> usize {
+        self.indices.len()
+    }
+
+    /// The number of indices that can be stored in this buffer without
+    /// reallocating memory. 
+    pub fn index_capacity(&self) -> usize {
+        self.allocated
+    }
+
+    /// Sets the number of indices that can be stored in this buffer without
+    /// reallocating memory. If the buffer already has capacity for the given
+    /// number of indices no space will be allocated.
+    pub fn ensure_indices_allocated(&mut self, new_size: usize) {
+        self.indices.ensure_allocated(new_size);
+    }
+
+    /// Draws the contents of this vertex buffer with the primitive mode specified
+    /// at construction and the index/element buffer.
+    pub fn draw_elements(&self) {
+        unsafe {
+            gl::BindVertexArray(self.data.vao);
+            gl::DrawElements(self.data.primitive_mode as GLenum, 
+                             (self.indices.len() * E::primitives()) as GLsizei,
+                             E::data_type() as GLenum, std::ptr::null());
+        }
+    }
 }
 
 impl<T: VertexData> PrimitiveBuffer<T> {
     /// Initializes a new, empty, buffer
     pub fn new(target: BufferTarget, usage: BufferUsage) -> PrimitiveBuffer<T> {
+        PrimitiveBuffer::with_capacity(target, usage, DEFAULT_SIZE)
+    }
+
+    /// Initializes a new, empty, buffer with the given capacity
+    pub fn with_capacity(target: BufferTarget, usage: BufferUsage, initial_capacity: usize) -> PrimitiveBuffer<T> {
         let mut buffer = 0;
 
         unsafe {
             gl::GenBuffers(1, &mut buffer);
             gl::BindBuffer(target as GLenum, buffer);
-            gl::BufferData(target as GLenum, (DEFAULT_SIZE * T::bytes()) as GLsizeiptr, std::ptr::null(), usage as GLenum);
+            gl::BufferData(target as GLenum, (initial_capacity * T::bytes()) as GLsizeiptr, std::ptr::null(), usage as GLenum);
         }
 
         PrimitiveBuffer {
@@ -289,7 +395,7 @@ impl<T: VertexData> PrimitiveBuffer<T> {
             buffer: buffer,
             target: target,
             usage: usage,
-            allocated: DEFAULT_SIZE,
+            allocated: initial_capacity,
             used: 0,
         }
     }
@@ -330,7 +436,7 @@ impl<T: VertexData> PrimitiveBuffer<T> {
         self.put(0, data);
     }
     /// Puts the given data at the end of this buffer, behind any data which is
-    /// allready in it. This resizes the underlying buffer if more space is needed
+    /// already in it. This resizes the underlying buffer if more space is needed
     /// to store the new data.
     pub fn put_at_end(&mut self, data: &[T]) {
         let end = self.used;
@@ -370,10 +476,10 @@ impl<T: VertexData> PrimitiveBuffer<T> {
     }
     
     /// Sets the number of vertices that can be stored in this buffer without
-    /// realocating memory. If the buffer allready has capacity for the given
+    /// reallocating memory. If the buffer already has capacity for the given
     /// number of vertices no space will be allocated.
     pub fn ensure_allocated(&mut self, new_size: usize) {
-        // Only realocate if necessary
+        // Only reallocate if necessary
         if new_size > self.allocated {
             let mut new_vbo = 0;
 
@@ -445,23 +551,6 @@ impl<T: VertexData> PrimitiveBuffer<T> {
     }
 }
 
-impl<T: VertexData> Drop for PrimitiveBuffer<T> {
-    fn drop(&mut self) {
-        unsafe {
-            gl::DeleteBuffers(1, &mut self.buffer);
-        }
-    }
-}
-
-/// Contains information on how to render a group of primitive buffers. In most cases simply using
-/// a [`VertexBuffer`], which combines information about rendering with data, is more adequate.
-///
-/// [`VertexBuffer`]: struct.VertexBuffer.html
-pub struct VertexArray {
-    array: GLuint,
-    index_type: Option<DataType>,
-}
-
 impl VertexArray {
     pub fn new() -> VertexArray {
         let mut array = 0;
@@ -505,25 +594,25 @@ impl VertexArray {
         }
     }
 
-    /// Registers the given primitive buffer to be used as a index buffer (also refered to as
+    /// Registers the given primitive buffer to be used as a index buffer (also referred to as
     /// element buffer) for this vertex array.  After this call, calls to [`draw_elements`] are 
-    /// safe. Note that `T` must have a datatype (See [`VertexData::data_type`]) which is indexable 
+    /// safe. Note that `T` must have a data type (See [`VertexData::data_type`]) which is indexable 
     /// (As specified by [`DataType::indexable`]).  If this is not upheld this function will panic 
     /// at runtime.
     ///
     /// [`VertexData::data_type`]: trait.VertexData.html#tymethod.data_type
     /// [`DataType::indexable`]:   enum.DataType.html#method.indexable
     /// [`draw_elements`]:         #method.draw_elements
-    pub fn set_index_buffer<T>(&mut self, ebo: &PrimitiveBuffer<T>) 
+    pub fn set_index_buffer<T>(&mut self, buffer: &PrimitiveBuffer<T>) 
         where T: VertexData
     {
         unsafe {
             gl::BindVertexArray(self.array);
-            ebo.bind();
+            buffer.bind();
         } 
 
         assert!(T::data_type().indexable(), 
-                "VertexArray::add_ebo called with a primitive buffer with data type {:?} which is not indexable",
+                "VertexArray::set_index_buffer called with a primitive buffer with data type {:?} which is not indexable",
                 T::data_type());
 
         self.index_type = Some(T::data_type());
@@ -559,11 +648,35 @@ impl VertexArray {
     }
 }
 
+impl<T: VertexData> Drop for PrimitiveBuffer<T> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteBuffers(1, &mut self.buffer);
+        }
+    }
+}
+
+impl <T: Vertex> Drop for VertexBuffer<T> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteBuffers(1, &mut self.vbo);
+            gl::DeleteVertexArrays(1, &mut self.vao);
+        }
+    }
+}
+
 impl Drop for VertexArray {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteVertexArrays(1, &mut self.array);
         }
+    }
+}
+
+impl<T: Vertex, E: VertexData> Deref for IndexedVertexBuffer<T, E> {
+    type Target = VertexBuffer<T>;
+    fn deref(&self) -> &VertexBuffer<T> {
+        &self.data
     }
 }
 
@@ -584,8 +697,8 @@ pub enum PrimitiveMode {
     TrianglesAdjacency          = gl::TRIANGLES_ADJACENCY,
 } 
 
-/// Represents different GL buffer usage hints. Note that these are hints,
-/// and drivers will not necesarily respect these.
+/// Represents different gl buffer usage hints. Note that these are hints,
+/// and drivers will not necessarily respect these.
 ///
 /// The first part of the name indicates how frequently the data will be used:  
 ///
@@ -593,7 +706,7 @@ pub enum PrimitiveMode {
 /// * Dynamic - Data is set frequently and used frequently
 /// * Stream - Data is set once and used at most a few times
 ///
-/// The specond part indicates how it will be used:  
+/// The second part indicates how it will be used:  
 ///
 /// * Draw - Data will be set by the application and read by the GPU
 /// * Read - Data is set by the GPU and read by the application
@@ -612,7 +725,7 @@ pub enum BufferUsage {
     StreamCopy  = gl::STREAM_COPY,
 }
 
-/// Reperesents a target to which a buffer can be bound
+/// Represents a target to which a buffer can be bound
 #[repr(u32)] // GLenum is u32
 #[derive(Copy, Clone)]
 pub enum BufferTarget {
@@ -657,7 +770,8 @@ impl DataType {
     }
 
     /// Returns true if this type can be used to specify indices when using `glDrawElements` and
-    /// similar functions.
+    /// similar functions. This returns true for `UnsignedInt`, `UnsignedShort` and `UnsignedByte`.
+    /// In terms of rust types, this returns true for `u8`, `u16` and `u32`.
     pub fn indexable(&self) -> bool {
         match *self {
             DataType::UnsignedInt | DataType::UnsignedByte | DataType::UnsignedShort => true,
@@ -696,12 +810,29 @@ pub trait Vertex {
     fn gen_shader_input_decl() -> String;
 }
 
-/// This trait marks types which can be stored in a GPU buffer. In general, this
-/// trait is implemented for all types which represent a collection of 
+/// This trait marks types which can be stored in a GPU buffer.  All fields of a 
+/// struct need to implement this in order for `#[derive(Vertex)]` to work. 
 ///
-/// All fields of a struct need to implement this in order for `#[derive(Vertex)]`
-/// to work. Implemented for single fields and up to four length tuples of the
-/// types `f32`, `i32`, `u32`
+/// Implemented for tuples, arrays and vectors of the types `GLfloat` (`f32`), 
+/// `GLint` (`i32`), `GLuint` (`u32`), `GLshort` (`i16`), `GLushort` (`u16`), 
+/// `GLbyte` (`i8`) and `GLubyte` (`u8`). Additionally the trait is implemented
+/// for combinations of the former (e.g. arrays of tuples).
+///
+/// # Example - Implementing this trait for a custom type
+/// ```rust
+/// use gondola::buffer::{VertexData, DataType};
+///
+/// struct Triangle {
+///     a: (f32, f32),
+///     b: (f32, f32),
+///     c: (f32, f32),
+/// }
+///
+/// impl VertexData for Triangle {
+///     fn primitives() -> usize { 6 } // 3 tuples of 2 primitives
+///     fn data_type() -> DataType { DataType::Float }
+/// }
+/// ```
 pub trait VertexData: Sized {
     /// The total number of bytes one of these components takes.
     fn bytes() -> usize {
@@ -762,6 +893,8 @@ impl_vertex_data!(GLint, DataType::Int);
 impl_vertex_data!(GLuint, DataType::UnsignedInt);
 impl_vertex_data!(GLbyte, DataType::Byte);
 impl_vertex_data!(GLubyte, DataType::UnsignedByte);
+impl_vertex_data!(GLshort, DataType::Int);
+impl_vertex_data!(GLushort, DataType::UnsignedInt);
 
 // Recursive generics woo!!!
 impl<T: VertexData> VertexData for Mat4<T> {
