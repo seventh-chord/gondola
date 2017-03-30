@@ -16,7 +16,7 @@ const DEFAULT_SIZE: usize = 100;
 /// # Deriving [`Vertex`](trait.Vertex.html)
 /// A custom proc_macro is defined in `gondola_vertex_macro` that can be used to derive the
 /// [`Vertex`](trait.Vertex.html) trait for custom structs. For this to work, all members of
-/// the struct need to implement [`VertexComponent`](trait.VertexComponent.html). See the
+/// the struct need to implement [`VertexData`](trait.VertexData.html). See the
 /// trait documentation for a list of implementations.
 ///
 /// # Example - Rendering with a custom shader and vertex type
@@ -262,7 +262,7 @@ impl <T: Vertex> Drop for VertexBuffer<T> {
 
 /// A GPU buffer which holds a set of primitives (floats, bytes or integers). These primitives
 /// can be rendered using a [`VertexArray`](struct.VertexArray.html).
-pub struct PrimitiveBuffer<T: VertexComponent> {
+pub struct PrimitiveBuffer<T: VertexData> {
     phantom: std::marker::PhantomData<T>,
 
     buffer: GLuint,
@@ -272,7 +272,7 @@ pub struct PrimitiveBuffer<T: VertexComponent> {
     used: usize,
 }
 
-impl<T: VertexComponent> PrimitiveBuffer<T> {
+impl<T: VertexData> PrimitiveBuffer<T> {
     /// Initializes a new, empty, buffer
     pub fn new(target: BufferTarget, usage: BufferUsage) -> PrimitiveBuffer<T> {
         let mut buffer = 0;
@@ -445,7 +445,7 @@ impl<T: VertexComponent> PrimitiveBuffer<T> {
     }
 }
 
-impl<T: VertexComponent> Drop for PrimitiveBuffer<T> {
+impl<T: VertexData> Drop for PrimitiveBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteBuffers(1, &mut self.buffer);
@@ -485,7 +485,7 @@ impl VertexArray {
     pub fn add_data_source<T>(&self, source: &PrimitiveBuffer<T>, 
                               index: usize, size: usize, 
                               stride: usize, offset: usize) 
-        where T: VertexComponent
+        where T: VertexData
     {
         source.bind();
 
@@ -503,7 +503,7 @@ impl VertexArray {
     /// Registers the given primitive buffer to be used as a element buffer for this vertex array.
     /// After this call, calls to `draw_elements` are safe.
     pub fn add_ebo<T>(&self, ebo: &PrimitiveBuffer<T>) 
-        where T: VertexComponent
+        where T: VertexData
     {
         unsafe {
             gl::BindVertexArray(self.array);
@@ -623,17 +623,42 @@ impl DataType {
 }
 
 /// Vertex buffers store a list of `Vertex`es (called vertices in proper
-/// english) on the GPU
+/// English) on the GPU. The difference between a `Vertex` and [`VertexData`]
+/// is that a vertex contains information on how it interacts with a shader,
+/// while you have to manually provide this information when using [`VertexData`].
+///
+/// This trait can be automatically derived for a struct with `#[derive(Vertex)]`. 
+/// For this to work, all members of a struct need to implement [`VertexData`].
+/// ```rust,no_run
+/// extern crate gondola;
+///
+/// #[macro_use]
+/// extern crate gondola_derive; // This crate provides custom derive
+///
+/// use gondola::buffer::Vertex; // We need to use the trait to derive it
+///
+/// #[derive(Vertex)]
+/// struct Vert {
+///     pos: (f32, f32, f32, f32),
+///     uv: (f32, f32),
+/// }
+///
+/// ```
+///
+/// [`VertexData`] trait.VertexData.html
 pub trait Vertex {
     fn bytes_per_vertex() -> usize;
     fn setup_attrib_pointers();
     fn gen_shader_input_decl() -> String;
 }
 
-/// All fields of a struct need to implement this in order for #[derive(Vertex)]
-/// to work. Implemented for single fields and up to four length touples of the
+/// This trait marks types which can be stored in a GPU buffer. In general, this
+/// trait is implemented for all types which represent a collection of 
+///
+/// All fields of a struct need to implement this in order for `#[derive(Vertex)]`
+/// to work. Implemented for single fields and up to four length tuples of the
 /// types `f32`, `i32`, `u32`
-pub trait VertexComponent: Sized {
+pub trait VertexData: Sized {
     /// The total number of bytes one of these components takes.
     fn bytes() -> usize {
         size_of::<Self>()
@@ -648,8 +673,8 @@ pub trait VertexComponent: Sized {
     /// Generates the type that would be used to represent this component in a
     /// glsl shader
     fn get_glsl_type() -> String {
-        let primitives = <Self as VertexComponent>::primitives();
-        let data_type = <Self as VertexComponent>::data_type();
+        let primitives = <Self as VertexData>::primitives();
+        let data_type = <Self as VertexData>::data_type();
 
         let mut result = String::with_capacity(4);
 
@@ -671,18 +696,18 @@ pub trait VertexComponent: Sized {
         }
 
         if result.is_empty() {
-            panic!("Invalid VertexComponent: {} primitives of type {:?}", primitives, data_type);
+            panic!("Invalid VertexData: {} primitives of type {:?}", primitives, data_type);
         }
 
         result
     }
 }
 
-// Implementations for VertexComponent
+// Implementations for VertexData
 // Implementations for primitives
 macro_rules! impl_vertex_component {
     ($primitive:ty, $data_type:expr) => {
-        impl VertexComponent for $primitive {
+        impl VertexData for $primitive {
             fn primitives() -> usize { 1 }
             fn data_type() -> DataType { $data_type }
         }
@@ -695,47 +720,47 @@ impl_vertex_component!(i8, DataType::Byte);
 impl_vertex_component!(u8, DataType::UnsignedByte);
 
 // Recursive generics woo!!!
-impl<T: VertexComponent> VertexComponent for Mat4<T> {
+impl<T: VertexData> VertexData for Mat4<T> {
     fn primitives() -> usize { 16 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for Vec2<T> {
+impl<T: VertexData> VertexData for Vec2<T> {
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for Vec3<T> {
+impl<T: VertexData> VertexData for Vec3<T> {
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for Vec4<T> {
+impl<T: VertexData> VertexData for Vec4<T> {
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for [T; 1] {
+impl<T: VertexData> VertexData for [T; 1] {
     fn primitives() -> usize { 1 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for [T; 2] {
+impl<T: VertexData> VertexData for [T; 2] {
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for [T; 3] {
+impl<T: VertexData> VertexData for [T; 3] {
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for [T; 4] {
+impl<T: VertexData> VertexData for [T; 4] {
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for (T, T) {
+impl<T: VertexData> VertexData for (T, T) {
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for (T, T, T) {
+impl<T: VertexData> VertexData for (T, T, T) {
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
-impl<T: VertexComponent> VertexComponent for (T, T, T, T) {
+impl<T: VertexData> VertexData for (T, T, T, T) {
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }

@@ -1,4 +1,8 @@
 
+//! Provides custom derives for the gondola crate.
+//!
+//! Currently only provides `#[derive(Vertex)]`
+
 #![recursion_limit = "128"]
 
 extern crate proc_macro;
@@ -33,8 +37,8 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|field| field.ty.clone())
                 .map(|ty| {
                     quote! {
-                        let primitives = <#ty as ::gondola::buffer::VertexComponent>::primitives();
-                        let data_type = <#ty as ::gondola::buffer::VertexComponent>::data_type() as GLenum;
+                        let primitives = <#ty as ::gondola::buffer::VertexData>::primitives();
+                        let data_type = <#ty as ::gondola::buffer::VertexData>::data_type() as GLenum;
 
                         unsafe {
                             gl::EnableVertexAttribArray(index);
@@ -47,7 +51,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                         }
 
                         index += 1;
-                        offset += <#ty as ::gondola::buffer::VertexComponent>::bytes();
+                        offset += <#ty as ::gondola::buffer::VertexData>::bytes();
                     }
                 });
             // Join all the attrib pointer setup code
@@ -64,8 +68,8 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             // Generate bytes_per_vertex code
             let types = variant_data.fields().iter().map(|field| field.ty.clone());
             let bytes_per_vertex_impl = quote! {
-                // Expands to "0 + <first_field as VertexComponent>::primitives() + ..."
-                0 #( + <#types as ::gondola::buffer::VertexComponent>::bytes())*
+                // Expands to "0 + <first_field as VertexData>::primitives() + ..."
+                0 #( + <#types as ::gondola::buffer::VertexData>::bytes())*
             };
 
             // Generate gen_shader_input_decl code
@@ -77,7 +81,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                             "layout(location = {index}) in {glsl_type} {name};",
                             name = stringify!(#ident),
                             index = index,
-                            glsl_type = <#ty as ::gondola::buffer::VertexComponent>::get_glsl_type(),
+                            glsl_type = <#ty as ::gondola::buffer::VertexData>::get_glsl_type(),
                         );
                         result.push_str(&line);
                         result.push('\n');

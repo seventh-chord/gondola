@@ -5,7 +5,7 @@ use gl;
 use gl::types::*;
 use std;
 use shader::UniformValue;
-use buffer::{VertexComponent, DataType};
+use buffer::{VertexData, DataType};
 
 /// A color with red, green, blue and alpha components. All components are expected to be
 /// between 0 and 1, both inclusinve.
@@ -107,7 +107,7 @@ fn clamp(value: f32, min: f32, max: f32) -> f32 {
     value
 }
 
-impl VertexComponent for Color {
+impl VertexData for Color {
     fn bytes() -> usize { std::mem::size_of::<f32>() * 4 }
     fn primitives() -> usize { 4 }
     fn data_type() -> DataType { DataType::Float }
