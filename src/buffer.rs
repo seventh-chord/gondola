@@ -633,11 +633,15 @@ pub trait Vertex {
 /// All fields of a struct need to implement this in order for #[derive(Vertex)]
 /// to work. Implemented for single fields and up to four length touples of the
 /// types `f32`, `i32`, `u32`
-pub trait VertexComponent {
+pub trait VertexComponent: Sized {
     /// The total number of bytes one of these components takes.
-    fn bytes() -> usize;
+    fn bytes() -> usize {
+        size_of::<Self>()
+    }
+
     /// The total number of primitives one of these components provides (e.g. 4 for a `Vec4<T>`).
     fn primitives() -> usize;
+
     /// The type of primitives this component provides.
     fn data_type() -> DataType;
 
@@ -679,7 +683,6 @@ pub trait VertexComponent {
 macro_rules! impl_vertex_component {
     ($primitive:ty, $data_type:expr) => {
         impl VertexComponent for $primitive {
-            fn bytes() -> usize { size_of::<$primitive>() }
             fn primitives() -> usize { 1 }
             fn data_type() -> DataType { $data_type }
         }
@@ -693,57 +696,46 @@ impl_vertex_component!(u8, DataType::UnsignedByte);
 
 // Recursive generics woo!!!
 impl<T: VertexComponent> VertexComponent for Mat4<T> {
-    fn bytes() -> usize { size_of::<Mat4<T>>() }
     fn primitives() -> usize { 16 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for Vec2<T> {
-    fn bytes() -> usize { size_of::<Vec2<T>>() }
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for Vec3<T> {
-    fn bytes() -> usize { size_of::<Vec3<T>>() }
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for Vec4<T> {
-    fn bytes() -> usize { size_of::<Vec4<T>>() }
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for [T; 1] {
-    fn bytes() -> usize { size_of::<[T; 1]>() }
     fn primitives() -> usize { 1 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for [T; 2] {
-    fn bytes() -> usize { size_of::<[T; 2]>() }
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for [T; 3] {
-    fn bytes() -> usize { size_of::<[T; 3]>() }
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for [T; 4] {
-    fn bytes() -> usize { size_of::<[T; 4]>() }
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for (T, T) {
-    fn bytes() -> usize { size_of::<(T, T)>() }
     fn primitives() -> usize { 2 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for (T, T, T) {
-    fn bytes() -> usize { size_of::<(T, T, T)>() }
     fn primitives() -> usize { 3 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
 impl<T: VertexComponent> VertexComponent for (T, T, T, T) {
-    fn bytes() -> usize { size_of::<(T, T, T, T)>() }
     fn primitives() -> usize { 4 * T::primitives() }
     fn data_type() -> DataType { T::data_type() }
 }
