@@ -67,7 +67,7 @@ impl Color {
     ///
     /// # Example
     /// ```rust
-    /// # use gondola::color::Color;
+    /// # use gondola::Color;
     /// let color = Color::hex_int(0xff00ff);
     ///
     /// assert_eq!(color, Color::rgb(1.0, 0.0, 1.0));

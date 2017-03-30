@@ -74,12 +74,14 @@ impl MatrixStack {
     /// push-pops.
     ///
     /// # Example
-    /// ```
+    /// ```rust,no_run We need a gl context to create a matrix stack
+    /// # #![allow(unused_variables)]
+    ///
     /// # extern crate gondola;
     /// extern crate cable_math;
     ///
     /// # fn main() {
-    /// use gondola::matrix_stack::MatrixStack;
+    /// use gondola::MatrixStack;
     /// use cable_math::Vec3;
     ///
     /// let mut matrix_stack = MatrixStack::new();

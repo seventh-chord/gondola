@@ -453,9 +453,13 @@ impl<T: VertexData> Drop for PrimitiveBuffer<T> {
     }
 }
 
-/// Contains information on how to render a group of primitive buffers
+/// Contains information on how to render a group of primitive buffers. In most cases simply using
+/// a [`VertexBuffer`], which combines information about rendering with data, is more adequate.
+///
+/// [`VertexBuffer`]: struct.VertexBuffer.html
 pub struct VertexArray {
     array: GLuint,
+    index_type: Option<DataType>,
 }
 
 impl VertexArray {
@@ -466,6 +470,7 @@ impl VertexArray {
         }
         VertexArray {
             array: array,
+            index_type: None,
         }
     }
 
@@ -482,7 +487,7 @@ impl VertexArray {
     ///             indicate that you have to advance 6 primitives to get from one color to the
     ///             next color.
     /// - `offset`: The number of primitives at the beginning of the source to skip.
-    pub fn add_data_source<T>(&self, source: &PrimitiveBuffer<T>, 
+    pub fn add_data_source<T>(&mut self, source: &PrimitiveBuffer<T>, 
                               index: usize, size: usize, 
                               stride: usize, offset: usize) 
         where T: VertexData
@@ -500,18 +505,34 @@ impl VertexArray {
         }
     }
 
-    /// Registers the given primitive buffer to be used as a element buffer for this vertex array.
-    /// After this call, calls to `draw_elements` are safe.
-    pub fn add_ebo<T>(&self, ebo: &PrimitiveBuffer<T>) 
+    /// Registers the given primitive buffer to be used as a index buffer (also refered to as
+    /// element buffer) for this vertex array.  After this call, calls to [`draw_elements`] are 
+    /// safe. Note that `T` must have a datatype (See [`VertexData::data_type`]) which is indexable 
+    /// (As specified by [`DataType::indexable`]).  If this is not upheld this function will panic 
+    /// at runtime.
+    ///
+    /// [`VertexData::data_type`]: trait.VertexData.html#tymethod.data_type
+    /// [`DataType::indexable`]:   enum.DataType.html#method.indexable
+    /// [`draw_elements`]:         #method.draw_elements
+    pub fn set_index_buffer<T>(&mut self, ebo: &PrimitiveBuffer<T>) 
         where T: VertexData
     {
         unsafe {
             gl::BindVertexArray(self.array);
             ebo.bind();
         } 
+
+        assert!(T::data_type().indexable(), 
+                "VertexArray::add_ebo called with a primitive buffer with data type {:?} which is not indexable",
+                T::data_type());
+
+        self.index_type = Some(T::data_type());
     }
 
-    /// Draws the given primitives with the graphics buffers bound to this vertex array 
+    /// Draws the given type of primitive with the data in the graphics buffers bound to this vertex 
+    /// array. If you want to specify indices when drawing use [`draw_elements`] instead.
+    ///
+    /// [`draw_elements`]: #method.draw_elements
     pub fn draw(&self, mode: PrimitiveMode, range: Range<usize>) {
         unsafe {
             gl::BindVertexArray(self.array);
@@ -519,12 +540,21 @@ impl VertexArray {
         }
     }
 
-    /// Draws this vertex array using a previously set element buffer. `ebo_data_type` should be
-    /// the type of data that is in the element buffer.
-    pub fn draw_elements(&self, mode: PrimitiveMode, ebo_data_type: DataType, count: usize) {
-        unsafe {
-            gl::BindVertexArray(self.array);
-            gl::DrawElements(mode as GLenum, count as GLsizei, ebo_data_type as GLenum, std::ptr::null());
+    /// Draws the given type of primitives with the data in graphics buffers bound to this vertex
+    /// array, in the order specified by the set index buffer (See [`set_index_buffer`]). If you
+    /// have not set a index buffer this function will panic at runtime. You might want to use
+    /// [`draw`] instead.
+    ///
+    /// [`set_index_buffer`]: #method.set_index_buffer
+    /// [`draw`]: #method.draw
+    pub fn draw_elements(&self, mode: PrimitiveMode, count: usize) {
+        if let Some(index_type) = self.index_type {
+            unsafe {
+                gl::BindVertexArray(self.array);
+                gl::DrawElements(mode as GLenum, count as GLsizei, index_type as GLenum, std::ptr::null());
+            }
+        } else {
+            panic!("VertexArray::draw_elements called without a valid index buffer set!");
         }
     }
 }
@@ -604,20 +634,34 @@ pub enum BufferTarget {
 #[repr(u32)] // GLenum is u32
 #[derive(Debug, Copy, Clone)]
 pub enum DataType {
-    Float        = gl::FLOAT,
-    Int          = gl::INT,
-    Byte         = gl::BYTE,
-    UnsignedInt  = gl::UNSIGNED_INT,
-    UnsignedByte = gl::UNSIGNED_BYTE,
+    Float         = gl::FLOAT,
+    Int           = gl::INT,
+    Short         = gl::SHORT,
+    Byte          = gl::BYTE,
+    UnsignedInt   = gl::UNSIGNED_INT,
+    UnsignedShort = gl::UNSIGNED_SHORT,
+    UnsignedByte  = gl::UNSIGNED_BYTE,
 }
 impl DataType {
+    /// The number of bytes a single primitive of this type takes
     pub fn size(&self) -> usize {
         match *self {
-            DataType::Float        => size_of::<f32>(),
-            DataType::Int          => size_of::<i32>(),
-            DataType::Byte         => size_of::<i8>(),
-            DataType::UnsignedInt  => size_of::<u32>(),
-            DataType::UnsignedByte => size_of::<u8>(),
+            DataType::Float         => size_of::<GLfloat>(),
+            DataType::Int           => size_of::<GLint>(),
+            DataType::Short         => size_of::<GLshort>(),
+            DataType::Byte          => size_of::<GLbyte>(),
+            DataType::UnsignedInt   => size_of::<GLuint>(),
+            DataType::UnsignedShort => size_of::<GLushort>(),
+            DataType::UnsignedByte  => size_of::<GLubyte>(),
+        }
+    }
+
+    /// Returns true if this type can be used to specify indices when using `glDrawElements` and
+    /// similar functions.
+    pub fn indexable(&self) -> bool {
+        match *self {
+            DataType::UnsignedInt | DataType::UnsignedByte | DataType::UnsignedShort => true,
+            _ => false,
         }
     }
 }
@@ -629,7 +673,8 @@ impl DataType {
 ///
 /// This trait can be automatically derived for a struct with `#[derive(Vertex)]`. 
 /// For this to work, all members of a struct need to implement [`VertexData`].
-/// ```rust,no_run
+///
+/// ```rust,ignore
 /// extern crate gondola;
 ///
 /// #[macro_use]
@@ -642,10 +687,9 @@ impl DataType {
 ///     pos: (f32, f32, f32, f32),
 ///     uv: (f32, f32),
 /// }
-///
 /// ```
 ///
-/// [`VertexData`] trait.VertexData.html
+/// [`VertexData`]: trait.VertexData.html
 pub trait Vertex {
     fn bytes_per_vertex() -> usize;
     fn setup_attrib_pointers();
@@ -704,8 +748,8 @@ pub trait VertexData: Sized {
 }
 
 // Implementations for VertexData
-// Implementations for primitives
-macro_rules! impl_vertex_component {
+
+macro_rules! impl_vertex_data {
     ($primitive:ty, $data_type:expr) => {
         impl VertexData for $primitive {
             fn primitives() -> usize { 1 }
@@ -713,11 +757,11 @@ macro_rules! impl_vertex_component {
         }
     }
 }
-impl_vertex_component!(f32, DataType::Float);
-impl_vertex_component!(i32, DataType::Int);
-impl_vertex_component!(u32, DataType::UnsignedInt);
-impl_vertex_component!(i8, DataType::Byte);
-impl_vertex_component!(u8, DataType::UnsignedByte);
+impl_vertex_data!(GLfloat, DataType::Float);
+impl_vertex_data!(GLint, DataType::Int);
+impl_vertex_data!(GLuint, DataType::UnsignedInt);
+impl_vertex_data!(GLbyte, DataType::Byte);
+impl_vertex_data!(GLubyte, DataType::UnsignedByte);
 
 // Recursive generics woo!!!
 impl<T: VertexData> VertexData for Mat4<T> {

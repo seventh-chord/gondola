@@ -319,7 +319,7 @@ impl Drop for Shader {
 /// Prepends the given section of code to the beginning of the given piece of
 /// shader src. Note that code is inserted after the `#version ...`
 /// preprocessor, if present.
-pub fn prepend_code(src: &str, code: &str) -> String {
+fn prepend_code(src: &str, code: &str) -> String {
     let insert_index =
         if let Some(preprocessor_index) = src.find("#version") {
             if let Some(newline_index) = src[preprocessor_index..].find('\n') {
@@ -490,7 +490,7 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 /// * `vertex_type`: The name of a struct which implementes [`Vertex`](buffer/trait.Vertex.html).
 ///
 /// # Example
-/// ```rust,no_run
+/// ```rust,ignore
 /// # #![allow(dead_code, unused_variables)]
 /// #[macro_use]
 /// extern crate gondola; 
