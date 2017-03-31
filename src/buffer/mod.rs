@@ -34,3 +34,46 @@ pub use self::primitives::*;
 pub use self::vertex_buffer::*;
 pub use self::primitive_buffer::*;
 
+/// Reperesents the data needed for a call to `gl::EnableVertexAttribArray`,
+/// `gl::VertexAttribPointer` and `gl::VertexAttribDivisor`. This is mainly
+/// intended for internal usage and when deriving [`Vertex`].
+///
+/// [`Vertex`]: struct.Vertex.html
+#[derive(Debug, Clone)]
+pub struct AttribBinding {
+    /// The vertex attribute to which this binding will serve values.
+    pub index: usize,
+    /// The number of primitives per vertex this attribute will serve to shaders.
+    pub primitives: usize,
+    /// The type of primitives which this attribute will serve to shaders. Should be a constant
+    /// defined by OpenGL.
+    pub primitive_type: u32,
+    /// If set to true, integer types will be parsed as floats and mapped to the range `0.0..1.0`
+    /// for unsigned integers and `-1.0..1.0` for signed integers.
+    pub normalized: bool,
+    /// The distance, in bytes, between each set of primitives
+    pub stride: usize,
+    /// The index, in bytes, of the first byte of data
+    pub offset: usize,
+
+    /// The number of vertices from other sources for which this source will be used. For example,
+    /// if set to 3 every set of three vertices will use one instance from this source.
+    pub divisor: usize,
+}
+
+impl AttribBinding {
+    /// Calls `gl::EnableVertexAttribArray`, `gl::VertexAttribPointer` and `gl::VertexAttribDivisor`.
+    pub fn enable(&self) {
+        use gl;
+        use gl::types::*;
+
+        unsafe {
+            gl::EnableVertexAttribArray(self.index as GLuint);
+            gl::VertexAttribPointer(self.index as GLuint, self.primitives as GLint,
+                                    self.primitive_type as GLenum, self.normalized as GLboolean,
+                                    self.stride as GLsizei, self.offset as *const GLvoid);
+            gl::VertexAttribDivisor(self.index as GLuint, self.divisor as GLuint);
+        }
+    }
+}
+

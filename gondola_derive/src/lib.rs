@@ -37,18 +37,15 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|field| field.ty.clone())
                 .map(|ty| {
                     quote! {
-                        let primitives = <#ty as ::gondola::buffer::VertexData>::primitives();
-                        let data_type = <<#ty as ::gondola::buffer::VertexData>::Primitive as ::gondola::buffer::GlPrimitive>::gl_enum();
-
-                        unsafe {
-                            gl::EnableVertexAttribArray(index);
-                            gl::VertexAttribPointer(
-                                index as GLuint, primitives as GLint,
-                                data_type,
-                                false as GLboolean,
-                                stride as GLsizei, offset as *const GLvoid
-                            );
-                        }
+                        ::gondola::buffer::AttribBinding {
+                            index: index,
+                            primitives: <#ty as ::gondola::buffer::VertexData>::primitives(),
+                            primitive_type: <<#ty as ::gondola::buffer::VertexData>::Primitive as ::gondola::buffer::GlPrimitive>::gl_enum(),
+                            normalized: false,
+                            stride: stride,
+                            offset: offset,
+                            divisor: 0,
+                        }.enable();
 
                         index += 1;
                         offset += <#ty as ::gondola::buffer::VertexData>::bytes();
@@ -109,8 +106,6 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                     }
 
                     fn setup_attrib_pointers() {
-                        use gl;
-                        use gl::types::*;
                         #setup_attrib_pointers_impl
                     }
 

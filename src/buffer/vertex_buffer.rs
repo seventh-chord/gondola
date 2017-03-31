@@ -16,43 +16,35 @@ use std::ops::Deref;
 ///
 /// # Example - Rendering with a custom shader and vertex type
 ///
-/// Imports:
-///
-/// ```rust,ignore
+/// ```rust,no_run
+/// #[macro_use] // Needed for load_shader! macro
 /// extern crate gondola;
-/// extern crate cable_math;
-/// #[macro_use]
-/// extern crate gondola_derive; // Provides custom derive for Vertex
+/// #[macro_use] // Provides custom derive for Vertex
+/// extern crate gondola_derive; 
 ///
-/// use cable_math::Vec2;
-/// use gondola::buffer::VertexBuffer;
-/// use gondola::shader::{Shader, ShaderPrototype}
-/// ```
+/// use gondola::buffer::{VertexBuffer, PrimitiveMode};
+/// use gondola::shader::{Shader, ShaderPrototype};
 ///
-/// Vertex declaration:
-///
-/// ```rust,ignore
+/// #[repr(C)]
 /// #[derive(Vertex)]
-/// struct Point {
-///     position: Vec2<f32>,
+/// struct Vertex {
+///     pos: (f32, f32),
 /// }
-/// ```
 ///
-/// Usage:
-///
-/// ```rust,ignore
+/// # fn main() {
 /// let data = vec![
-///     Point { position: Vec2::new(0.0, 0.0) },
-///     Point { position: Vec2::new(100.0, 0.0) },
-///     Point { position: Vec2::new(0.0, 100.0) },
+///     Vertex { pos: (0.0, 0.0) },
+///     Vertex { pos: (100.0, 0.0) },
+///     Vertex { pos: (0.0, 100.0) },
 /// ];
-/// let buffer = VertexBuffer::from_data(PrimitiveMode::Triangles, &data);
+/// let buffer = VertexBuffer::with_data(PrimitiveMode::Triangles, &data);
 ///
 /// // Creates a shader with input declarations for the custom type inserted
-/// let shader = load_shader!("assets/shader.glsl", Point).unwrap();
+/// let shader = load_shader!("assets/shader.glsl", Vertex).unwrap();
 ///
 /// shader.bind();
 /// buffer.draw();
+/// # }
 /// ```
 pub struct VertexBuffer<T: Vertex> {
     // We are generic over the vertex type, but dont actually store any vertices
@@ -72,7 +64,7 @@ pub struct VertexBuffer<T: Vertex> {
 /// from [`VertexBuffer`] a `IndexedVertexBuffer` uses a element/index buffer to render the
 /// vertices in a non-default order. This is commonly used when rendering models or other complex
 /// geometry.
-///
+/// 
 /// This type has two generics parameters. `T` specifies the type of vertices which is
 /// stored in this buffer, while `E` specifies the type of indices used. `E` must have a primitive
 /// type which can be used as a index. All basic unsigned integers can be used as indices. For
@@ -89,7 +81,6 @@ pub struct VertexBuffer<T: Vertex> {
 /// extern crate gondola;
 /// #[macro_use]
 /// extern crate gondola_derive; // Provides custom derive for Vertex
-/// extern crate gl;
 ///
 /// use gondola::buffer::{IndexedVertexBuffer, VertexData, PrimitiveMode};
 ///
