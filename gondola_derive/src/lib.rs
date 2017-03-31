@@ -38,7 +38,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 .map(|ty| {
                     quote! {
                         let primitives = <#ty as ::gondola::buffer::VertexData>::primitives();
-                        let data_type = <#ty as ::gondola::buffer::VertexData>::data_type() as GLenum;
+                        let data_type = <<#ty as ::gondola::buffer::VertexData>::Primitive as ::gondola::buffer::GlPrimitive>::gl_enum();
 
                         unsafe {
                             gl::EnableVertexAttribArray(index);
@@ -54,9 +54,9 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                         offset += <#ty as ::gondola::buffer::VertexData>::bytes();
                     }
                 });
-            // Join all the attrib pointer setup code
+            // Join all the attribute pointer setup code
             let setup_attrib_pointers_impl = quote! {
-                let stride = <#ident as Vertex>::bytes_per_vertex();
+                let stride = <#ident as ::gondola::buffer::Vertex>::bytes_per_vertex();
 
                 // This is accessed in the quote! block above
                 let mut offset = 0;

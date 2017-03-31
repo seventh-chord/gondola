@@ -19,6 +19,7 @@ use std::ops::Deref;
 /// Imports:
 ///
 /// ```rust,ignore
+/// extern crate gondola;
 /// extern crate cable_math;
 /// #[macro_use]
 /// extern crate gondola_derive; // Provides custom derive for Vertex
@@ -72,17 +73,59 @@ pub struct VertexBuffer<T: Vertex> {
 /// vertices in a non-default order. This is commonly used when rendering models or other complex
 /// geometry.
 ///
-/// Note that this type has two generics parameters. `T` specifies the type of vertices which is
-/// stored in this buffer, while `E` specifies the type of indices used. It is important that
-/// [`E::data_type()`] is indexable (As specified by [`DataType::indexable`]).
+/// This type has two generics parameters. `T` specifies the type of vertices which is
+/// stored in this buffer, while `E` specifies the type of indices used. `E` must have a primitive
+/// type which can be used as a index. All basic unsigned integers can be used as indices. For
+/// further information, see [`GlIndex`].
+///
+/// Note that you can use a custom struct as a index. This allows you to statically enforce that
+/// there is allways the correct number of indices to draw a primitive.
 ///
 /// This struct dereferences to [`VertexBuffer`], exposing methods to modify the data in this
 /// buffer. See its documentation for more information.
 ///
+/// # Example - Using custom index types
+/// ```rust,no_run
+/// extern crate gondola;
+/// #[macro_use]
+/// extern crate gondola_derive; // Provides custom derive for Vertex
+/// extern crate gl;
+///
+/// use gondola::buffer::{IndexedVertexBuffer, VertexData, PrimitiveMode};
+///
+/// #[repr(C)]
+/// #[derive(Vertex)]
+/// struct Vertex {
+///     pos: (f32, f32),
+/// }
+///
+/// #[repr(C)]
+/// struct Triangle(u32, u32, u32);
+///
+/// // u32 can be used as a index, so Triangle can now also be used as a set of 3 indices
+/// impl VertexData for Triangle {
+///     type Primitive = u32; 
+/// }
+///
+/// # fn main() {
+/// let data = [
+///     Vertex { pos: (0.0, 0.0) },
+///     Vertex { pos: (10.0, 0.0) },
+///     Vertex { pos: (10.0, 10.0) },
+///     Vertex { pos: (0.0, 10.0) },
+/// ];
+/// let indices = [
+///     Triangle(0, 1, 2),
+///     Triangle(0, 2, 3),
+/// ];
+///
+/// let buffer = IndexedVertexBuffer::with_data(PrimitiveMode::Triangles, &data, &indices);
+/// # }
+/// ```
+///
 /// [`VertexBuffer`]:        struct.VertexBuffer.html
-/// [`E::data_type()`]:      trait.VertexData.html#tymethod.data_type
-/// [`DataType::indexable`]: enum.DataType.html#method.data_type
-pub struct IndexedVertexBuffer<T: Vertex, E: VertexData> {
+/// [`GlIndex`]:             trait.GlIndex.html
+pub struct IndexedVertexBuffer<T: Vertex, E: VertexData> where E::Primitive: GlIndex {
     data: VertexBuffer<T>,
     indices: PrimitiveBuffer<E>,
 }
@@ -266,7 +309,9 @@ impl<T: Vertex> VertexBuffer<T> {
     }
 }
 
-impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E> {
+impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E> 
+    where E::Primitive: GlIndex,
+{
     /// Creates a new indexed vertex buffer, preallocating space for 100 vertices and 100 indices.
     pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> IndexedVertexBuffer<T, E> {
         IndexedVertexBuffer::with_capacity(primitive_mode, usage, DEFAULT_SIZE, DEFAULT_SIZE)
@@ -276,19 +321,23 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E> {
     /// and indices.
     pub fn with_capacity(primitive_mode: PrimitiveMode, usage: BufferUsage, 
                          vertex_capacity: usize, index_capacity: usize) -> IndexedVertexBuffer<T, E> {
-        assert!(E::data_type().indexable(), "Attempted to create IndexedVertexBuffer with {:?}, which is not indexable", E::data_type());
+        let data = VertexBuffer::with_capacity(primitive_mode, usage, vertex_capacity);
+        let indices = PrimitiveBuffer::with_capacity(BufferTarget::ElementArray, usage, index_capacity);
+
         IndexedVertexBuffer {
-            data: VertexBuffer::with_capacity(primitive_mode, usage, vertex_capacity),
-            indices: PrimitiveBuffer::with_capacity(BufferTarget::ElementArray, usage, index_capacity),
+            data: data,
+            indices: indices,
         }
     }
 
     /// Creates a new vertex buffer, storing the given vertices and indices on the GPU.
     pub fn with_data(primitive_mode: PrimitiveMode, data: &[T], indices: &[E]) -> IndexedVertexBuffer<T, E> {
-        assert!(E::data_type().indexable(), "Attempted to create IndexedVertexBuffer with {:?}, which is not indexable", E::data_type());
+        let data = VertexBuffer::with_data(primitive_mode, data);
+        let indices = PrimitiveBuffer::with_data(BufferTarget::ElementArray, indices);
+
         IndexedVertexBuffer {
-            data: VertexBuffer::with_data(primitive_mode, data),
-            indices: PrimitiveBuffer::with_data(BufferTarget::ElementArray, indices),
+            data: data,
+            indices: indices,
         }
     }
 
@@ -342,7 +391,7 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E> {
             gl::BindVertexArray(self.data.vao);
             gl::DrawElements(self.data.primitive_mode as GLenum, 
                              (self.indices.len() * E::primitives()) as GLsizei,
-                             E::data_type() as GLenum, std::ptr::null());
+                             E::Primitive::gl_enum(), std::ptr::null());
         }
     }
 }
@@ -356,7 +405,9 @@ impl <T: Vertex> Drop for VertexBuffer<T> {
     }
 }
 
-impl<T: Vertex, E: VertexData> Deref for IndexedVertexBuffer<T, E> {
+impl<T: Vertex, E: VertexData> Deref for IndexedVertexBuffer<T, E> 
+    where E::Primitive: GlIndex,
+{
     type Target = VertexBuffer<T>;
     fn deref(&self) -> &VertexBuffer<T> {
         &self.data

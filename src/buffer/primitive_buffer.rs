@@ -23,7 +23,7 @@ pub struct PrimitiveBuffer<T: VertexData> {
 /// [`VertexBuffer`]: struct.VertexBuffer.html
 pub struct VertexArray {
     array: GLuint,
-    index_type: Option<DataType>,
+    index_type: Option<GLenum>,
 }
 
 impl VertexArray {
@@ -63,7 +63,7 @@ impl VertexArray {
             gl::EnableVertexAttribArray(index as GLuint);
 
             gl::VertexAttribPointer(index as GLuint, size as GLint,
-                                    T::data_type() as GLenum, false as GLboolean,
+                                    T::Primitive::gl_enum(), false as GLboolean,
                                     (stride * T::bytes()) as GLsizei, 
                                     (offset * T::bytes()) as *const GLvoid);
         }
@@ -71,26 +71,22 @@ impl VertexArray {
 
     /// Registers the given primitive buffer to be used as a index buffer (also referred to as
     /// element buffer) for this vertex array.  After this call, calls to [`draw_elements`] are 
-    /// safe. Note that `T` must have a data type (See [`VertexData::data_type`]) which is indexable 
-    /// (As specified by [`DataType::indexable`]).  If this is not upheld this function will panic 
-    /// at runtime.
+    /// safe. Note that `T` must have a primitive type ([`VertexData::Primitive`]) which is 
+    /// indexable ([`GlIndex`]). This includes all basic unsigned integers.
     ///
-    /// [`VertexData::data_type`]: trait.VertexData.html#tymethod.data_type
-    /// [`DataType::indexable`]:   enum.DataType.html#method.indexable
+    /// [`GlIndex`]:               trait.GlIndex.html
+    /// [`VertexData::Primitive`]: trait.VertexData.html#associatedtype.Primitive
     /// [`draw_elements`]:         #method.draw_elements
     pub fn set_index_buffer<T>(&mut self, buffer: &PrimitiveBuffer<T>) 
-        where T: VertexData
+        where T: VertexData,
+              T::Primitive: GlIndex,
     {
         unsafe {
             gl::BindVertexArray(self.array);
             buffer.bind();
         } 
 
-        assert!(T::data_type().indexable(), 
-                "VertexArray::set_index_buffer called with a primitive buffer with data type {:?} which is not indexable",
-                T::data_type());
-
-        self.index_type = Some(T::data_type());
+        self.index_type = Some(T::Primitive::gl_enum());
     }
 
     /// Draws the given type of primitive with the data in the graphics buffers bound to this vertex 
@@ -115,7 +111,7 @@ impl VertexArray {
         if let Some(index_type) = self.index_type {
             unsafe {
                 gl::BindVertexArray(self.array);
-                gl::DrawElements(mode as GLenum, count as GLsizei, index_type as GLenum, std::ptr::null());
+                gl::DrawElements(mode as GLenum, count as GLsizei, index_type, std::ptr::null());
             }
         } else {
             panic!("VertexArray::draw_elements called without a valid index buffer set!");
@@ -278,11 +274,6 @@ impl<T: VertexData> PrimitiveBuffer<T> {
     /// The number of bytes that are internally allocated in GPU memory
     pub fn bytes_allocated(&self) -> usize {
         self.allocated
-    }
-
-    /// The type of data that is stored in the buffer
-    pub fn data_type(&self) -> DataType {
-        T::data_type()
     }
 
     /// Binds this buffer to the target specified in the constructor

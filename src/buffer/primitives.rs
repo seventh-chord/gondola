@@ -69,42 +69,79 @@ pub enum BufferTarget {
     DispatchIndirect    = gl::DISPATCH_INDIRECT_BUFFER,
 }
 
-/// Represents different types of data which may be stored in a buffer
-#[repr(u32)] // GLenum is u32
-#[derive(Debug, Copy, Clone)]
-pub enum DataType {
-    Float         = gl::FLOAT,
-    Int           = gl::INT,
-    Short         = gl::SHORT,
-    Byte          = gl::BYTE,
-    UnsignedInt   = gl::UNSIGNED_INT,
-    UnsignedShort = gl::UNSIGNED_SHORT,
-    UnsignedByte  = gl::UNSIGNED_BYTE,
+/// This trait is used to mark types which are OpenGL primitives. You should not implement this
+/// trait yourself. If you want to use a custom type in a [`VertexBuffer`], implement [`Vertex`].
+/// Similarly, if you want to use a custom type in a [`PrimitiveBuffer`], implement [`VertexData`]
+/// for it.
+///
+/// This trait is implemented for all the basic OpenGL primitives: `GLfloat`, `GLint`, `GLshort`,
+/// `GLbyte`, `GLuint`, `GLushort` and `GLubyte`, which correspond to the rust primitives `f32`,
+/// `i32`, `i16`, `i8`, `u32`, `u16` and `u8`.
+///
+/// [`VertexBuffer`]:    struct.VertexBuffer.html
+/// [`PrimitiveBuffer`]: struct.PrimitiveBuffer.html
+/// [`Vertex`]:          trait.Vertex.html
+/// [`VertexData`]:      trait.VertexData.html
+pub trait GlPrimitive: Sized {
+    fn glsl_scalar_name() -> Option<&'static str> { None }
+    fn glsl_vec_name() -> Option<&'static str>    { None }
+    fn rust_name() -> &'static str;
+    fn gl_name() -> &'static str;
+    fn gl_enum() -> GLenum;
 }
-impl DataType {
-    /// The number of bytes a single primitive of this type takes
-    pub fn size(&self) -> usize {
-        match *self {
-            DataType::Float         => size_of::<GLfloat>(),
-            DataType::Int           => size_of::<GLint>(),
-            DataType::Short         => size_of::<GLshort>(),
-            DataType::Byte          => size_of::<GLbyte>(),
-            DataType::UnsignedInt   => size_of::<GLuint>(),
-            DataType::UnsignedShort => size_of::<GLushort>(),
-            DataType::UnsignedByte  => size_of::<GLubyte>(),
-        }
-    }
 
-    /// Returns true if this type can be used to specify indices when using `glDrawElements` and
-    /// similar functions. This returns true for `UnsignedInt`, `UnsignedShort` and `UnsignedByte`.
-    /// In terms of rust types, this returns true for `u8`, `u16` and `u32`.
-    pub fn indexable(&self) -> bool {
-        match *self {
-            DataType::UnsignedInt | DataType::UnsignedByte | DataType::UnsignedShort => true,
-            _ => false,
-        }
-    }
+impl GlPrimitive for GLfloat {
+    fn glsl_scalar_name() -> Option<&'static str> { Some("float") }
+    fn glsl_vec_name() -> Option<&'static str>    { Some("vec") }
+    fn rust_name() -> &'static str { "f32" }
+    fn gl_name() -> &'static str   { "GLfloat" }
+    fn gl_enum() -> GLenum { gl::FLOAT }
 }
+impl GlPrimitive for GLint {
+    fn glsl_scalar_name() -> Option<&'static str> { Some("int") }
+    fn glsl_vec_name() -> Option<&'static str>    { Some("ivec") }
+    fn rust_name() -> &'static str { "i32" }
+    fn gl_name() -> &'static str   { "GLint" }
+    fn gl_enum() -> GLenum { gl::INT }
+}
+impl GlPrimitive for GLshort {
+    fn rust_name() -> &'static str { "i16" }
+    fn gl_name() -> &'static str   { "GLshort" }
+    fn gl_enum() -> GLenum { gl::SHORT }
+}
+impl GlPrimitive for GLbyte {
+    fn rust_name() -> &'static str { "i8" }
+    fn gl_name() -> &'static str   { "GLbyte" }
+    fn gl_enum() -> GLenum { gl::BYTE }
+}
+impl GlPrimitive for GLuint {
+    fn glsl_scalar_name() -> Option<&'static str> { Some("uint") }
+    fn glsl_vec_name() -> Option<&'static str>    { Some("uvec") }
+    fn rust_name() -> &'static str { "u32" }
+    fn gl_name() -> &'static str   { "GLuint" }
+    fn gl_enum() -> GLenum { gl::UNSIGNED_INT }
+}
+impl GlPrimitive for GLushort {
+    fn rust_name() -> &'static str { "u16" }
+    fn gl_name() -> &'static str   { "GLushort" }
+    fn gl_enum() -> GLenum { gl::UNSIGNED_SHORT }
+}
+impl GlPrimitive for GLubyte {
+    fn rust_name() -> &'static str { "u8" }
+    fn gl_name() -> &'static str   { "GLubyte" }
+    fn gl_enum() -> GLenum { gl::UNSIGNED_BYTE }
+}
+
+/// This trait is used to mark types which can be used as indices in e.g. a element/index buffer.
+/// You should not implement this trait yourself.
+///
+/// This trait is implemented for `GLuint`, `GLushort` and `GLubyte`, which correspond to `u32`,
+/// `u16` and `u8`.
+pub trait GlIndex: Sized + GlPrimitive {}
+
+impl GlIndex for GLuint {}
+impl GlIndex for GLushort {}
+impl GlIndex for GLubyte {}
 
 /// Vertex buffers store a list of `Vertex`es (called vertices in proper
 /// English) on the GPU. The difference between a `Vertex` and [`VertexData`]
@@ -130,141 +167,123 @@ impl DataType {
 /// ```
 ///
 /// [`VertexData`]: trait.VertexData.html
-pub trait Vertex {
+pub trait Vertex: Sized {
     fn bytes_per_vertex() -> usize;
     fn setup_attrib_pointers();
     fn gen_shader_input_decl() -> String;
 }
 
 /// This trait marks types which can be stored in a GPU buffer.  All fields of a 
-/// struct need to implement this in order for `#[derive(Vertex)]` to work. 
+/// struct need to implement this in order for `#[derive(Vertex)]` to work. Note
+/// that any struct that implements this trait should only contains fields of a
+/// single type.
 ///
-/// Implemented for tuples, arrays and vectors of the types `GLfloat` (`f32`), 
-/// `GLint` (`i32`), `GLuint` (`u32`), `GLshort` (`i16`), `GLushort` (`u16`), 
-/// `GLbyte` (`i8`) and `GLubyte` (`u8`). Additionally the trait is implemented
-/// for combinations of the former (e.g. arrays of tuples).
+/// By default this trait is implemented for tuples, arrays and vectors of all 
+/// [`GlPrimitives`].
+///
+/// [`GlPrimitives`]: trait.GlPrimitives.html
 ///
 /// # Example - Implementing this trait for a custom type
 /// ```rust
-/// use gondola::buffer::{VertexData, DataType};
+/// use gondola::buffer::VertexData;
 ///
-/// struct Triangle {
+/// #[repr(C)]
+/// struct Point {
 ///     a: (f32, f32),
-///     b: (f32, f32),
-///     c: (f32, f32),
 /// }
 ///
-/// impl VertexData for Triangle {
-///     fn primitives() -> usize { 6 } // 3 tuples of 2 primitives
-///     fn data_type() -> DataType { DataType::Float }
+/// impl VertexData for Point {
+///     type Primitive = f32;
 /// }
 /// ```
 pub trait VertexData: Sized {
+    type Primitive: GlPrimitive;
+
     /// The total number of bytes one of these components takes.
     fn bytes() -> usize {
         size_of::<Self>()
     }
 
     /// The total number of primitives one of these components provides (e.g. 4 for a `Vec4<T>`).
-    fn primitives() -> usize;
+    fn primitives() -> usize {
+        assert_eq!(size_of::<Self>() % size_of::<Self::Primitive>(), 0);
 
-    /// The type of primitives this component provides.
-    fn data_type() -> DataType;
+        size_of::<Self>() / size_of::<Self::Primitive>()
+    }
 
     /// Generates the type that would be used to represent this component in a
     /// glsl shader
     fn get_glsl_type() -> String {
         let primitives = <Self as VertexData>::primitives();
-        let data_type = <Self as VertexData>::data_type();
 
-        let mut result = String::with_capacity(4);
+        let mut result = String::with_capacity(6);
 
         if primitives == 1 {
-            match data_type {
-                DataType::Float =>       result.push_str("float"),
-                DataType::Int =>         result.push_str("int"),
-                DataType::UnsignedInt => result.push_str("uint"),
-                _ => panic!("Data type {:?} is not supported for glsl yet. See {}:{}", data_type, file!(), line!()),
+            if let Some(scalar_name) = Self::Primitive::glsl_scalar_name() {
+                result.push_str(scalar_name);
+            } else {
+                panic!("Data type {}/{} is not supported for glsl yet. (At {}:{})", 
+                       Self::Primitive::rust_name(), Self::Primitive::gl_name(),
+                       file!(), line!());
             }
         } else if primitives > 1 && primitives <= 4 {
-            match data_type {
-                DataType::Float =>       result.push_str("vec"),
-                DataType::Int =>         result.push_str("ivec"),
-                DataType::UnsignedInt => result.push_str("uvec"),
-                _ => panic!("Data type {:?} is not supported for glsl yet. See {}:{}", data_type, file!(), line!()),
+            if let Some(vec_name) = Self::Primitive::glsl_vec_name() {
+                result.push_str(vec_name);
+            } else {
+                panic!("Data type {}/{} is not supported for glsl yet. (At {}:{})", 
+                       Self::Primitive::rust_name(), Self::Primitive::gl_name(),
+                       file!(), line!());
             }
             result.push_str(&primitives.to_string());
         }
 
         if result.is_empty() {
-            panic!("Invalid VertexData: {} primitives of type {:?}", primitives, data_type);
+            panic!("Invalid VertexData: {} primitives of type {}/{} are not supported for glsl yet (At {}:{})", 
+                   primitives,
+                   Self::Primitive::rust_name(), Self::Primitive::gl_name(),
+                   file!(), line!());
         }
 
         result
     }
 }
 
-// Implementations for VertexData
 
-macro_rules! impl_vertex_data {
-    ($primitive:ty, $data_type:expr) => {
-        impl VertexData for $primitive {
-            fn primitives() -> usize { 1 }
-            fn data_type() -> DataType { $data_type }
-        }
-    }
+// Implementations for VertexData:
+impl<T: GlPrimitive> VertexData for T {
+    type Primitive = T; 
 }
-impl_vertex_data!(GLfloat, DataType::Float);
-impl_vertex_data!(GLint, DataType::Int);
-impl_vertex_data!(GLuint, DataType::UnsignedInt);
-impl_vertex_data!(GLbyte, DataType::Byte);
-impl_vertex_data!(GLubyte, DataType::UnsignedByte);
-impl_vertex_data!(GLshort, DataType::Int);
-impl_vertex_data!(GLushort, DataType::UnsignedInt);
-
-// Recursive generics woo!!!
 impl<T: VertexData> VertexData for Mat4<T> {
-    fn primitives() -> usize { 16 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for Vec2<T> {
-    fn primitives() -> usize { 2 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for Vec3<T> {
-    fn primitives() -> usize { 3 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for Vec4<T> {
-    fn primitives() -> usize { 4 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for [T; 1] {
-    fn primitives() -> usize { 1 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for [T; 2] {
-    fn primitives() -> usize { 2 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for [T; 3] {
-    fn primitives() -> usize { 3 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for [T; 4] {
-    fn primitives() -> usize { 4 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for (T, T) {
-    fn primitives() -> usize { 2 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for (T, T, T) {
-    fn primitives() -> usize { 3 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 impl<T: VertexData> VertexData for (T, T, T, T) {
-    fn primitives() -> usize { 4 * T::primitives() }
-    fn data_type() -> DataType { T::data_type() }
+    type Primitive = T::Primitive;
 }
 
