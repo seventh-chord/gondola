@@ -3,7 +3,7 @@
 
 use cable_math::Vec2;
 use std::sync::mpsc;
-use glutin::{Event, MouseButton, ElementState};
+use glutin::{Event, MouseButton, ElementState, MouseScrollDelta};
 
 const MOUSE_KEYS: usize = 5;
 const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
@@ -19,6 +19,7 @@ const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
 pub struct InputManager {
     mouse_pos: Vec2<f32>,
     mouse_delta: Vec2<f32>,
+    mouse_scroll: Vec2<f32>,
     mouse_states: [State; MOUSE_KEYS],
     keyboard_states: [State; KEYBOARD_KEYS],
     type_buffer: String,
@@ -31,6 +32,7 @@ impl InputManager {
         InputManager {
             mouse_pos: Vec2::zero(),
             mouse_delta: Vec2::zero(),
+            mouse_scroll: Vec2::zero(),
             mouse_states: [State::Up; MOUSE_KEYS],
             keyboard_states: [State::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
@@ -42,6 +44,7 @@ impl InputManager {
     /// Pulls new data from this input managers source. This should be called once per frame.
     pub fn refresh(&mut self) {
         self.mouse_delta = Vec2::zero(); 
+        self.mouse_scroll = Vec2::zero();
         self.type_buffer.clear();
 
         for state in self.mouse_states.iter_mut() {
@@ -74,6 +77,16 @@ impl InputManager {
                         };
                     }
                 },
+                Event::MouseWheel(delta, _) => {
+                    match delta {
+                        MouseScrollDelta::LineDelta(x, y) => {
+                            self.mouse_scroll += Vec2::new(x, y);
+                        },
+                        MouseScrollDelta::PixelDelta(x, y) => {
+                            self.mouse_delta += Vec2::new(x, y);
+                        },
+                    }
+                },
                 Event::KeyboardInput(state, key, _name) => {
 //                    if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
                     let ref mut internal_state = self.keyboard_states[key as usize];
@@ -99,6 +112,8 @@ impl InputManager {
     pub fn mouse_pos(&self)   -> Vec2<f32> { self.mouse_pos }
     /// The distance the mouse cursor moved in the last frame
     pub fn mouse_delta(&self) -> Vec2<f32> { self.mouse_delta }
+    /// The number of units scrolled in the last frame
+    pub fn mouse_scroll(&self) -> f32 { self.mouse_scroll.y }
     /// The state of the given mouse key. Panics if `key` is greater than 4. The left
     /// mouse key is 0, the right key is 1 and the middle key is 2.
     pub fn mouse_key(&self, key: u8) -> State {
@@ -123,17 +138,17 @@ impl InputManager {
 pub enum State {
     /// The button is not held down.
     Up,
-    /// The button is beeing held down. In the previous frame it was not held down.
+    /// The button is being held down. In the previous frame it was not held down.
     Pressed, 
-    /// The button is beeing held down, and its repeat action triggered
+    /// The button is being held down, and its repeat action triggered
     PressedRepeat,
-    /// The button is beeing held down.
+    /// The button is being held down.
     Down,
-    /// The button is not beeing held down. In the previous frame it was held down.
+    /// The button is not being held down. In the previous frame it was held down.
     Released,
 }
 impl State {
-    /// Returns true if the button is beeing held down (`Down` or `Pressed`) and
+    /// Returns true if the button is being held down (`Down` or `Pressed`) and
     /// false otherwise (`Up`, `Released` or `PressedRepeat`).
     pub fn down(self) -> bool {
         match self {
@@ -141,21 +156,21 @@ impl State {
             State::Down | State::Pressed | State::PressedRepeat => true,
         }
     }
-    /// Returns true if the button is not beeing held down (`Up` or `Released`) and
+    /// Returns true if the button is not being held down (`Up` or `Released`) and
     /// false otherwise (`Down` or `Pressed`).
     pub fn up(self) -> bool {
         !self.down()
     }
-    /// Returns true if the button is beeing held down, but was not held down in the last
+    /// Returns true if the button is being held down, but was not held down in the last
     /// frame (`Pressed`)
     pub fn pressed(self) -> bool { self == State::Pressed }
-    /// Returns true either if this button is beeing held down and was not held down in the
-    /// last frame (`Pressed`), or if the repeat action has been triggered by the key beeing
+    /// Returns true either if this button is being held down and was not held down in the
+    /// last frame (`Pressed`), or if the repeat action has been triggered by the key being
     /// held down for an extended amount of time (`PressedRepeat`).
     pub fn pressed_repeat(self) -> bool {
         self == State::Pressed || self == State::PressedRepeat
     }
-    /// Returns true if the button is beeing not held down, but was held down in the last
+    /// Returns true if the button is being not held down, but was held down in the last
     /// frame (`Released`)
     pub fn released(self) -> bool { self == State::Released }
 }
