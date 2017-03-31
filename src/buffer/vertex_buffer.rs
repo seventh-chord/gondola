@@ -377,7 +377,7 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E>
 
     /// Draws the contents of this vertex buffer with the primitive mode specified
     /// at construction and the index/element buffer.
-    pub fn draw_elements(&self) {
+    pub fn draw(&self) {
         unsafe {
             gl::BindVertexArray(self.data.vao);
             gl::DrawElements(self.data.primitive_mode as GLenum, 
