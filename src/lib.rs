@@ -1,4 +1,19 @@
 
+//! A semi-safe, semi-stateless wrapper around OpenGL 3.3 Core. This library provides various
+//! utilities to make using OpenGL 3.3 safer. It uses rust's type system to encode some information
+//! which helps prevent common errors. This library is primarily intended to be used for games,
+//! but you can also use it to create other graphics applications.
+//!
+//! Some points to get started:
+//!
+//!  - Use [`gondola::run`] to launch your game.
+//!  - Use a [`VertexBuffer`] to do basic drawing.
+//!  - Use [`GameState::gen_input_manager`] to get access to keyboard/mouse state.
+//!
+//! [`GameState::gen_input_manager`]: struct.GameState.html#method.gen_input_manager
+//! [`VertexBuffer`]:                 buffer/struct.VertexBuffer.html
+//! [`gondola::run`]:                 fn.run.html
+
 extern crate gl;
 extern crate glutin;
 extern crate png;
