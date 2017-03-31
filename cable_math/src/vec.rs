@@ -193,7 +193,7 @@ impl<T: Float> Vec2<T> {
     /// assert!(epsilon < 0.001);
     /// ```
     pub fn angle(&self) -> T {
-        (self.y / self.x).atan()
+        self.y.atan2(self.x)
     }
 
     /// Rotates this vector counterclockwise by the given angle in radians.
