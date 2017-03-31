@@ -347,7 +347,7 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E>
     /// Puts the given indices at the given index in this buffer, overwriting any
     /// indices which where previously in that location. This resizes the underlying
     /// buffer if more space is needed to store the new data.
-    pub fn put(&mut self, index: usize, data: &[E]) {
+    pub fn put_indices(&mut self, index: usize, data: &[E]) {
         self.indices.put(index, data);
     }
 

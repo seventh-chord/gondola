@@ -265,18 +265,6 @@ impl<T: VertexData> VertexData for Vec3<T> {
 impl<T: VertexData> VertexData for Vec4<T> {
     type Primitive = T::Primitive;
 }
-impl<T: VertexData> VertexData for [T; 1] {
-    type Primitive = T::Primitive;
-}
-impl<T: VertexData> VertexData for [T; 2] {
-    type Primitive = T::Primitive;
-}
-impl<T: VertexData> VertexData for [T; 3] {
-    type Primitive = T::Primitive;
-}
-impl<T: VertexData> VertexData for [T; 4] {
-    type Primitive = T::Primitive;
-}
 impl<T: VertexData> VertexData for (T, T) {
     type Primitive = T::Primitive;
 }
@@ -286,4 +274,15 @@ impl<T: VertexData> VertexData for (T, T, T) {
 impl<T: VertexData> VertexData for (T, T, T, T) {
     type Primitive = T::Primitive;
 }
+macro_rules! impl_array { ($count:expr) => {
+    impl<T: VertexData> VertexData for [T; $count] {
+        type Primitive = T::Primitive;
+    }
+} }
+impl_array!(1);  impl_array!(2);  impl_array!(3);  impl_array!(4);  impl_array!(5);  impl_array!(6);
+impl_array!(7);  impl_array!(8);  impl_array!(9);  impl_array!(10); impl_array!(11); impl_array!(12);
+impl_array!(13); impl_array!(14); impl_array!(15); impl_array!(16); impl_array!(17); impl_array!(18);
+impl_array!(19); impl_array!(20); impl_array!(21); impl_array!(22); impl_array!(23); impl_array!(24);
+impl_array!(25); impl_array!(26); impl_array!(27); impl_array!(28); impl_array!(29); impl_array!(30);
+impl_array!(31); impl_array!(32); impl_array!(33); impl_array!(34); impl_array!(35); impl_array!(36);
 

@@ -372,14 +372,25 @@ fn prepend_code(src: &str, code: &str) -> String {
 /// assert_eq!("in vec4 color; in vec2 tex;", inputs);
 /// ```
 pub fn create_inputs(src: &str, for_geom: bool) -> String {
-    let pattern = "out";
+    let patterns = [
+        ("out", "in"),
+        ("flat out", "flat in"),
+    ];
     let mut result = String::new();
 
     let mut i = 0;
     'outer:
-    while i < src.len() - pattern.len() - 1{
-        // Search for occurences of "out"
-        if let Some(index) = src[i..].find(pattern) {
+    while i < src.len() - 1{
+        // Search for occurences of "out" and other patterns
+        let next = patterns.iter()
+            // Search for each pattern
+            .map(|pair| (src[i..].find(pair.0), *pair))
+            // Eliminate those that where not found at all
+            .filter(|&(index, _)| index.is_some())
+            // Find the first one
+            .min_by_key(|pair| pair.0);
+
+        if let Some((Some(index), (pattern, input))) = next {
             let index = i + index; // Index will be offset from start
             i = index + pattern.len();
 
@@ -403,7 +414,8 @@ pub fn create_inputs(src: &str, for_geom: bool) -> String {
 
             // Append the output to the string
             if !result.is_empty() { result.push(' '); }
-            result.push_str("in ");
+            result.push_str(input);
+            result.push(' ');
             result.push_str(&src[start..end]);
             if for_geom { result.push_str("[]"); }
             result.push(';');
@@ -575,15 +587,16 @@ mod tests {
         let shader = "
             #version 330 core
             out vec4 color;
+            flat out ivec2 tile;
             out vec2 tex;
             // Rest of shader ommited
         ";
 
         let inputs = create_inputs(shader, false);
-        assert_eq!("in vec4 color; in vec2 tex;", inputs);
+        assert_eq!("in vec4 color; flat in ivec2 tile; in vec2 tex;", inputs);
 
         let geom_inputs = create_inputs(shader, true);
-        assert_eq!("in vec4 color[]; in vec2 tex[];", geom_inputs);
+        assert_eq!("in vec4 color[]; flat in ivec2 tile[]; in vec2 tex[];", geom_inputs);
     }
 }
 
