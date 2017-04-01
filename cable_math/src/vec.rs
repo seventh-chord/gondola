@@ -102,6 +102,14 @@ impl<T: Num + Copy> Vec3<T> {
     pub fn dot(a: Vec3<T>, b: Vec3<T>) -> T {
         a.x*b.x + a.y*b.y + a.z*b.z
     }
+
+    pub fn cross(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
+        Vec3 {
+            x: a.y*b.z - a.z*b.y,
+            y: a.z*b.x - a.x*b.z,
+            z: a.x*b.y - a.y*b.x,
+        }
+    }
 }
 impl<T: Num + Copy> Vec4<T> {
     /// Creates a new vector with the given components
