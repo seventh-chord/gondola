@@ -39,6 +39,48 @@ pub mod graphics {
         };
         Some(String::from(value))
     }
+
+    /// Sets which side of a face to treat as the front face and which side of a face to cull. If
+    /// `None` is passed this disables culling.
+    ///
+    /// For simplicity, you can simply call `graphics::set_culling(Some(Default::default()))`,
+    /// which will set the winding order to counter-clockwise and cull-face to the back face.
+    pub fn set_culling(mode: Option<(WindingOrder, FaceSide)>) {
+        unsafe { match mode {
+            Some((winding_order, face_side)) => {
+                gl::Enable(gl::CULL_FACE);
+                match winding_order {
+                    WindingOrder::Clockwise => gl::FrontFace(gl::CW),
+                    WindingOrder::CounterClockwise => gl::FrontFace(gl::CCW),
+                }
+                match face_side {
+                    FaceSide::Front => gl::CullFace(gl::FRONT),
+                    FaceSide::Back => gl::CullFace(gl::BACK),
+                }
+            },
+            None => {
+                gl::Disable(gl::CULL_FACE);
+            },
+        } }
+    }
+
+    #[derive(Debug, Copy, Clone)]
+    pub enum WindingOrder {
+        Clockwise, CounterClockwise,
+    } 
+    #[derive(Debug, Copy, Clone)]
+    pub enum FaceSide {
+        Front, Back
+    }
+
+    impl Default for WindingOrder { 
+        /// The default winding order is counter-clockwise.
+        fn default() -> WindingOrder { WindingOrder::CounterClockwise } 
+    }
+    impl Default for FaceSide { 
+        /// The default face side is back, as this is the face you want to cull by default.
+        fn default() -> FaceSide { FaceSide::Back } 
+    }
     
     /// Clears the currently bound framebuffer to the given color. If no color is specified
     /// only the backbuffer is cleared
