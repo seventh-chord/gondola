@@ -6,6 +6,7 @@ use std::fmt;
 use std::error;
 use gl::types::*;
 
+use color::Color;
 use texture::{Texture, TextureFormat};
 
 /// Set to 8, which 97% of all cards support, acording to the [wildfiregames report][1]
@@ -118,10 +119,10 @@ impl Framebuffer {
                 gl::GenRenderbuffers(1, &mut depth_buffer_handle);
                 gl::BindRenderbuffer(gl::RENDERBUFFER, depth_buffer_handle);
                 if let Some(level) = properties.multisample {
-                    gl::RenderbufferStorageMultisample(gl::RENDERBUFFER, level as GLsizei, gl::DEPTH_COMPONENT16, 
+                    gl::RenderbufferStorageMultisample(gl::RENDERBUFFER, level as GLsizei, gl::DEPTH_COMPONENT, 
                                                        properties.width as GLint, properties.height as GLint);
                 } else {
-                    gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT16,
+                    gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT,
                                             properties.width as GLint, properties.height as GLint);
                 }
                 gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depth_buffer_handle);
@@ -228,6 +229,19 @@ impl Framebuffer {
             }
         } 
         None
+    }
+
+    /// Clears the color attachment at the given index to the given color. This method panics if
+    /// the index is not that of a valid color attachment.
+    pub fn clear_color_attachment(&self, index: usize, color: Color) {
+        if index > MAX_COLOR_ATTACHMENTS || self.textures[index].is_none() {
+            panic!("Could not clear framebuffer color attachment. {} is not a valid color attachment index", index);
+        }
+
+        unsafe {
+            use std::mem;
+            gl::ClearBufferfv(gl::COLOR, index as GLint, mem::transmute(&color));
+        }
     }
 }
 

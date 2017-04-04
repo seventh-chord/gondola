@@ -492,6 +492,7 @@ impl UniformValue for u32                   { unsafe fn set_uniform(&self, locat
 impl UniformValue for (u32, u32)            { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, (*self).0 as GLuint, (*self).1 as GLuint); } }
 impl UniformValue for (u32, u32, u32)       { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint); } }
 impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint, (*self).3 as GLuint); } }
+impl UniformValue for bool                  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1i(location, if *self { 1 } else { 0 }); } }
 
 /// Shorthand for loading a shader, propagating its outputs and inserting input declarations
 /// for a given vertex type
