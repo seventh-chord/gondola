@@ -144,13 +144,28 @@ pub fn run<T: Game + Sized>() {
         }
 
         // Timing
-        let elapsed = start_time.elapsed();
-        let target_delta = Duration::from_millis(state.target_delta as u64);
-        if state.target_delta > 0 && elapsed < target_delta {
-            std::thread::sleep(target_delta - elapsed); // This is not very precice :/
+        if let Some(target_delta) = state.target_delta {
+            let target_delta = Duration::from_millis(target_delta as u64);
+            let elapsed = start_time.elapsed();
+            if elapsed < target_delta {
+                std::thread::sleep(target_delta - elapsed); // This is not very precice :/
+            }
         }
         let delta_dur = start_time.elapsed();
         delta = delta_dur.as_secs()*1000 + (delta_dur.subsec_nanos() as u64)/1000000;
+
+        // Calculate average framerate
+        state.frame_accumulator += 1;
+        state.delta_accumulator += delta as u32;
+        if state.delta_accumulator > 500 { // Update every half second
+            let frames = state.frame_accumulator as f32;
+            let time = (state.delta_accumulator as f32) * 0.001;
+
+            state.average_framerate = frames / time;
+
+            state.frame_accumulator = 0;
+            state.delta_accumulator = 0;
+        }
     }
 
     game.close();
@@ -165,9 +180,17 @@ pub struct GameState {
     pub exit: bool,
     /// The number of milliseconds per frame this game should aim to run at. Set to 16
     /// for 60 fps. If the main loop takes less time than this amount the game will
-    /// sleep until a total of `target_delta` has ellapsed. If set to `0` the game will
-    /// never sleep.
-    pub target_delta: u32,
+    /// sleep until a total of `target_delta` has ellapsed. If set to `None` the game will
+    /// never sleep, and run as fast as possible.
+    pub target_delta: Option<u32>,
+    /// The number of frames that where displayed in the last second. This number is updated every 
+    /// half second. Note that this is only an average; it does not reflect rapid fluctuations of 
+    /// delta times.
+    pub average_framerate: f32,
+
+    // Used to calculate framerate
+    frame_accumulator: u32,
+    delta_accumulator: u32,
 
     event_sinks: Vec<mpsc::Sender<glutin::Event>>,
 }
@@ -195,7 +218,11 @@ impl GameState {
         GameState {
             win_size: Vec2::zero(),
             exit: false,
-            target_delta: 15,
+            target_delta: Some(15),
+
+            average_framerate: -1.0,
+            frame_accumulator: 0,
+            delta_accumulator: 0,
 
             event_sinks: Vec::new(),
         }
