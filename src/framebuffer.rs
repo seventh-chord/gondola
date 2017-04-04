@@ -176,36 +176,38 @@ impl Framebuffer {
 
     /// Moves the contents of this framebuffer to the given framebuffer, resolving multisampling
     /// if present. Note that this also unbinds this framebuffer
-    pub fn blit_to_framebuffer(&self, other: &Framebuffer) {
-        self.blit_indexed(other.framebuffer, other.width, other.height);
+    pub fn blit_to_framebuffer(&self, other: &Framebuffer, buffers: BlitBuffers) {
+        self.blit_indexed(other.framebuffer, other.width, other.height, buffers);
     }
 
     /// Moves the contents of this framebuffer to the backbuffer, resolving multisampling
     /// if present. Note that this also unbinds this framebuffer. This will only partially
     /// cover the backbuffer if this framebuffer is smaller than the backbuffer. To upscale
     /// a framebuffer while blitting, use [`blit_with_size`](struct.Framebuffer.html#method.blit_with_size).
-    pub fn blit(&self) {
-        self.blit_indexed(0, self.width, self.height);
+    pub fn blit(&self, buffers: BlitBuffers) {
+        self.blit_indexed(0, self.width, self.height, buffers);
     }
 
     /// Moves the contents of this framebuffer to the backbuffer, resolving multisampling
     /// if present. Note that this also unbinds this framebuffer. This allows setting
     /// the size to which this framebuffer should be scaled while blitting. This should
     /// be used if the framebuffer is larger or smaller than the backbuffer.
-    pub fn blit_with_size(&self, width: u32, height: u32) {
-        self.blit_indexed(0, width, height);
+    pub fn blit_with_size(&self, width: u32, height: u32, buffers: BlitBuffers) {
+        self.blit_indexed(0, width, height, buffers);
     }
 
-    fn blit_indexed(&self, target: GLuint, dst_width: u32, dst_height: u32) {
+    fn blit_indexed(&self, target: GLuint, dst_width: u32, dst_height: u32, buffers: BlitBuffers) {
+        let mut gl_flag = 0;
+        if buffers.contains(BLIT_COLOR)   { gl_flag |= gl::COLOR_BUFFER_BIT }
+        if buffers.contains(BLIT_DEPTH)   { gl_flag |= gl::DEPTH_BUFFER_BIT }
+        if buffers.contains(BLIT_STENCIL) { gl_flag |= gl::STENCIL_BUFFER_BIT }
+
         unsafe {
             gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, target);
             gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer);
-            gl::BlitFramebuffer(
-                0, 0, self.width as i32, self.height as i32,
-                0, 0, dst_width as i32, dst_height as i32,
-                gl::COLOR_BUFFER_BIT,
-                gl::NEAREST
-            );
+            gl::BlitFramebuffer(0, 0, self.width as i32, self.height as i32,
+                                0, 0, dst_width as i32, dst_height as i32,
+                                gl_flag, gl::NEAREST);
         }
         self.unbind();
     }
@@ -238,6 +240,14 @@ impl Drop for Framebuffer {
             }
             // Textures are managed by the `Texture` struct, and are automatically deleted
         }
+    }
+}
+
+bitflags! {
+    pub flags BlitBuffers: u8 {
+        const BLIT_COLOR =   0b00000001,
+        const BLIT_DEPTH =   0b00000010,
+        const BLIT_STENCIL = 0b00000100,
     }
 }
 

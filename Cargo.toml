@@ -7,8 +7,9 @@ authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 [dependencies]
 gondola_derive = { path = "gondola_derive" }
 cable_math = { path = "cable_math" }
-glutin = "0.7.*"
+glutin = "0.7"
 gl = "*"
-png = "0.6.*"
-rusttype = "0.2.1"
+png = "0.6"
+rusttype = "0.2"
+bitflags = "0.8"
 

@@ -19,6 +19,8 @@ extern crate glutin;
 extern crate png;
 extern crate cable_math;
 extern crate rusttype;
+#[macro_use]
+extern crate bitflags;
 
 mod color;
 mod matrix_stack;

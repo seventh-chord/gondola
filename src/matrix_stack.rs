@@ -141,17 +141,6 @@ impl MatrixStack {
         self.model_stack[self.model_pointer] = Mat4::identity();
     }
 
-    /// Pops all frames of the model and view stacks. Loads the identity matrix for the model, view
-    /// and projection matrices.
-    pub fn reset(&mut self) {
-        self.model_pointer = 0;
-        self.view_pointer = 0;
-
-        self.view_stack[0] = Mat4::identity();
-        self.model_stack[0] = Mat4::identity();
-        self.projection = Mat4::identity();
-    }
-
     /// Applies the given translation to the top of the model stack
     pub fn translate(&mut self, translation: Vec3<f32>) {
         self.model_stack[self.model_pointer] *= Mat4::translation(translation)
