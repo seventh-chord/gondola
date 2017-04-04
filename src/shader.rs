@@ -126,12 +126,14 @@ impl ShaderPrototype {
 
     /// Binds this shader to matrix stack storage, so that it automatically
     /// has access to the currently set matrix stacks without the need to 
-    /// set uniforms every time a shader is bound.
+    /// set uniforms every time a shader is bound. This gives access to the 
+    /// uniforms `mvp`, `model_mat` and `normal_mat` from shaders. `normal_mat`
+    /// is based on the model matrix.
     ///
     /// *Implementation note*: Matricies are stored at the last valid uniform
     /// buffer binding index.
     pub fn bind_to_matrix_storage(&mut self) {
-        let uniform_block_decl = "layout(shared,std140) uniform MatrixBlock { mat4 mvp; };";
+        let uniform_block_decl = "layout(shared,std140) uniform MatrixBlock { mat4 mvp; mat4 model_mat; mat4 normal_mat; };";
         if self.geom_src.is_empty() {
             self.vert_src = prepend_code(&self.vert_src, uniform_block_decl);
         } else {

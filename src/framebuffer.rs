@@ -52,6 +52,7 @@ pub struct Framebuffer {
     framebuffer: GLuint,
     textures: [Option<Texture>; MAX_COLOR_ATTACHMENTS],
     depth_buffer: Option<GLuint>,
+    sample_level: Option<usize>,
     pub width: u32,
     pub height: u32
 }
@@ -92,7 +93,8 @@ impl Framebuffer {
                                        0, // Level
                                        format as GLint,
                                        properties.width as GLint, properties.height as GLint, 0, //Size and border
-                                       gl::RGBA, gl::UNSIGNED_BYTE, ::std::ptr::null()); // Data for texture
+                                       format.unsized_format(), format.gl_primitive_enum(), 
+                                       ::std::ptr::null()); // Data for texture
                         gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                         gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                         gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
@@ -148,6 +150,7 @@ impl Framebuffer {
                     framebuffer: framebuffer,
                     textures: textures,
                     depth_buffer: depth_buffer,
+                    sample_level: properties.multisample,
                     width: properties.width,
                     height: properties.height,
                 }
@@ -211,11 +214,13 @@ impl Framebuffer {
     /// index for which a `color_format`  was set in the [framebuffers properties][1] from which this
     /// framebuffer was built. If there is no color attachment at the given index, or the index is
     /// greater than [`MAX_COLOR_ATTACHMENTS`][2] this returns `None`.
+    /// Note that if multisampling is enabled for this color attachment this function returns none,
+    /// as multisampled textures can not be used like normal textures.
     ///
     /// [1]: struct.FramebufferProperties.html
     /// [2]: constant.MAX_COLOR_ATTACHMENTS.html
     pub fn get_color_attachment(&self, index: usize) -> Option<&Texture> {
-        if index < self.textures.len() {
+        if self.sample_level.is_none() && index < self.textures.len() {
             if let Some(ref texture) = self.textures[index] {
                 return Some(texture);
             }

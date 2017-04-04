@@ -11,8 +11,10 @@ const STACK_SIZE: usize = 32;
 /// A matrix stack containing a single projection matrix and a stack of
 /// modelview matrices
 pub struct MatrixStack {
-    modelview_stack: [Mat4<f32>; STACK_SIZE],
-    modelview_pointer: usize,
+    model_stack: [Mat4<f32>; STACK_SIZE],
+    model_pointer: usize,
+    view_stack: [Mat4<f32>; STACK_SIZE],
+    view_pointer: usize,
     projection: Mat4<f32>,
 
     uniform_buffer_index: GLuint,
@@ -24,8 +26,10 @@ impl MatrixStack {
         let uniform_buffer = PrimitiveBuffer::<Mat4<f32>>::new(BufferTarget::Uniform, BufferUsage::DynamicDraw);
 
         MatrixStack {
-            modelview_stack: [Mat4::identity(); STACK_SIZE],
-            modelview_pointer: 0,
+            model_stack: [Mat4::identity(); STACK_SIZE],
+            model_pointer: 0,
+            view_stack: [Mat4::identity(); STACK_SIZE],
+            view_pointer: 0,
             projection: Mat4::identity(),
 
             uniform_buffer_index: get_uniform_binding_index(),
@@ -44,30 +48,49 @@ impl MatrixStack {
         self.projection = Mat4::perspective(fov, aspect, near, far);
     }
 
-    /// Pushes one frame onto the modeview stack
+    /// Pushes one frame onto the model stack
     fn push_private(&mut self) {
-        if self.modelview_pointer >= STACK_SIZE - 1 {
+        if self.model_pointer >= STACK_SIZE - 1 {
             panic!("Stack overflow in MatrixStack::push(&mut self)");
         }
 
-        let old_top = self.modelview_stack[self.modelview_pointer];
-        self.modelview_pointer += 1;
-        self.modelview_stack[self.modelview_pointer] = old_top.clone();
+        let old_top = self.model_stack[self.model_pointer];
+        self.model_pointer += 1;
+        self.model_stack[self.model_pointer] = old_top.clone();
+    }
+
+    /// Pops one frame of the model stack
+    fn pop_private(&mut self) {
+        if self.model_pointer <= 0 {
+            panic!("Stack underflow in MatrixStack::pop(&mut self)");
+        }
+        self.model_pointer -= 1;
+    }
+
+    /// Pushes one frame onto the modeview stack
+    fn view_push_private(&mut self) {
+        if self.view_pointer >= STACK_SIZE - 1 {
+            panic!("Stack overflow in MatrixStack::push(&mut self)");
+        }
+
+        let old_top = self.view_stack[self.view_pointer];
+        self.view_pointer += 1;
+        self.view_stack[self.view_pointer] = old_top.clone();
     }
 
     /// Pops one frame of the modeview stack
-    fn pop_private(&mut self) {
-        if self.modelview_pointer <= 0 {
+    fn view_pop_private(&mut self) {
+        if self.view_pointer <= 0 {
             panic!("Stack underflow in MatrixStack::pop(&mut self)");
         }
-        self.modelview_pointer -= 1;
+        self.view_pointer -= 1;
     }
 
     /// Pushes a frame onto the matrix stack, executes the given action and pops the frame
     /// back off again. All matrix transforms that are executed within the action will be
     /// reset after it returns. This allows for temporary transformations without side effects.
     ///
-    /// Note that only the modelview matrix is affected by this, and modifications to the 
+    /// Note that only the model matrix is affected by this, and modifications to the 
     /// projection matrix will persist even after this operation.
     ///
     /// By wrapping the code in a closure we can guarantee that there will never be unbalanced
@@ -102,37 +125,87 @@ impl MatrixStack {
         self.pop_private();
     }
 
-    /// Sets the top of the modelview stack to a identity matrix
+    /// Equal to `push`, but modifies the view matrix rather than the model matrix. See [`push`][1]
+    /// for more info.
+    ///
+    /// [1]: struct.MatrixStack.html#fn.push.html
+    pub fn push_view<F>(&mut self, mut action: F) where F: FnMut(&mut Self) {
+        self.view_push_private();
+        action(self);
+        self.view_pop_private();
+    }
+
+    /// Sets the top of the model and view stacks to a identity matrix
     pub fn identity(&mut self) {
-        self.modelview_stack[self.modelview_pointer] = Mat4::identity();
+        self.view_stack[self.view_pointer] = Mat4::identity();
+        self.model_stack[self.model_pointer] = Mat4::identity();
     }
 
-    /// Applies the given translation to the top of the modelview stack
+    /// Pops all frames of the model and view stacks. Loads the identity matrix for the model, view
+    /// and projection matrices.
+    pub fn reset(&mut self) {
+        self.model_pointer = 0;
+        self.view_pointer = 0;
+
+        self.view_stack[0] = Mat4::identity();
+        self.model_stack[0] = Mat4::identity();
+        self.projection = Mat4::identity();
+    }
+
+    /// Applies the given translation to the top of the model stack
     pub fn translate(&mut self, translation: Vec3<f32>) {
-        self.modelview_stack[self.modelview_pointer] *= Mat4::translation(translation)
+        self.model_stack[self.model_pointer] *= Mat4::translation(translation)
     }
 
-    /// Applies the given scaling to the top of the modelview stack
+    /// Applies the given scaling to the top of the model stack
     pub fn scale(&mut self, scale: Vec3<f32>) {
-        self.modelview_stack[self.modelview_pointer] *= Mat4::scaling(scale);
+        self.model_stack[self.model_pointer] *= Mat4::scaling(scale);
     }
 
-    /// Applies a rotation of `angle` radians around the x-axis to the top of the modelview stack
+    /// Applies a rotation of `angle` radians around the x-axis to the top of the model stack
     pub fn rotate_x(&mut self, angle: f32) {
-        self.modelview_stack[self.modelview_pointer] *= Mat4::rotation_x(angle);
+        self.model_stack[self.model_pointer] *= Mat4::rotation_x(angle);
     }
-    /// Applies a rotation of `angle` radians around the y-axis to the top of the modelview stack
+    /// Applies a rotation of `angle` radians around the y-axis to the top of the model stack
     pub fn rotate_y(&mut self, angle: f32) {
-        self.modelview_stack[self.modelview_pointer] *= Mat4::rotation_y(angle);
+        self.model_stack[self.model_pointer] *= Mat4::rotation_y(angle);
     }
-    /// Applies a rotation of `angle` radians around the z-axis to the top of the modelview stack
+    /// Applies a rotation of `angle` radians around the z-axis to the top of the model stack
     pub fn rotate_z(&mut self, angle: f32) {
-        self.modelview_stack[self.modelview_pointer] *= Mat4::rotation_z(angle);
+        self.model_stack[self.model_pointer] *= Mat4::rotation_z(angle);
     }
 
-    /// Returns the top of the modelview stack
+    /// Returns the top of the model stack
     pub fn peek(&self) -> Mat4<f32> {
-        self.modelview_stack[self.modelview_pointer]
+        self.model_stack[self.model_pointer]
+    }
+
+    /// Applies the given translation to the top of the view stack
+    pub fn translate_view(&mut self, translation: Vec3<f32>) {
+        self.view_stack[self.view_pointer] *= Mat4::translation(translation)
+    }
+
+    /// Applies the given scaling to the top of the view stack
+    pub fn scale_view(&mut self, scale: Vec3<f32>) {
+        self.view_stack[self.view_pointer] *= Mat4::scaling(scale);
+    }
+
+    /// Applies a rotation of `angle` radians around the x-axis to the top of the view stack
+    pub fn rotate_x_view(&mut self, angle: f32) {
+        self.view_stack[self.view_pointer] *= Mat4::rotation_x(angle);
+    }
+    /// Applies a rotation of `angle` radians around the y-axis to the top of the view stack
+    pub fn rotate_y_view(&mut self, angle: f32) {
+        self.view_stack[self.view_pointer] *= Mat4::rotation_y(angle);
+    }
+    /// Applies a rotation of `angle` radians around the z-axis to the top of the view stack
+    pub fn rotate_z_view(&mut self, angle: f32) {
+        self.view_stack[self.view_pointer] *= Mat4::rotation_z(angle);
+    }
+
+    /// Returns the top of the view stack
+    pub fn peek_view(&self) -> Mat4<f32> {
+        self.view_stack[self.view_pointer]
     }
 
     /// Returns the projection matrix
@@ -142,17 +215,21 @@ impl MatrixStack {
 
     /// Returns the model-view-projection matrix
     pub fn mvp(&self) -> Mat4<f32> {
-        self.projection * self.peek()
+        self.projection * self.peek_view() * self.peek()
     }
 
-    /// Writes the model-view-projection matrix to the uniform buffer to which all shaders
-    /// have access. Note that shaders need to be set up in order to have access to this 
-    /// buffer. This is done automatically when constructing a shader with the `load_shader!()`
-    /// macro, or can be done manually by calling `bind_to_matrix_storage()` on a
-    /// `ShaderPrototype` before building a shader from it.
+    /// Writes the model-view-projection matrix, the model matrix and the normal matrix to 
+    /// the uniform buffer to which all shaders have access. Note that shaders need to be 
+    /// set up in order to have access to this buffer. This is done automatically when 
+    /// constructing a shader with the `load_shader!()` macro, or can be done manually by 
+    /// calling `bind_to_matrix_storage()` on a `ShaderPrototype` before building a shader 
+    /// from it.
     pub fn update_buffer(&mut self) {
         let mvp = self.mvp();
-        self.uniform_buffer.put_at_start(&[mvp]);
+        let model = self.peek();
+        let normal = model.inverse().transpose();
+
+        self.uniform_buffer.put_at_start(&[mvp, model, normal]);
         self.uniform_buffer.bind_base(self.uniform_buffer_index);
     }
 }

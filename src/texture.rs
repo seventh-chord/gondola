@@ -251,12 +251,21 @@ pub enum TextureFormat {
     R_8      = gl::R8,
 }
 impl TextureFormat {
-    /// Retrives the unsized version of the given format
+    /// Retrieves the unsized version of the given format
     pub fn unsized_format(&self) -> GLenum {
         match *self {
             TextureFormat::RGBA_F32 | TextureFormat::RGBA_F16 | TextureFormat::RGBA_8 => gl::RGBA,
             TextureFormat::RGB_F32 | TextureFormat::RGB_F16 | TextureFormat::RGB_8 => gl::RGB,
             TextureFormat::R_F32 | TextureFormat::R_F16 | TextureFormat::R_8 => gl::RED
+        }
+    }
+
+    /// The OpenGL primitive associated with this color format.
+    pub fn gl_primitive_enum(&self) -> GLenum {
+        match *self {
+            TextureFormat::RGBA_F32 | TextureFormat::RGB_F32 | TextureFormat::R_F32 => gl::FLOAT,
+            TextureFormat::RGBA_F16 | TextureFormat::RGB_F16 | TextureFormat::R_F16 => gl::FLOAT,
+            TextureFormat::RGBA_8 | TextureFormat::RGB_8 | TextureFormat::R_8 => gl::UNSIGNED_BYTE,
         }
     }
 }
