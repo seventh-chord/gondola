@@ -90,7 +90,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             let field_count = variant_data.fields().len();
             let shader_input_impl = quote! {
                 let mut result = String::with_capacity(#field_count * 50); // Approx. 50 chars per primitive
-                let mut index = 0; // Used in the above quote! block, which is inserted bellow
+                let mut index = 0; // Used in the above quote! block, which is inserted below
                 result.push('\n');
                 #( #shader_input_impl )*
                 result

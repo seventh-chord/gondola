@@ -5,9 +5,16 @@ use gl;
 use std::fmt;
 use std::error;
 use gl::types::*;
-use texture::TextureFormat;
 
-/// Utility to specify the format of a framebuffer before building it.
+use texture::{Texture, TextureFormat};
+
+/// Set to 8, which 97% of all cards support, acording to the [wildfiregames report][1]
+/// [1]: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_COLOR_ATTACHMENTS_EXT
+pub const MAX_COLOR_ATTACHMENTS: usize = 8;
+
+/// Utility to specify the format of a framebuffer before building it. If you expect to rebuild a
+/// framebuffer occasionally (e.g. when the game window is resized) it could be beneficial to store
+/// this struct alongside the framebuffer itself.
 pub struct FramebufferProperties {
     /// Size in pixels
     pub width: u32,
@@ -15,9 +22,10 @@ pub struct FramebufferProperties {
     pub height: u32,
     /// The amount of multisampling to apply
     pub multisample: Option<usize>,
-    /// The format in which color data is stored internally
-    pub internal_format: TextureFormat,
-    /// If `true` a depthbuffer will be constructed for framebuffers
+    /// The color formats in which color data is stored internally. The OpenGL spec states that at
+    /// least 8 attachments will be supported, and in practice no card supports more than this.
+    pub color_formats: [Option<TextureFormat>; MAX_COLOR_ATTACHMENTS],
+    /// If `true` a depthbuffer will be added to framebuffers
     pub depth_buffer: bool,
 }
 
@@ -27,7 +35,7 @@ impl FramebufferProperties {
             width: width,
             height: height,
             multisample: None,
-            internal_format: TextureFormat::RGB_8,
+            color_formats: [Some(TextureFormat::RGB_8), None, None, None, None, None, None, None],
             depth_buffer: false,
         }
     }
@@ -42,7 +50,7 @@ impl FramebufferProperties {
 /// [`FramebufferProperties`](struct.FramebufferProperties.html).
 pub struct Framebuffer {
     framebuffer: GLuint,
-    texture: GLuint,
+    textures: [Option<Texture>; MAX_COLOR_ATTACHMENTS],
     depth_buffer: Option<GLuint>,
     pub width: u32,
     pub height: u32
@@ -51,7 +59,7 @@ pub struct Framebuffer {
 impl Framebuffer {
     fn new(properties: &FramebufferProperties) -> Result<Framebuffer, FramebufferError> {
         let mut framebuffer: GLuint = 0;
-        let mut texture: GLuint = 0;
+        let mut textures: [Option<Texture>; MAX_COLOR_ATTACHMENTS] = Default::default();
         let mut depth_buffer: Option<GLuint> = None;
 
         let mut error: Option<FramebufferError> = None;
@@ -62,32 +70,47 @@ impl Framebuffer {
 
             let texture_target = if properties.multisample.is_none() { gl::TEXTURE_2D } else { gl::TEXTURE_2D_MULTISAMPLE };
 
-            gl::GenTextures(1, &mut texture);
-            gl::BindTexture(texture_target, texture);
-            ::util::graphics::print_errors();
-            if let Some(level) = properties.multisample {
-                gl::TexImage2DMultisample(texture_target,
-                                          level as GLsizei,
-                                          properties.internal_format as GLuint,
-                                          properties.width as GLint, properties.height as GLint, //Size
-                                          true as GLboolean); // Fixed sample locations
-            } else {
-                gl::TexImage2D(texture_target,
-                               0, // Level
-                               properties.internal_format as GLint,
-                               properties.width as GLint, properties.height as GLint, 0, //Size and border
-                               gl::RGBA, gl::UNSIGNED_BYTE, ::std::ptr::null()); // Data for texture
-                gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
-                gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
-                gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
-                gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
-                gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
+            // Add draw buffers
+            let mut draw_buffers: [GLenum; MAX_COLOR_ATTACHMENTS] = Default::default();
+            for i in 0..MAX_COLOR_ATTACHMENTS {
+                // Add a color attachment
+                if let Some(format) = properties.color_formats[i] {
+                    let attachment = gl::COLOR_ATTACHMENT0 + (i as GLenum);
+                    draw_buffers[i] = attachment;
+
+                    let mut texture = 0;
+                    gl::GenTextures(1, &mut texture);
+                    gl::BindTexture(texture_target, texture);
+                    if let Some(level) = properties.multisample {
+                        gl::TexImage2DMultisample(texture_target,
+                                                  level as GLsizei,
+                                                  format as GLuint,
+                                                  properties.width as GLint, properties.height as GLint, //Size
+                                                  true as GLboolean); // Fixed sample locations
+                    } else {
+                        gl::TexImage2D(texture_target,
+                                       0, // Level
+                                       format as GLint,
+                                       properties.width as GLint, properties.height as GLint, 0, //Size and border
+                                       gl::RGBA, gl::UNSIGNED_BYTE, ::std::ptr::null()); // Data for texture
+                        gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
+                    }
+
+                    gl::FramebufferTexture(gl::FRAMEBUFFER, attachment, texture, 0);
+                    textures[i] = Some(Texture::from_raw(texture, format, properties.width, properties.height));
+                } else {
+                    draw_buffers[i] = gl::NONE;
+                }
+                
             }
-            
 
-            gl::FramebufferTexture(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, texture, 0);
-            gl::DrawBuffers(1, &gl::COLOR_ATTACHMENT0);
+            gl::DrawBuffers(MAX_COLOR_ATTACHMENTS as GLsizei, draw_buffers.as_ptr());
 
+            // Add depth buffer
             if properties.depth_buffer {
                 let mut depth_buffer_handle = 0;
                 gl::GenRenderbuffers(1, &mut depth_buffer_handle);
@@ -103,10 +126,11 @@ impl Framebuffer {
                 depth_buffer = Some(depth_buffer_handle);
             }
 
+            // Check if framebuffer was sucessfully constructed
             let status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
             if status != gl::FRAMEBUFFER_COMPLETE {
+                // Delete OpenGL data (textures are automatically deleted)
                 gl::DeleteFramebuffers(1, &framebuffer);
-                gl::DeleteTextures(1, &texture);
                 if let Some(depth_buffer) = depth_buffer {
                     gl::DeleteRenderbuffers(1, &depth_buffer);
                 }
@@ -122,7 +146,7 @@ impl Framebuffer {
             return Ok(
                 Framebuffer {
                     framebuffer: framebuffer,
-                    texture: texture,
+                    textures: textures,
                     depth_buffer: depth_buffer,
                     width: properties.width,
                     height: properties.height,
@@ -182,16 +206,32 @@ impl Framebuffer {
         }
         self.unbind();
     }
+
+    /// Retrieves the color attachment at the given index. There will be a color attachment at each
+    /// index for which a `color_format`  was set in the [framebuffers properties][1] from which this
+    /// framebuffer was built. If there is no color attachment at the given index, or the index is
+    /// greater than [`MAX_COLOR_ATTACHMENTS`][2] this returns `None`.
+    ///
+    /// [1]: struct.FramebufferProperties.html
+    /// [2]: constant.MAX_COLOR_ATTACHMENTS.html
+    pub fn get_color_attachment(&self, index: usize) -> Option<&Texture> {
+        if index < self.textures.len() {
+            if let Some(ref texture) = self.textures[index] {
+                return Some(texture);
+            }
+        } 
+        None
+    }
 }
 
 impl Drop for Framebuffer {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteFramebuffers(1, &self.framebuffer);
-            gl::DeleteTextures(1, &self.texture);
             if let Some(depth_buffer) = self.depth_buffer {
                 gl::DeleteRenderbuffers(1, &depth_buffer);
             }
+            // Textures are managed by the `Texture` struct, and are automatically deleted
         }
     }
 }

@@ -41,7 +41,7 @@ pub mod graphics {
     }
 
     /// Sets which side of a face to treat as the front face and which side of a face to cull. If
-    /// `None` is passed this disables culling.
+    /// `None` is passed this disables culling.dire stra
     ///
     /// For simplicity, you can simply call `graphics::set_culling(Some(Default::default()))`,
     /// which will set the winding order to counter-clockwise and cull-face to the back face.

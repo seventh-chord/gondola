@@ -19,6 +19,17 @@ pub struct Texture {
 }
 
 impl Texture { 
+    /// Creates a texture from a raw OpenGL handle and some additional data. Intended for internal
+    /// use only, use with care!
+    pub fn from_raw(texture: GLuint, format: TextureFormat, width: u32, height: u32) -> Texture {
+        Texture {
+            texture: texture,
+            format: format,
+            width: width,
+            height: height,
+        }
+    }
+
     /// Creates a texture from a image file.
     pub fn from_file<P>(path: P) -> io::Result<Texture> where P: AsRef<Path> {
         let mut texture = Texture::new();
