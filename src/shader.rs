@@ -146,7 +146,6 @@ impl ShaderPrototype {
 
     /// Adds input declarations for the given vertex to this shader. The generated shader can then be 
     /// used to draw [`VertexBuffer`]s with vertices of type `T`.
-    ///
     /// [`VertexBuffer`]: ../buffer/struct.VertexBuffer.html
     pub fn with_input_vert<T>(&mut self, name_prefix: &str) where T: Vertex {
         let input = <T as Vertex>::gen_shader_input_decl(name_prefix);
@@ -268,6 +267,13 @@ impl Shader {
                 }
 
                 let message = str::from_utf8(&buffer).expect("Shader log was not valid UTF-8").to_string();
+                let message = format!(
+                    "{}\nFor source:\n-- VERT\n{}\n-- FRAG\n{}\n-- GEOM\n{}",
+                    message,
+                    vert_src,
+                    geom_src.unwrap_or(""),
+                    frag_src.unwrap_or(""),
+                );
                 return Err(ShaderError::Link(message));
             }
         }
@@ -496,6 +502,8 @@ impl UniformValue for bool                  { unsafe fn set_uniform(&self, locat
 /// Shorthand for loading a shader, propagating its outputs and inserting input declarations
 /// for a given vertex type. 
 ///
+/// This macro allways returns `Result<Shader, ShaderError>`.
+///
 /// # Parameters
 /// `load_shader!(src, vertex_type)`
 ///
@@ -508,9 +516,22 @@ impl UniformValue for bool                  { unsafe fn set_uniform(&self, locat
 /// * `src`: The source file from which to load this shader. Should be `AsRef<Path>` 
 ///   (This includes `&str` and `Path`).
 /// * `vertex_type`: The name of a struct which implementes [`Vertex`].
-/// * `transform_feedback_output_type`: The name of a struct which implements [`Vertex`]. This
+/// * `transform_output_type`: The name of a struct which implements [`Vertex`]. This
 ///    shader can then be used for transform feedback, with `transform_output_type` as a target
 ///    type. Output declarations for this vertex type will also be inserted.
+///
+/// # Prefixes
+/// When a shader has many inputs and outputs it can be usefull to prefix all variables from a
+/// given source with a common prefix, to avoid naming conflicts. This can be done by appending
+/// `["prefix"]` to the vertex type. 
+///
+/// For example, if 
+///
+/// `load_shader!("...", Vert)` generates `layout(...) in vec3 position`
+///
+/// then
+///
+/// `load_shader!("...", Vert ["in_"])` generates `layout(...) in vec3 in_position`
 ///
 /// [`Vertex`]: buffer/trait.Vertex.html
 ///
@@ -521,7 +542,6 @@ impl UniformValue for bool                  { unsafe fn set_uniform(&self, locat
 /// extern crate gondola; 
 /// #[macro_use]
 /// extern crate gondola_derive;
-/// extern crate gl; // Required for the vertex derive
 ///
 /// use gondola::shader::*;
 /// use gondola::buffer::Vertex;
@@ -538,19 +558,30 @@ impl UniformValue for bool                  { unsafe fn set_uniform(&self, locat
 #[macro_export]
 macro_rules! load_shader {
     ($src:expr, $vert:ty) => {
+        load_shader!($src, $vert [""])
+    };
+    ($src:expr, $vert:ty => $target:ty) => {
+        load_shader!($src, $vert => $target ["out_"]);
+    };
+    ($src:expr, $vert:ty => $target:ty [$target_prefix:expr]) => {
+        load_shader!($src, $vert [""] => $target [$target_prefix]);
+    };
+
+    // With custom prefixes
+    ($src:expr, $vert:ty [$vert_prefix:expr]) => {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
-            prototype.with_input_vert::<$vert>("in_");
+            prototype.with_input_vert::<$vert>($vert_prefix);
             prototype.build()
         })
     };
-    ($src:expr, $vert:ty => $target:ty) => {
+    ($src:expr, $vert:ty [$vert_prefix:expr] => $target:ty [$target_prefix:expr]) => {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
-            prototype.with_input_vert::<$vert>("in_");
-            prototype.with_transform_output_vert::<$target>("out_");
+            prototype.with_input_vert::<$vert>($vert_prefix);
+            prototype.with_transform_output_vert::<$target>($target_prefix);
             prototype.build()
         })
     };
