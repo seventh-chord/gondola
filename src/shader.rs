@@ -22,6 +22,8 @@ pub struct ShaderPrototype {
     frag_src: String,
     geom_src: String,
     bind_to_matrix_storage: bool,
+
+    transform_feedback_outputs: Option<Vec<String>>,
 }
 
 impl ShaderPrototype {
@@ -90,6 +92,7 @@ impl ShaderPrototype {
             geom_src: geom_src,
             frag_src: frag_src,
             bind_to_matrix_storage: false,
+            transform_feedback_outputs: None,
         })
     }
 
@@ -100,48 +103,67 @@ impl ShaderPrototype {
             geom_src: String::from(geom_src),
             frag_src: String::from(frag_src),
             bind_to_matrix_storage: false,
+            transform_feedback_outputs: None,
         }
     }
 
-    /// Inserts input declarations matching the output declarations of a previous
-    /// shader stage into the next shader stage. For example, if the vertex source
-    /// contains `out vec4 color;`, `in vec4 color;` will be added to the either 
-    /// the geometry or the fragment shader, depending on which one exists.
+    /// Inserts input declarations matching the output declarations of a previous shader stage into 
+    /// the next shader stage. For example, if the vertex source contains `out vec4 color;`, 
+    /// `in vec4 color;` will be added to the either the geometry or the fragment shader, depending 
+    /// on which one exists.
     pub fn propagate_outputs(&mut self) {
         if self.geom_src.is_empty() {
             let vert_out = create_inputs(&self.vert_src, false);
             if !self.frag_src.is_empty() {
-                self.frag_src = prepend_code(&self.frag_src, &vert_out);
+                prepend_code(&mut self.frag_src, &vert_out);
             }
         } else {
             if !self.frag_src.is_empty() {
                 let geom_out = create_inputs(&self.geom_src, false);
-                self.frag_src = prepend_code(&self.frag_src, &geom_out);
+                prepend_code(&mut self.frag_src, &geom_out);
             }
             
             let vert_out = create_inputs(&self.vert_src, true);
-            self.geom_src = prepend_code(&self.geom_src, &vert_out);
+            prepend_code(&mut self.geom_src, &vert_out);
         }
     }
 
-    /// Binds this shader to matrix stack storage, so that it automatically
-    /// has access to the currently set matrix stacks without the need to 
-    /// set uniforms every time a shader is bound. This gives access to the 
-    /// uniforms `mvp`, `model_mat` and `normal_mat` from shaders. `normal_mat`
-    /// is based on the model matrix.
+    /// Binds this shader to matrix stack storage, so that it automatically has access to the currently 
+    /// set matrix stacks without the need to set uniforms every time a shader is bound. This gives 
+    /// access to the uniforms `mvp`, `model_mat` and `normal_mat` from shaders. `normal_mat` is based 
+    /// on the model matrix.
     ///
-    /// *Implementation note*: Matricies are stored at the last valid uniform
-    /// buffer binding index.
+    /// *Implementation note*: Matricies are stored at the last valid uniform buffer binding index.
     pub fn bind_to_matrix_storage(&mut self) {
         let uniform_block_decl = "layout(shared,std140) uniform MatrixBlock { mat4 mvp; mat4 model_mat; mat4 normal_mat; };";
         if self.geom_src.is_empty() {
-            self.vert_src = prepend_code(&self.vert_src, uniform_block_decl);
+            prepend_code(&mut self.vert_src, uniform_block_decl);
         } else {
-            self.geom_src = prepend_code(&self.geom_src, uniform_block_decl);
+            prepend_code(&mut self.geom_src, uniform_block_decl);
         }
         self.bind_to_matrix_storage = true;
     }
 
+    /// Adds input declarations for the given vertex to this shader. The generated shader can then be 
+    /// used to draw [`VertexBuffer`]s with vertices of type `T`.
+    ///
+    /// [`VertexBuffer`]: ../buffer/struct.VertexBuffer.html
+    pub fn with_input_vert<T>(&mut self, name_prefix: &str) where T: Vertex {
+        let input = <T as Vertex>::gen_shader_input_decl(name_prefix);
+        prepend_code(&mut self.vert_src, &input);
+    }
+
+    /// Adds output declarations for the given vertex to this shader. This is intended for usage
+    /// with transform feedback. The generated shader can then be used as a target for
+    /// [`transform_feedback_into`][1]
+    ///
+    /// [1]: ../buffer/struct.VertexBuffer.html#method.transform_feedback_into
+    pub fn with_transform_output_vert<T>(&mut self, name_prefix: &str) where T: Vertex {
+        let output = <T as Vertex>::gen_transform_feedback_decl(name_prefix);
+        prepend_code(&mut self.vert_src, &output);
+
+        self.transform_feedback_outputs = Some(<T as Vertex>::gen_transform_feedback_outputs(name_prefix));
+    }
 
     /// Converts this prototype into a shader
     pub fn build(&self) -> Result<Shader, ShaderError> {
@@ -149,31 +171,7 @@ impl ShaderPrototype {
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
         let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
 
-        match Shader::new(vert_src, geom_src, frag_src) {
-            Ok(shader) => {
-                if self.bind_to_matrix_storage {
-                    unsafe {
-                        let binding_index = ::matrix_stack::get_uniform_binding_index();
-                        let c_str = CString::new("MatrixBlock").unwrap();
-                        let block_index = gl::GetUniformBlockIndex(shader.program, c_str.as_ptr());
-                        gl::UniformBlockBinding(shader.program, block_index, binding_index);
-                    }
-                }
-                Ok(shader)
-            },
-            Err(err) => Err(err)
-        }
-    }
-
-    /// Converts this prototype into a shader, inserting input declarations for the given
-    /// vertex into the fragment shader
-    pub fn build_with_vert<T>(&self) -> Result<Shader, ShaderError> where T: Vertex {
-        let input_decl = <T as Vertex>::gen_shader_input_decl();
-        let vert_src = &prepend_code(&self.vert_src, &input_decl);
-        let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
-        let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
-
-        match Shader::new(vert_src, geom_src, frag_src) {
+        match Shader::new(vert_src, geom_src, frag_src, self.transform_feedback_outputs.clone()) {
             Ok(shader) => {
                 if self.bind_to_matrix_storage {
                     unsafe {
@@ -200,12 +198,11 @@ pub struct Shader {
 }
 
 impl Shader {
-    /// Constructs a glsl shader from source. Note that the geometry and fragment shaders are
-    /// optional, as they are not needed for all purposes.
-    pub fn new(vert_src: &str,
-               geom_src: Option<&str>,
-               frag_src: Option<&str>)
-               -> Result<Shader, ShaderError> {
+    fn new(vert_src: &str,
+           geom_src: Option<&str>,
+           frag_src: Option<&str>,
+           transform_feedback_outputs: Option<Vec<String>>
+           ) -> Result<Shader, ShaderError> {
         let program;
         let vert_shader = 0;
         let frag_shader;
@@ -237,8 +234,20 @@ impl Shader {
                 }
             };
 
+            if let Some(transform_feedback_outputs) = transform_feedback_outputs {
+                let names = transform_feedback_outputs.into_iter()
+                    .map(|s| CString::new(s.into_bytes()).unwrap())
+                    .collect::<Vec<_>>();
+                let name_ptrs = names.iter()
+                    .map(|n| n.as_ptr())
+                    .collect::<Vec<_>>();
+
+                gl::TransformFeedbackVaryings(program, name_ptrs.len() as GLsizei, name_ptrs.as_ptr(), gl::INTERLEAVED_ATTRIBS);
+            }
+
             gl::LinkProgram(program);
 
+            // Handle errors
             let mut status = gl::FALSE as GLint;
             gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
             if status != (gl::TRUE as GLint) {
@@ -321,7 +330,7 @@ impl Drop for Shader {
 /// Prepends the given section of code to the beginning of the given piece of
 /// shader src. Note that code is inserted after the `#version ...`
 /// preprocessor, if present.
-fn prepend_code(src: &str, code: &str) -> String {
+fn prepend_code(src: &mut String, code: &str) {
     let insert_index =
         if let Some(preprocessor_index) = src.find("#version") {
             if let Some(newline_index) = src[preprocessor_index..].find('\n') {
@@ -336,19 +345,9 @@ fn prepend_code(src: &str, code: &str) -> String {
             0
         };
 
-    let mut result = String::with_capacity(src.len() + code.len() + 2); // +2 for newlines surrounding inserted code
-
-    result.push_str(&src[0..insert_index]);
-
-    result.push('\n');
-    result.push_str(code);
-    result.push('\n');
-
-    if !src.is_empty() && insert_index < src.len() - 1 {
-        result.push_str(&src[insert_index+1..]);
-    }
-
-    result
+    src.insert(insert_index, '\n');
+    src.insert_str(insert_index + 1, code);
+    src.insert(insert_index + 1 + code.len(), '\n');
 }
 
 /// Finds all variables marked as `out` in the given glsl shader and generates
@@ -495,14 +494,25 @@ impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, locat
 impl UniformValue for bool                  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1i(location, if *self { 1 } else { 0 }); } }
 
 /// Shorthand for loading a shader, propagating its outputs and inserting input declarations
-/// for a given vertex type
+/// for a given vertex type. 
 ///
 /// # Parameters
 /// `load_shader!(src, vertex_type)`
 ///
 /// * `src`: The source file from which to load this shader. Should be `AsRef<Path>` 
 ///   (This includes `&str` and `Path`).
-/// * `vertex_type`: The name of a struct which implementes [`Vertex`](buffer/trait.Vertex.html).
+/// * `vertex_type`: The name of a struct which implementes [`Vertex`].
+///
+/// `load_shader!(src, vertex_type => transform_output_type)`
+///
+/// * `src`: The source file from which to load this shader. Should be `AsRef<Path>` 
+///   (This includes `&str` and `Path`).
+/// * `vertex_type`: The name of a struct which implementes [`Vertex`].
+/// * `transform_feedback_output_type`: The name of a struct which implements [`Vertex`]. This
+///    shader can then be used for transform feedback, with `transform_output_type` as a target
+///    type. Output declarations for this vertex type will also be inserted.
+///
+/// [`Vertex`]: buffer/trait.Vertex.html
 ///
 /// # Example
 /// ```rust,ignore
@@ -531,7 +541,17 @@ macro_rules! load_shader {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
-            prototype.build_with_vert::<$vert>()
+            prototype.with_input_vert::<$vert>("in_");
+            prototype.build()
+        })
+    };
+    ($src:expr, $vert:ty => $target:ty) => {
+        ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
+            prototype.propagate_outputs();
+            prototype.bind_to_matrix_storage();
+            prototype.with_input_vert::<$vert>("in_");
+            prototype.with_transform_output_vert::<$target>("out_");
+            prototype.build()
         })
     };
 }

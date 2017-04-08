@@ -81,6 +81,17 @@ pub mod graphics {
         /// The default face side is back, as this is the face you want to cull by default.
         fn default() -> FaceSide { FaceSide::Back } 
     }
+
+    /// Enables/disables rasterization. If disabled, only the vertex shader will be run. This is
+    /// useful when you are only interested in transform feedback. Keep in mind that rasterization
+    /// has to be re-enabled before rendering, otherwise nothing will be shown.
+    pub fn set_rasterization(discard: bool) {
+        if discard {
+            unsafe { gl::Enable(gl::RASTERIZER_DISCARD) };
+        } else {
+            unsafe { gl::Disable(gl::RASTERIZER_DISCARD) };
+        }
+    } 
     
     /// Clears the currently bound framebuffer to the given color. If no color is specified
     /// only the backbuffer is cleared
@@ -98,7 +109,7 @@ pub mod graphics {
     }
 
     /// Toggles depth testing. This only has an effect if the currently bound framebuffer
-    /// has a depthbuffer (The backbuffer allways has a depthbuffer).
+    /// has a depthbuffer (The backbuffer always has a depthbuffer).
     pub fn set_depth_testing(enabled: bool) {
         unsafe {
             if enabled {

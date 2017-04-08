@@ -290,12 +290,30 @@ impl<T: Vertex> VertexBuffer<T> {
         }
     }
 
-    /// Draws the contents of this vertex buffer with the primitive mode specified
-    /// at construction.
+    /// Draws the contents of this vertex buffer with the primitive mode specified at construction.
     pub fn draw(&self) {
         unsafe {
             gl::BindVertexArray(self.vao);
             gl::DrawArrays(self.primitive_mode as GLenum, 0, self.vertex_count as GLsizei);
+        }
+    }
+
+    /// Draws the contents of this vertex buffer, feeding transform feedback data into the given
+    /// buffer. If `rasterization` is set to false the fragment shader will not be run and no data
+    /// will be written to the bound framebuffer.
+    pub fn transform_feedback_into<U>(&self, target: &mut VertexBuffer<U>, rasterization: bool) 
+        where U: Vertex,
+    {
+        unsafe {
+            if !rasterization { gl::Enable(gl::RASTERIZER_DISCARD); }
+
+            gl::BindVertexArray(self.vao);
+            gl::BindBufferBase(gl::TRANSFORM_FEEDBACK_BUFFER, 0, target.vbo);
+            gl::BeginTransformFeedback(self.primitive_mode.gl_base_primitive() as GLenum);
+            gl::DrawArrays(self.primitive_mode as GLenum, 0, self.vertex_count as GLsizei);
+            gl::EndTransformFeedback();
+
+            if !rasterization { gl::Disable(gl::RASTERIZER_DISCARD); }
         }
     }
 }

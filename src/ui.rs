@@ -585,7 +585,9 @@ impl Vertex for Vert {
         }
     }
     // Not used, we manualy declare inputs in the shader
-    fn gen_shader_input_decl() -> String { String::new() }
+    fn gen_shader_input_decl(_name_prefix: &str) -> String { String::new() }
+    fn gen_transform_feedback_decl(_name_prefix: &str) -> String { String::new() }
+    fn gen_transform_feedback_outputs(_name_prefix: &str) -> Vec<String> { Vec::new() }
 }
 
 const VERT_SRC: &'static str = "

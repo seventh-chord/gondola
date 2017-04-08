@@ -8,7 +8,7 @@ use cable_math::{Vec2, Vec3, Vec4, Mat4};
 
 /// Represents different types of primitives which can be drawn on the GPU.
 #[repr(u32)] // GLenum is u32
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PrimitiveMode {
     Points                      = gl::POINTS,
     LineStrip                   = gl::LINE_STRIP,
@@ -21,7 +21,26 @@ pub enum PrimitiveMode {
     Triangles                   = gl::TRIANGLES,
     TriangleStripAdjacency      = gl::TRIANGLE_STRIP_ADJACENCY,
     TrianglesAdjacency          = gl::TRIANGLES_ADJACENCY,
-} 
+}
+
+impl PrimitiveMode {
+    /// Returns the base primitive for this type. Either `gl::POINTS`, `gl::LINES` or
+    /// `gl::TRIANGLES`.
+    pub fn gl_base_primitive(&self) -> GLenum {
+        match *self {
+            PrimitiveMode::Points
+                => gl::POINTS,
+
+            PrimitiveMode::LineStrip | PrimitiveMode::LineLoop | PrimitiveMode::Lines |
+            PrimitiveMode::LineStripAdjacency | PrimitiveMode::LinesAdjacency
+                => gl::LINES,
+
+            PrimitiveMode::TriangleStrip | PrimitiveMode::TriangleFan | PrimitiveMode::Triangles |
+            PrimitiveMode::TriangleStripAdjacency | PrimitiveMode::TrianglesAdjacency
+                => gl::TRIANGLES,
+        }
+    }
+}
 
 /// Represents different gl buffer usage hints. Note that these are hints,
 /// and drivers will not necessarily respect these.
@@ -38,7 +57,7 @@ pub enum PrimitiveMode {
 /// * Read - Data is set by the GPU and read by the application
 /// * Copy - Data is set and read by the GPU
 #[repr(u32)] // GLenum is u32
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BufferUsage {
     StaticDraw  = gl::STATIC_DRAW,
     DynamicDraw = gl::DYNAMIC_DRAW,
@@ -53,7 +72,7 @@ pub enum BufferUsage {
 
 /// Represents a target to which a buffer can be bound
 #[repr(u32)] // GLenum is u32
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum BufferTarget {
     Array               = gl::ARRAY_BUFFER,
     ElementArray        = gl::ELEMENT_ARRAY_BUFFER,
@@ -170,7 +189,10 @@ impl GlIndex for GLubyte {}
 pub trait Vertex: Sized {
     fn bytes_per_vertex() -> usize;
     fn setup_attrib_pointers();
-    fn gen_shader_input_decl() -> String;
+
+    fn gen_shader_input_decl(name_prefix: &str) -> String;
+    fn gen_transform_feedback_outputs(name_prefix: &str) -> Vec<String>;
+    fn gen_transform_feedback_decl(name_prefix: &str) -> String;
 }
 
 /// This trait marks types which can be stored in a GPU buffer.  All fields of a 
