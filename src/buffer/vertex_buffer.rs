@@ -3,7 +3,7 @@ use super::*;
 use gl;
 use gl::types::*;
 use std;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 /// A GPU buffer which holds a list of a custom vertex type. This struct also has utility methods
 /// for rendering the vertices as primitives.
@@ -420,6 +420,13 @@ impl<T: Vertex, E: VertexData> Deref for IndexedVertexBuffer<T, E>
     type Target = VertexBuffer<T>;
     fn deref(&self) -> &VertexBuffer<T> {
         &self.data
+    }
+}
+impl<T: Vertex, E: VertexData> DerefMut for IndexedVertexBuffer<T, E> 
+    where E::Primitive: GlIndex,
+{
+    fn deref_mut(&mut self) -> &mut VertexBuffer<T> {
+        &mut self.data
     }
 }
 

@@ -2,7 +2,7 @@
 use super::*;
 use gl;
 use gl::types::*;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 /// A [`PrimitiveBuffer`] which can be bound to a texture target and accessed from shaders. This
 /// struct dereferences to [`PrimitiveBuffer`], so it can be used like a normal buffer when needed.
@@ -83,5 +83,10 @@ impl<T: VertexData> Deref for TextureBuffer<T> {
     type Target = PrimitiveBuffer<T>;
     fn deref(&self) -> &PrimitiveBuffer<T> {
         &self.buffer
+    }
+}
+impl<T: VertexData> DerefMut for TextureBuffer<T> {
+    fn deref_mut(&mut self) -> &mut PrimitiveBuffer<T> {
+        &mut self.buffer
     }
 }
