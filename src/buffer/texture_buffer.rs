@@ -71,7 +71,7 @@ impl<T: VertexData> TextureBuffer<T> {
 
     /// Binds this buffer to the given texture unit. Note that this binds the texture to the
     /// `gl::TEXTURE_BUFFER` target.
-    pub fn bind(&self, unit: u32) {
+    pub fn bind_texture(&self, unit: u32) {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0 + unit);
             gl::BindTexture(gl::TEXTURE_BUFFER, self.texture);
