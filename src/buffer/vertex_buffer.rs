@@ -50,8 +50,8 @@ pub struct VertexBuffer<T: Vertex> {
     // We are generic over the vertex type, but dont actually store any vertices
     phantom: std::marker::PhantomData<T>,
 
-    vertex_count: usize,
-    allocated: usize,
+    vertex_count: usize, // Used space, in number of vertices
+    allocated: usize, // Allocated space, in number of vertices
 
     primitive_mode: PrimitiveMode,
     usage: BufferUsage,

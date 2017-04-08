@@ -3,6 +3,7 @@ use super::*;
 use gl;
 use gl::types::*;
 use std::ops::{Deref, DerefMut};
+use std::cell::UnsafeCell;
 
 /// A [`PrimitiveBuffer`] which can be bound to a texture target and accessed from shaders. This
 /// struct dereferences to [`PrimitiveBuffer`], so it can be used like a normal buffer when needed.
@@ -10,6 +11,12 @@ use std::ops::{Deref, DerefMut};
 /// [`PrimitiveBuffer`]:           struct.PrimitiveBuffer.html
 pub struct TextureBuffer<T: VertexData> {
     buffer: PrimitiveBuffer<T>,
+    /// Because the buffer may reallocate we need to be able to detect if the underlying buffer has
+    /// changed
+    bound_buffer: UnsafeCell<GLuint>,
+    /// Format of the texture as seen by shaders
+    format: GLenum,
+
     texture: GLuint,
 }
 
@@ -33,7 +40,7 @@ impl<T: VertexData> TextureBuffer<T> {
 
     /// Converts a vertex buffer into a texture buffer. 
     ///
-    /// `access_primitives` specifies the number of primitives that will be accessible per texel in 
+    /// `access_primitives` specifies the number of primitives that will be accessible per texel in
     /// a shader. This must be between 1 and 4 (both inclusive), and `T::primitives()` must be 
     /// divisible by it. For example, if your vertex data has 10 primitives `access_primitives` can
     /// be 1 and 2.
@@ -64,17 +71,26 @@ impl<T: VertexData> TextureBuffer<T> {
         }
 
         TextureBuffer {
+            bound_buffer: UnsafeCell::new(buffer.buffer),
             buffer: buffer,
+            format: format,
             texture: texture,
         }
     }
 
-    /// Binds this buffer to the given texture unit. Note that this binds the texture to the
+    /// Binds this buffer to the given texture unit. Note that this binds the texture to the 
     /// `gl::TEXTURE_BUFFER` target.
     pub fn bind_texture(&self, unit: u32) {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0 + unit);
             gl::BindTexture(gl::TEXTURE_BUFFER, self.texture);
+
+            // Ensure that the internal buffer has not replaced its internal buffer object under us
+            let bound = self.bound_buffer.get();
+            if *bound != self.buffer.buffer {
+                gl::TexBuffer(gl::TEXTURE_BUFFER, self.format, self.buffer.buffer);
+                *bound = self.buffer.buffer;
+            }
         }
     }
 }
@@ -88,5 +104,13 @@ impl<T: VertexData> Deref for TextureBuffer<T> {
 impl<T: VertexData> DerefMut for TextureBuffer<T> {
     fn deref_mut(&mut self) -> &mut PrimitiveBuffer<T> {
         &mut self.buffer
+    }
+}
+
+impl<T: VertexData> Drop for TextureBuffer<T> {
+    fn drop(&mut self) {
+        unsafe {
+            gl::DeleteTextures(1, &self.texture);
+        }
     }
 }

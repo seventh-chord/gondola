@@ -136,9 +136,8 @@ impl ShaderPrototype {
     /// *Implementation note*: Matricies are stored at the last valid uniform buffer binding index.
     pub fn bind_to_matrix_storage(&mut self) {
         let uniform_block_decl = "layout(shared,std140) uniform MatrixBlock { mat4 mvp; mat4 model_mat; mat4 normal_mat; };";
-        if self.geom_src.is_empty() {
-            prepend_code(&mut self.vert_src, uniform_block_decl);
-        } else {
+        prepend_code(&mut self.vert_src, uniform_block_decl);
+        if !self.geom_src.is_empty() {
             prepend_code(&mut self.geom_src, uniform_block_decl);
         }
         self.bind_to_matrix_storage = true;
