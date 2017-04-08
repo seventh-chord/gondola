@@ -147,7 +147,7 @@ impl Texture {
         self.format = format;
     }
 
-    /// Binds this texture to the given texture unit
+    /// Binds this texture to the given texture unit.
     pub fn bind(&self, unit: u32) {
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0 + unit);

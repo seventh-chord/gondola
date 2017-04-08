@@ -1,7 +1,7 @@
 
 //! Utilities for storing and drawing data in GPU buffers.
 //!
-//! This module defines four primary structs for storing data:
+//! This module defines five primary structs for storing data:
 //!
 //!  - [`VertexBuffer`] is the simplest to use type, and you probably want to use it in most cases.
 //!    To use it you define a custom type which implements [`Vertex`]. You can then store a slice of
@@ -12,12 +12,15 @@
 //!    store any type which implements [`VertexData`] in a graphics buffer. Primitive buffers are
 //!    used when you need low level control over how data is managed, or when you want to do
 //!    something not exposed through vertex buffers. 
+//!  - [`TextureBuffer`] is a primitives buffer which can be bound to a texture target. This allows you
+//!    to access the data stored in it from glsl using a `samplerBuffer`.
 //!  - [`VertexArray`] is used to specify how data in a primitive buffer is passed to a shader. You
 //!    usually want to use a [`VertexBuffer`], which automatically manages primitive buffers and
 //!    vertex arrays for you.
 //!
 //! [`VertexBuffer`]:           struct.VertexBuffer.html
 //! [`IndexedVertexBuffer`]:    struct.IndexedVertexBuffer.html
+//! [`TextureBuffer`]:          struct.TextureBuffer.html
 //! [`PrimitiveBuffer`]:        struct.PrimitiveBuffer.html
 //! [`VertexArray`]:            struct.VertexArray.html
 //! [`Vertex`]:                 trait.Vertex.html 
@@ -29,10 +32,12 @@ const DEFAULT_SIZE: usize = 100;
 mod primitives;
 mod vertex_buffer;
 mod primitive_buffer;
+mod texture_buffer;
 
 pub use self::primitives::*;
 pub use self::vertex_buffer::*;
 pub use self::primitive_buffer::*;
+pub use self::texture_buffer::*;
 
 /// Reperesents the data needed for a call to `gl::EnableVertexAttribArray`,
 /// `gl::VertexAttribPointer` and `gl::VertexAttribDivisor`. This is mainly
