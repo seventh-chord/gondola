@@ -32,10 +32,22 @@ impl<T: Copy> Copy for Vec2<T> {}
 impl<T: Copy> Copy for Vec3<T> {}
 impl<T: Copy> Copy for Vec4<T> {}
 
-// General functions
-impl<T: Num + Copy> Vec2<T> {
+// Constructors
+impl<T> Vec2<T> {
     /// Creates a new vector with the given components
     pub fn new(x: T, y: T) -> Vec2<T> { Vec2 { x: x, y: y } }
+}
+impl<T> Vec3<T> {
+    /// Creates a new vector with the given components
+    pub fn new(x: T, y: T, z: T) -> Vec3<T> { Vec3 { x: x, y: y, z: z } }
+}
+impl<T> Vec4<T> {
+    /// Creates a new vector with the given components
+    pub fn new(x: T, y: T, z: T, w: T) -> Vec4<T> { Vec4 { x: x, y: y, z: z, w: w } }
+}
+
+// General functions
+impl<T: Num + Copy> Vec2<T> {
     /// Creates a new vector with all components set to 0
     pub fn zero() -> Vec2<T> { Vec2 { x: T::zero(), y: T::zero() } }
 
@@ -87,8 +99,6 @@ impl<T: Num + Copy> Vec2<T> {
 
 }
 impl<T: Num + Copy> Vec3<T> {
-    /// Creates a new vector with the given components
-    pub fn new(x: T, y: T, z: T) -> Vec3<T> { Vec3 { x: x, y: y, z: z } }
     /// Creates a new vector with all components set to 0
     pub fn zero() -> Vec3<T> { Vec3 { x: T::zero(), y: T::zero(), z: T::zero() } }
     
@@ -112,8 +122,6 @@ impl<T: Num + Copy> Vec3<T> {
     }
 }
 impl<T: Num + Copy> Vec4<T> {
-    /// Creates a new vector with the given components
-    pub fn new(x: T, y: T, z: T, w: T) -> Vec4<T> { Vec4 { x: x, y: y, z: z, w: w } }
     /// Creates a new vector with all components set to 0
     pub fn zero() -> Vec4<T> { Vec4 { x: T::zero(), y: T::zero(), z: T::zero(), w: T::zero() } }
 

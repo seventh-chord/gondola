@@ -4,6 +4,11 @@ name = "cable_math"
 version = "0.1.0"
 authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 
+[features]
+default = []
+derive = ["serde"]
+
 [dependencies]
 num = "0.1.*"
-
+# Only needed if we want custom derives for vector types
+serde = { version = "0.9", optional = true }
