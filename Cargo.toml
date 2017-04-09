@@ -4,6 +4,10 @@ name = "gondola"
 version = "0.1.0"
 authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 
+[features]
+default = []
+serialize = ["serde"]
+
 [dependencies]
 gondola_derive = { path = "gondola_derive" }
 cable_math = { path = "cable_math" }
@@ -12,4 +16,5 @@ gl = "*"
 png = "0.6"
 rusttype = "0.2"
 bitflags = "0.8"
-
+# Only needed if we want custom serialization derives for color types
+serde = { version = "0.9", optional = true }

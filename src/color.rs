@@ -47,18 +47,21 @@ impl Color {
     /// and b is a hexadecimal digit.
     ///
     /// If the string is not valid, this returns solid white.
-    pub fn hex(string: &str) -> Color {
+    pub fn hex(string: &str) -> Option<Color> {
         let value = {
             if string.len() == 6 {
                 u32::from_str_radix(string, 16)
             } else if string.len() == 7 {
                 u32::from_str_radix(&string[1..], 16)
             } else {
-                Ok(0xffffff) // White
+                return None
             }
-        }.unwrap_or(0xffffff);
+        };
 
-        Color::hex_int(value)
+        match value {
+            Ok(value) => Some(Color::hex_int(value)),
+            Err(_) =>    None,
+        }
     }
 
     /// Creates a color from a hex int. Bit `0..8` (The eight least significant bits) are the
@@ -82,6 +85,16 @@ impl Color {
         let b = b as f32 / 255.0;
 
         Color { r: r, g: g, b: b, a: 1.0 }
+    }
+
+    /// Converts this color to a hex string like "#ffa13b". Note that this function currently
+    /// ignores the alpha channel.
+    pub fn to_hex(&self) -> String {
+        let r = (self.r * 255.0) as u32;
+        let g = (self.g * 255.0) as u32;
+        let b = (self.b * 255.0) as u32;
+        let value = r << 16 | g << 8 | b;
+        format!("#{:06x}", value)
     }
 
     /// Creates a new color based on this color, with the red,
@@ -115,6 +128,60 @@ impl VertexData for Color {
 impl UniformValue for Color {
     unsafe fn set_uniform(&self, location: GLint) {
         gl::Uniform4f(location, self.r, self.g, self.b, self.a);
+    }
+}
+
+// Custom serialization
+#[cfg(feature = "serialize")]
+mod serialize {
+    use super::*;
+
+    use std::fmt;
+    use std::marker::PhantomData;
+    use serde::{Serialize, Deserialize, Serializer, Deserializer};
+    use serde::ser::{SerializeSeq};
+    use serde::de::{Visitor, SeqVisitor, Error};
+
+    impl Serialize for Color {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            s.serialize_str(&self.to_hex())
+        }
+    }
+
+    impl Deserialize for Color {
+        fn deserialize<D: Deserializer>(d: D) -> Result<Self, D::Error> {
+            d.deserialize_str(ColorVisitor)
+        }
+    }
+
+    struct ColorVisitor;
+    impl Visitor for ColorVisitor {
+        type Value = Color;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("A string representing a valid hex color")
+        }
+
+        fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
+            match Color::hex(v) {
+                Some(color) => Ok(color),
+                None =>        Err(E::custom(format!("\"{}\" is not a valid color string", v))),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_hex() {
+        assert_eq!("#ffa3b1", Color::hex("#ffa3b1").unwrap().to_hex());
+        assert_eq!("#a300f1", Color::hex("#a300f1").unwrap().to_hex());
+        assert_eq!("#000000", Color::hex("#000000").unwrap().to_hex());
+        assert_eq!("#000001", Color::hex("#000001").unwrap().to_hex());
+        assert_eq!("#100000", Color::hex("#100000").unwrap().to_hex());
     }
 }
 

@@ -21,6 +21,8 @@ extern crate cable_math;
 extern crate rusttype;
 #[macro_use]
 extern crate bitflags;
+#[cfg(feature = "serialize")]
+extern crate serde;
 
 mod color;
 mod matrix_stack;

@@ -1,12 +1,12 @@
 
 extern crate num;
 
-#[cfg(feature = "derive")]
+#[cfg(feature = "serialize")]
 extern crate serde;
 
 pub mod vec;
 pub mod mat;
-#[cfg(feature = "derive")]
+#[cfg(feature = "serialize")]
 mod serialize;
 
 pub use vec::*;

@@ -464,13 +464,13 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Style {
         Style {
-            base_color:      Color::hex("4c4665"),
-            hover_color:     Color::hex("575074"),
-            hold_color:      Color::hex("413c56"),
-            top_color:       Color::hex("403147"),
-            top_hold_color:  Color::hex("2a2738"),
-            caret_color:     Color::hex("ffffff"),
-            text_color:      Color::hex("ffffff"),
+            base_color:      Color::hex_int(0x4c4665),
+            hover_color:     Color::hex_int(0x575074),
+            hold_color:      Color::hex_int(0x413c56),
+            top_color:       Color::hex_int(0x403147),
+            top_hold_color:  Color::hex_int(0x2a2738),
+            caret_color:     Color::hex_int(0xffffff),
+            text_color:      Color::hex_int(0xffffff),
 
             padding: Vec2::new(10.0, 6.0),
             caret_width: 2.0,
