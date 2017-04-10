@@ -137,10 +137,8 @@ mod serialize {
     use super::*;
 
     use std::fmt;
-    use std::marker::PhantomData;
     use serde::{Serialize, Deserialize, Serializer, Deserializer};
-    use serde::ser::{SerializeSeq};
-    use serde::de::{Visitor, SeqVisitor, Error};
+    use serde::de::{Visitor, Error};
 
     impl Serialize for Color {
         fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {

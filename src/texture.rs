@@ -256,7 +256,7 @@ impl TextureFormat {
         match *self {
             TextureFormat::RGBA_F32 | TextureFormat::RGBA_F16 | TextureFormat::RGBA_8 => gl::RGBA,
             TextureFormat::RGB_F32 | TextureFormat::RGB_F16 | TextureFormat::RGB_8 => gl::RGB,
-            TextureFormat::R_F32 | TextureFormat::R_F16 | TextureFormat::R_8 => gl::RED
+            TextureFormat::R_F32 | TextureFormat::R_F16 | TextureFormat::R_8 => gl::RED,
         }
     }
 
@@ -266,6 +266,24 @@ impl TextureFormat {
             TextureFormat::RGBA_F32 | TextureFormat::RGB_F32 | TextureFormat::R_F32 => gl::FLOAT,
             TextureFormat::RGBA_F16 | TextureFormat::RGB_F16 | TextureFormat::R_F16 => gl::FLOAT,
             TextureFormat::RGBA_8 | TextureFormat::RGB_8 | TextureFormat::R_8 => gl::UNSIGNED_BYTE,
+        }
+    }
+
+    /// The name of the OpenGL primitive associated with this color format.
+    pub fn gl_primitive_enum_name(&self) -> &'static str {
+        match *self {
+            TextureFormat::RGBA_F32 | TextureFormat::RGB_F32 | TextureFormat::R_F32 => "GLfloat",
+            TextureFormat::RGBA_F16 | TextureFormat::RGB_F16 | TextureFormat::R_F16 => "GLfloat",
+            TextureFormat::RGBA_8 | TextureFormat::RGB_8 | TextureFormat::R_8 => "GLbyte",
+        }
+    }
+
+    /// The number of components this color format has. For example, `RGB_8` has 3 components.
+    pub fn components(&self) -> usize {
+        match *self {
+            TextureFormat::RGBA_F32 | TextureFormat::RGBA_F16 | TextureFormat::RGBA_8 => 4,
+            TextureFormat::RGB_F32 | TextureFormat::RGB_F16 | TextureFormat::RGB_8 => 3,
+            TextureFormat::R_F32 | TextureFormat::R_F16 | TextureFormat::R_8 => 1,
         }
     }
 }

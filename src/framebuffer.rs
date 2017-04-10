@@ -8,6 +8,7 @@ use gl::types::*;
 
 use color::Color;
 use texture::{Texture, TextureFormat};
+use buffer::{VertexData, GlPrimitive};
 
 /// Set to 8, which 97% of all cards support, acording to the [wildfiregames report][1]
 /// [1]: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_COLOR_ATTACHMENTS_EXT
@@ -242,6 +243,55 @@ impl Framebuffer {
             use std::mem;
             gl::ClearBufferfv(gl::COLOR, index as GLint, mem::transmute(&color));
         }
+    }
+
+    /// Retrieves the pixels from the given region in the given color attachment. Returns all
+    /// pixels in row-major order. Because a framebuffers attachments types are not strongly typed
+    /// it is critical that `T` is a type which has the same format as the color attachment.
+    ///
+    /// # Panics
+    ///
+    ///  * If the region is outside of the bounds of this framebuffer. 
+    ///  * If the index does not point to a valid color attachment.
+    ///  * If T has a different number of primitives than the given color attachment.
+    ///  * If T has a different primitive type than the given color attachment.
+    pub fn get_pixel_data<T>(&self, index: usize, x: u32, y: u32, width: u32, height: u32) -> Vec<T> 
+        where T: VertexData,
+    {
+        let mut data = Vec::<T>::with_capacity((width * height) as usize);
+
+        if index > MAX_COLOR_ATTACHMENTS && self.textures[index].is_none() {
+            panic!("Invalid call to get_pixel_data. {} is not a valid color attachment.", index);
+        }
+        let format = match self.textures[index] {
+            Some(ref texture) => texture.format,
+            None => unreachable!(), // We check if texture is None above
+        };
+
+        if T::primitives() != format.components() {
+            panic!("Invalid call to get_pixel_data. T has a different number of primitives than {:?}.", format);
+        }
+
+        if T::Primitive::gl_enum() != format.gl_primitive_enum() {
+            panic!("Invalid call to get_pixel_data. T has a different primitive type than color attachment {}. ({} vs {})",
+                   index, T::Primitive::gl_name(), format.gl_primitive_enum_name());
+        }
+
+        if x + width > self.width && y + height > self.height {
+            panic!("Invalid call to get_pixel_data, The rectangle (x: {}, y: {}, width: {}, height: {}) is outside of the\
+                   region of the framebuffer (width: {}, height: {}).",
+                   x, y, width, height, self.width, self.height);
+        }
+
+        unsafe {
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer);
+            gl::ReadBuffer(gl::COLOR_ATTACHMENT0 + index as u32);
+            gl::ReadPixels(x as GLint, y as GLint, width as GLsizei, height as GLsizei,
+                           format.unsized_format(), format.gl_primitive_enum(), data.as_ptr() as *mut _);
+            data.set_len((width * height) as usize);
+        }
+
+        data
     }
 }
 
