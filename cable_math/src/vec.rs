@@ -308,6 +308,75 @@ impl<T: Float> Vec3<T> {
             z: self.z.round(),
         }
     }
+
+    /// Rotates this vector by the given amount of radians around the x-axis in the
+    /// counter-clockwise direction.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec3;
+    ///
+    /// let a = Vec3::new(1.0, 0.0, 1.0);
+    /// let b = Vec3::new(1.0, -1.0, 0.0);
+    ///
+    /// let dif = b - a.rotate_x(1.571); // Approximately π/2
+    ///
+    /// assert!(dif.len() < 0.001);
+    /// ```
+    pub fn rotate_x(self, angle: T) -> Vec3<T> {
+        let cos = angle.cos();
+        let sin = angle.sin();
+        Vec3 {
+            x: self.x,
+            y: self.y*cos - self.z*sin,
+            z: self.y*sin + self.z*cos,
+        }
+    }
+
+    /// Rotates this vector by the given amount of radians around the y-axis in the
+    /// counter-clockwise direction.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec3;
+    ///
+    /// let a = Vec3::new(1.0, -1.0, 1.0);
+    /// let b = Vec3::new(-1.0, -1.0, 1.0);
+    ///
+    /// let dif = b - a.rotate_y(1.571); // Approximately π/2
+    ///
+    /// assert!(dif.len() < 0.001);
+    /// ```
+    pub fn rotate_y(self, angle: T) -> Vec3<T> {
+        let cos = angle.cos();
+        let sin = angle.sin();
+        Vec3 {
+            x: self.x*cos - self.z*sin,
+            y: self.y,
+            z: self.x*sin + self.z*cos,
+        }
+    }
+
+    /// Rotates this vector by the given amount of radians around the z-axis in the
+    /// counter-clockwise direction.
+    /// # Example
+    /// ```
+    /// use cable_math::Vec3;
+    ///
+    /// let a = Vec3::new(1.0, 0.0, 1.0);
+    /// let b = Vec3::new(0.0, 1.0, 1.0);
+    ///
+    /// let dif = b - a.rotate_z(1.571); // Approximately π/2
+    ///
+    /// assert!(dif.len() < 0.001);
+    /// ```
+    pub fn rotate_z(self, angle: T) -> Vec3<T> {
+        let cos = angle.cos();
+        let sin = angle.sin();
+        Vec3 {
+            x: self.x*cos - self.y*sin,
+            y: self.x*sin + self.y*cos,
+            z: self.z,
+        }
+    }
 }
 impl<T: Float> Vec4<T> {
     /// Calculates the length of this vector
