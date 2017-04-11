@@ -155,9 +155,26 @@ impl Ui {
         }
     }
 
-    /// Shows a new button with the given text at the given location. Returns true if the button
-    /// was pressed. Note that this function needs to be called every frame you want to see the
-    /// button.
+    /// Shows a new toggle button which toggles between showing `on_text` and `off_text` whenever
+    /// the button is pressed. Note that this function needs to be called every frame if you want
+    /// to see the button. Only the `on_text` is used to create the id for this button, so only it
+    /// needs to be unique. Additionally, there is a separate id "pool" for toggle buttons, so you
+    /// can have buttons and toggle buttons with the same nameThe same rules as for naming buttons 
+    /// apply.
+    ///
+    /// Returns true if the button was toggled
+    pub fn toggle_button(&mut self, on_text: &str, off_text: &str, state: &mut bool) -> bool {
+        let (id, on_text) = id_and_text(on_text, CompType::ToggleButton);
+        let text = if *state { on_text } else { off_text };
+        let toggle = self.button_internal(text, id).2;
+        if toggle {
+            *state = !*state;
+        }
+        toggle
+    }
+
+    /// Shows a new button with the given text. Returns true if the button was pressed. Note that 
+    /// this function needs to be called every frame if you want to see the button.
     ///
     /// Every button should have a unique display text. Buttons with the same name will behave
     /// like a singe button. If the text contains the character sequence "##", that sequence and
@@ -503,6 +520,7 @@ struct Id(u64, CompType);
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum CompType {
     Button,
+    ToggleButton,
     Slider,
     Textbox,
 }
