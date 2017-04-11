@@ -307,12 +307,32 @@ impl Shader {
         }
     }
 
+    /// Sets the uniform with the given name to the given value. This prints a warning if no
+    /// uniform with the given name exists.
     pub fn set_uniform<T: UniformValue>(&self, uniform_name: &str, value: T) {
         if let Some(location) = self.get_uniform_location(uniform_name) {
             self.bind();
             unsafe { value.set_uniform(location); }
         } else {
-            println!("Invalid uniform name: {}", uniform_name); // Maybe panic
+            // The reason we simply print a error here is because it sometimes is convenient to
+            // ignore a uniform while refactoring a shader. panicing or returning some result would
+            // force changing rust code when glsl code is changed, which slows down the development
+            // process.
+            println!("Invalid uniform name: {}", uniform_name); 
+        }
+    }
+
+    /// Sets the uniform at the given offset from the given name to the given value. When a uniform
+    /// is an array this can be used to set a specific element of that array. For example, if the
+    /// shader contains `uniform vec3 positions[2];`, `set_uniform_with_offset(1, "positions", ...)`
+    /// will modify the second elment of the positions array.  This prints a warning if no uniform 
+    /// with the given name exists.
+    pub fn set_uniform_with_offset<T: UniformValue>(&self, offset: usize, uniform_name: &str, value: T) {
+        if let Some(location) = self.get_uniform_location(uniform_name) {
+            self.bind();
+            unsafe { value.set_uniform(location + offset as GLint); }
+        } else {
+            println!("Invalid uniform name: {}", uniform_name); 
         }
     }
 }

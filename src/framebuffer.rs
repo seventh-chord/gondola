@@ -100,8 +100,8 @@ impl Framebuffer {
                         gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                         gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                         gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
-                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
-                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
                     }
 
                     gl::FramebufferTexture(gl::FRAMEBUFFER, attachment, texture, 0);
@@ -289,6 +289,7 @@ impl Framebuffer {
             gl::ReadPixels(x as GLint, y as GLint, width as GLsizei, height as GLsizei,
                            format.unsized_format(), format.gl_primitive_enum(), data.as_ptr() as *mut _);
             data.set_len((width * height) as usize);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         }
 
         data
