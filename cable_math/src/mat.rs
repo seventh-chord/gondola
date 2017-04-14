@@ -166,7 +166,8 @@ impl<T: Num + Copy> Mat4<T> {
 }
 
 impl<T: Float + Copy> Mat4<T> {
-    /// Creates a new perspective projection matrix. FOV should be in degrees
+    /// Creates a new perspective projection matrix. `fov` is the vertical field of view and should
+    /// be in degrees.
     pub fn perspective(fov: T, aspect: T, near: T, far: T) -> Mat4<T> {
         let two = T::one() + T::one();
         let top = (fov / two).to_radians().tan() * near;

@@ -61,7 +61,7 @@ impl InputManager {
                 Event::MouseMoved(x, y) => {
                     let old_mouse_pos = self.mouse_pos;
                     self.mouse_pos = Vec2::new(x as f32, y as f32);
-                    self.mouse_delta = self.mouse_pos - old_mouse_pos;
+                    self.mouse_delta += self.mouse_pos - old_mouse_pos;
                 },
                 Event::MouseInput(state, button) => {
                     let index = match button {

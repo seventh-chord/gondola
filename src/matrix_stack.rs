@@ -43,7 +43,7 @@ impl MatrixStack {
     }
 
     /// Sets the projection matrix to a perspective projection with the given parameters.
-    /// `fov` should be given in radians.
+    /// `fov` is the vertical field of view and should be given in degrees.
     pub fn perspective(&mut self, fov: f32, aspect: f32, near: f32, far: f32) {
         self.projection = Mat4::perspective(fov, aspect, near, far);
     }
