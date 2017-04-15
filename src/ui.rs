@@ -188,8 +188,7 @@ impl Ui {
     /// Internal version of the `button` method, which allows specifying a separate id for 
     /// the button. This allows a button to be used as the "host" for another component.
     ///
-    /// This function returns the width and height of this button, as well as true if the button
-    /// was pressed.
+    /// Returns `(width, height, pressed)`.
     ///
     /// The text passed to this function will be displayed on the button directly, without checking
     /// for a "##" sequence.
@@ -219,25 +218,65 @@ impl Ui {
     }
 
     /// Inserts the given string into the gui. If an alignment is given the label will have the
-    /// default component size, and the text in it will be drawn based on that alignment.
+    /// default component size, and the text in it will be drawn based on that alignment. Returns
+    /// true if the label is currently hovered.
     pub fn label(&mut self, text: &str, alignment: Option<Alignment>) {
-        if let Some(alignment) = alignment {
-            let width = self.style.comp_width;
-            let height = self.default_height();
-            let size = Vec2::new(width, height);
+        let (width, height, actual_alignment);
 
-            text_in_quad(&mut self.font, self.caret, size, self.style.padding, 
-                         text, alignment, self.style.text_color);
-            self.advance_caret(width, height);
-        } else {
-            let width = self.font.font().width(text, FONT_SIZE);
-            let height = self.default_height();
-            let size = Vec2::new(width, height);
-
-            text_in_quad(&mut self.font, self.caret, size, self.style.padding, 
-                         text, Alignment::Left, self.style.text_color);
-            self.advance_caret(width, height);
+        match alignment {
+            Some(alignment) => {
+                actual_alignment = alignment;
+                width = self.style.comp_width;
+                height = self.default_height();
+            },
+            None => {
+                actual_alignment = Alignment::Left;
+                width = self.font.font().width(text, FONT_SIZE);
+                height = self.default_height();
+            },
         }
+
+        let size = Vec2::new(width, height);
+        let pos = self.caret;
+
+        text_in_quad(&mut self.font, pos, size, self.style.padding, 
+                     text, actual_alignment, self.style.text_color);
+        self.advance_caret(width, height);
+    }
+
+    /// Inserts the given string into the gui. If an alignment is given the label will have the
+    /// default component size, and the text in it will be drawn based on that alignment. This
+    /// label differs from the normal label in that it can be hovered, and will change color if 
+    /// hovered. Returns true if the label is currently hovered.
+    pub fn label_hover(&mut self, text: &str, alignment: Option<Alignment>) -> bool {
+        let (width, height, actual_alignment);
+
+        match alignment {
+            Some(alignment) => {
+                actual_alignment = alignment;
+                width = self.style.comp_width;
+                height = self.default_height();
+            },
+            None => {
+                actual_alignment = Alignment::Left;
+                width = self.font.font().width(text, FONT_SIZE);
+                height = self.default_height();
+            },
+        }
+
+        let size = Vec2::new(width, height);
+        let pos = self.caret;
+
+        let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
+            self.mouse_pos.x < pos.x + width && self.mouse_pos.y < pos.y + height;
+
+        let color = if hovered { self.style.text_color_hovered } else { self.style.text_color };
+
+        text_in_quad(&mut self.font, pos, size, self.style.padding, 
+                     text, actual_alignment, color);
+        self.advance_caret(width, height);
+
+        hovered
     }
 
     /// Creates a new slider that allows selecting values from the given range. Returns a value
@@ -472,6 +511,7 @@ pub struct Style {
     pub top_hold_color: Color,
     pub caret_color: Color,
     pub text_color: Color,
+    pub text_color_hovered: Color,
 
     pub padding: Vec2<f32>,
     pub margin: Vec2<f32>,
@@ -481,13 +521,14 @@ pub struct Style {
 impl Default for Style {
     fn default() -> Style {
         Style {
-            base_color:      Color::hex_int(0x4c4665),
-            hover_color:     Color::hex_int(0x575074),
-            hold_color:      Color::hex_int(0x413c56),
-            top_color:       Color::hex_int(0x403147),
-            top_hold_color:  Color::hex_int(0x2a2738),
-            caret_color:     Color::hex_int(0xffffff),
-            text_color:      Color::hex_int(0xffffff),
+            base_color:         Color::hex_int(0x4c4665),
+            hover_color:        Color::hex_int(0x575074),
+            hold_color:         Color::hex_int(0x413c56),
+            top_color:          Color::hex_int(0x403147),
+            top_hold_color:     Color::hex_int(0x2a2738),
+            caret_color:        Color::hex_int(0xffffff),
+            text_color:         Color::hex_int(0xffffff),
+            text_color_hovered: Color::hex_int(0xccccdd),
 
             padding: Vec2::new(10.0, 6.0),
             caret_width: 2.0,
