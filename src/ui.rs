@@ -37,6 +37,7 @@ pub struct Ui {
     held: Option<Id>,
     focused: Option<Id>,
 
+    salt: String,
     internal_fmt_string: String,
     slider_map: HashMap<Id, f32>,
 
@@ -72,6 +73,7 @@ impl Ui {
             held: None,
             focused: None,
 
+            salt: String::new(),
             internal_fmt_string: String::new(),
             slider_map: HashMap::new(),
             textbox_map: HashMap::new(),
@@ -127,6 +129,13 @@ impl Ui {
         self.font.draw();
     }
 
+    /// Sets a string which is used to salt all names when producing ids. Multiple components of
+    /// the same type can have the same name as long as a different salt is set when adding each
+    /// of the components. Note that the same salt should be used for each component every frame.
+    pub fn set_salt(&mut self, salt: &str) {
+        self.salt = salt.to_owned();
+    }
+
     /// Moves the internal caret to the given position. Consecutive items will be inserted at
     /// the caret.
     pub fn set_caret(&mut self, pos: Vec2<f32>, line_dir: LineDir) {
@@ -155,6 +164,15 @@ impl Ui {
         }
     }
 
+    /// Inserts a blank line and advances the caret to the next line (See [`next_line`]).
+    /// [`next_line`]: struct.Ui.html#method.next_line
+    pub fn blank_line(&mut self) {
+        let width = self.style.comp_width;
+        let height = self.default_height();
+        self.advance_caret(width, height);
+        self.next_line();
+    }
+
     /// Shows a new toggle button which toggles between showing `on_text` and `off_text` whenever
     /// the button is pressed. Note that this function needs to be called every frame if you want
     /// to see the button. Only the `on_text` is used to create the id for this button, so only it
@@ -164,7 +182,7 @@ impl Ui {
     ///
     /// Returns true if the button was toggled
     pub fn toggle_button(&mut self, on_text: &str, off_text: &str, state: &mut bool) -> bool {
-        let (id, on_text) = id_and_text(on_text, CompType::ToggleButton);
+        let (id, on_text) = id_and_text(on_text, CompType::ToggleButton, &self.salt);
         let text = if *state { on_text } else { off_text };
         let toggle = self.button_internal(text, id).2;
         if toggle {
@@ -181,7 +199,7 @@ impl Ui {
     /// any subsequent characters will not be shown. Using this, you can have multiple buttons
     /// show the same text.
     pub fn button(&mut self, text: &str) -> bool {
-        let (id, text) = id_and_text(text, CompType::Button);
+        let (id, text) = id_and_text(text, CompType::Button, &self.salt);
         self.button_internal(text, id).2
     }
 
@@ -287,7 +305,7 @@ impl Ui {
     /// any subsequent characters will not be shown. Using this, you can have multiple sliders
     /// show the same text.
     pub fn slider(&mut self, text: &str, range: Range<f32>) -> f32 {
-        let id = Id::from_str(text, CompType::Slider);
+        let id = Id::from_str(text, CompType::Slider, &self.salt);
         let mut value = *self.slider_map.entry(id).or_insert((range.start + range.end) / 2.0);
         self.slider_ptr(text, range, &mut value);
         self.slider_map.insert(id, value);
@@ -303,7 +321,7 @@ impl Ui {
     /// any subsequent characters will not be shown. Using this, you can have multiple sliders
     /// show the same text.
     pub fn slider_ptr(&mut self, text: &str, range: Range<f32>, value: &mut f32) -> bool {
-        let (id, text) = id_and_text(text, CompType::Slider);
+        let (id, text) = id_and_text(text, CompType::Slider, &self.salt);
 
         let width = self.style.comp_width;
         let height = self.default_height();
@@ -361,7 +379,7 @@ impl Ui {
     /// Creates a new textbox. The title will not be displayed, but should be a unique identifier
     /// for this textbox.
     pub fn textbox(&mut self, title: &str) -> &str {
-        let id = Id::from_str(title, CompType::Textbox);
+        let id = Id::from_str(title, CompType::Textbox, &self.salt);
         let pos = self.caret;
 
         let (width, height, pressed) = self.button_internal("", id);
@@ -567,19 +585,20 @@ enum CompType {
 }
 
 impl Id {
-    fn from_str(text: &str, ty: CompType) -> Id {
+    fn from_str(text: &str, ty: CompType, salt: &str) -> Id {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hasher, Hash};
 
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);
+        salt.hash(&mut hasher);
         let id = hasher.finish();
 
         Id(id, ty)
     }
 }
-fn id_and_text(text: &str, ty: CompType) -> (Id, &str) {
-    let id = Id::from_str(text, ty);
+fn id_and_text<'a, 'b>(text: &'a str, ty: CompType, salt: &'b str) -> (Id, &'a str) {
+    let id = Id::from_str(text, ty, salt);
     let name = text.split("##").next().unwrap();
     (id, name)
 }
