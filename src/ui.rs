@@ -163,13 +163,35 @@ impl Ui {
             },
         }
     }
-
-    /// Inserts a blank line and advances the caret to the next line (See [`next_line`]).
+    
+    /// Draws a separator and advances to the next line. See [`next_line`] for more info.
+    ///
     /// [`next_line`]: struct.Ui.html#method.next_line
-    pub fn blank_line(&mut self) {
-        let width = self.style.comp_width;
-        let height = self.default_height();
-        self.advance_caret(width, height);
+    pub fn line_separator(&mut self) {
+        match self.line_dir {
+            LineDir::Horizontal => {
+                let width = self.style.separator_width;
+                let color = self.style.separator_color;
+
+                let a = Vec2 {
+                    x: self.caret_start.x + width/2.0, 
+                    y: self.caret.y + self.line_size,
+                };
+                let b = Vec2 {
+                    x: self.caret.x - self.style.margin.x - width, 
+                    y: a.y,
+                };
+
+                line(&mut self.draw_data, a, b, width, color);
+            },
+            LineDir::Vertical => {
+                let a = Vec2::new(self.caret_start.x, self.caret.y + self.line_size + self.style.margin.y/2.0); 
+                let b = Vec2::new(self.caret.x, self.caret.y + self.line_size + self.style.margin.y/2.0); 
+                let width = self.style.separator_width;
+                let color = self.style.separator_color;
+                line(&mut self.draw_data, a, b, width, color);
+            },
+        }
         self.next_line();
     }
 
@@ -239,27 +261,24 @@ impl Ui {
     /// default component size, and the text in it will be drawn based on that alignment. Returns
     /// true if the label is currently hovered.
     pub fn label(&mut self, text: &str, alignment: Option<Alignment>) {
-        let (width, height, actual_alignment);
+        let mut size = self.font.font().dimensions(text, FONT_SIZE);
 
+        let actual_alignment;
         match alignment {
             Some(alignment) => {
                 actual_alignment = alignment;
-                width = self.style.comp_width;
-                height = self.default_height();
+                size.x = self.style.comp_width;
             },
             None => {
                 actual_alignment = Alignment::Left;
-                width = self.font.font().width(text, FONT_SIZE);
-                height = self.default_height();
             },
         }
 
-        let size = Vec2::new(width, height);
         let pos = self.caret;
 
         text_in_quad(&mut self.font, pos, size, self.style.padding, 
                      text, actual_alignment, self.style.text_color);
-        self.advance_caret(width, height);
+        self.advance_caret(size.x, size.y);
     }
 
     /// Inserts the given string into the gui. If an alignment is given the label will have the
@@ -528,12 +547,14 @@ pub struct Style {
     pub top_color: Color,
     pub top_hold_color: Color,
     pub caret_color: Color,
+    pub separator_color: Color,
     pub text_color: Color,
     pub text_color_hovered: Color,
 
     pub padding: Vec2<f32>,
     pub margin: Vec2<f32>,
     pub caret_width: f32,
+    pub separator_width: f32,
     pub comp_width: f32,
 }
 impl Default for Style {
@@ -545,11 +566,13 @@ impl Default for Style {
             top_color:          Color::hex_int(0x403147),
             top_hold_color:     Color::hex_int(0x2a2738),
             caret_color:        Color::hex_int(0xffffff),
+            separator_color:    Color::hex_int(0xffffff),
             text_color:         Color::hex_int(0xffffff),
             text_color_hovered: Color::hex_int(0xccccdd),
 
             padding: Vec2::new(10.0, 6.0),
             caret_width: 2.0,
+            separator_width: 2.0,
             margin: Vec2::new(5.0, 5.0),
             comp_width: 150.0,
         }
@@ -621,6 +644,16 @@ fn quad(buf: &mut Vec<Vert>, pos: Vec2<f32>, size: Vec2<f32>, color: Color){
     buf.push(Vert { pos: Vec2::new(min.x, min.y), color: color });
     buf.push(Vert { pos: Vec2::new(max.x, max.y), color: color });
     buf.push(Vert { pos: Vec2::new(min.x, max.y), color: color });
+}
+
+fn line(buf: &mut Vec<Vert>, a: Vec2<f32>, b: Vec2<f32>, width: f32, color: Color) {
+    let normal = (b - a).normalize().left() * (width / 2.0);
+    buf.push(Vert { pos: a - normal, color: color });
+    buf.push(Vert { pos: b - normal, color: color });
+    buf.push(Vert { pos: b + normal, color: color });
+    buf.push(Vert { pos: a - normal, color: color });
+    buf.push(Vert { pos: b + normal, color: color });
+    buf.push(Vert { pos: a + normal, color: color });
 }
 
 fn text_in_quad(font: &mut CachedFont, pos: Vec2<f32>, size: Vec2<f32>, padding: Vec2<f32>, text: &str, alignment: Alignment, color: Color) {
