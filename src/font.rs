@@ -17,6 +17,7 @@ use std::path::Path;
 use std::fs::File;
 use std::str::Chars;
 use std::ops::Range;
+
 use cable_math::Vec2;
 use texture::{Texture, SwizzleComp, TextureFormat};
 use buffer::{Vertex, VertexBuffer, BufferUsage, PrimitiveMode};
@@ -70,29 +71,56 @@ impl Font {
         }
     }
 
-    /// Calculates the width, in pixels, of the given string if it where to be
-    /// rendered at the given size. This takes newlines into acount, meaning that
-    /// for a multiline string this will return the length of the longest line.
+    /// Calculates the width, in pixels, of the given string if it where to be rendered at the
+    /// given size. This takes newlines into acount, meaning that for a multiline string this will
+    /// return the length of the longest line.
+    ///
+    /// Also see [`dimensions`] and [`height`].
+    ///
+    /// [`height`]:     struct.Font.html#method.height
+    /// [`dimensions`]: struct.Font.html#method.dimensions
     pub fn width(&self, text: &str, text_size: f32) -> f32 {
-        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
-        let mut max_width = 0.0;
-        for PlacementInfo { caret, .. } in iter {
-            max_width = f32::max(caret.x, max_width);
-        }
-        max_width
+        self.dimensions(text, text_size).x
     }
 
-    /// Calculates which region of the given piece of text will be visible in a
-    /// viewport with the given width. `focus` specifies which codepoint of the string
-    /// should be in the center of the viewport. For example, if `focus` is set to
-    /// `text.len() - 1` this function will find a range of characters starting from
-    /// the end which will fit into the given width.
+    /// Calculates the height, in pixels, of the given string if it where to be rendered at the
+    /// given size. This takes newlines into acount, meaning that for a multiline string this will
+    /// return the sum of the height of each individual line.
     ///
-    /// Panics if `focus` is not a valid index to `text`. A valid index is within
-    /// the length of the text and on a character boundary. Keep in mind that
-    /// `focus` is a byte index, not a char index.  Returns a range that can be used 
-    /// to take a valid slice of `text`, and the draw space coordinate of where the
-    /// caret should be drawn if this text slice is drawn.
+    /// Also see [`dimensions`] and [`width`].
+    ///
+    /// [`height`]:     struct.Font.html#method.width
+    /// [`dimensions`]: struct.Font.html#method.dimensions
+    pub fn height(&self, text: &str, text_size: f32) -> f32 {
+        self.dimensions(text, text_size).x
+    }
+
+    /// Calculates the dimensions, in pixels, of the given string if it where to be rendered at the
+    /// given size. This takes newlines into acount.
+    ///
+    /// Also see [`width`] and [`height`].
+    ///
+    /// [`height`]: struct.Font.html#method.height
+    /// [`width`]:  struct.Font.html#method.width
+    pub fn dimensions(&self, text: &str, text_size: f32) -> Vec2<f32> {
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        let mut max = Vec2::zero();
+        for PlacementInfo { caret, .. } in iter {
+            max.x = f32::max(caret.x, max.x);
+            max.y = f32::max(caret.y, max.y);
+        }
+        max
+    }
+
+    /// Calculates which region of the given piece of text will be visible in a viewport with the
+    /// given width. `focus` specifies which codepoint of the string should be in the center of the
+    /// viewport. For example, if `focus` is set to `text.len() - 1` this function will find a
+    /// range of characters starting from the end which will fit into the given width.
+    ///
+    /// Panics if `focus` is not a valid index to `text`. A valid index is within the length of the
+    /// text and on a character boundary. Keep in mind that `focus` is a byte index, not a char
+    /// index.  Returns a range that can be used to take a valid slice of `text`, and the draw
+    /// space coordinate of where the caret should be drawn if this text slice is drawn.
     ///
     /// This function has not been tested with multiline strings.
     pub fn visible_area(&self, text: &str, text_size: f32, width: f32, focus: usize) -> (Range<usize>, f32) {
