@@ -62,6 +62,34 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     }
 }
 
+// Quaternion vector multiplication
+impl<T: Num + Float + Copy> Mul<Vec3<T>> for Quaternion<T> {
+    type Output = Vec3<T>; 
+    fn mul(self, vec: Vec3<T>) -> Vec3<T> {
+        let one = T::one();
+        let two = one + one;
+
+        let a11 = one - two*self.y*self.y - two*self.z*self.z;
+        let a12 = two*self.x*self.y - two*self.z*self.w;
+        let a13 = two*self.x*self.z + two*self.y*self.w;
+
+        let a21 = two*self.x*self.y + two*self.w*self.z;
+        let a22 = one - two*self.x*self.x - two*self.z*self.z;
+        let a23 = two*self.y*self.z - two*self.w*self.x;
+
+        let a31 = two*self.x*self.z - two*self.w*self.y;
+        let a32 = two*self.y*self.z + two*self.w*self.x;
+        let a33 = one - two*self.x*self.x - two*self.y*self.y;
+
+        Vec3 {
+            x: vec.x*a11 + vec.y*a12 + vec.z*a13,
+            y: vec.x*a21 + vec.y*a22 + vec.z*a23,
+            z: vec.x*a31 + vec.y*a32 + vec.z*a33,
+        }
+    }
+}
+
+// Quaternion quaternion multiplication
 impl<T: Num + Float + Copy> Mul for Quaternion<T> {
     type Output = Self; 
     fn mul(self, other: Quaternion<T>) -> Self {
@@ -85,6 +113,8 @@ impl<T: Num + Float + Copy> MulAssign for Quaternion<T> {
         self.w = w;
     }
 }
+
+// Quaternion scalar multiplication
 impl<T: Num + Float + Copy> Mul<T> for Quaternion<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
@@ -151,8 +181,8 @@ mod tests {
         let a = Vec4::new(0.0, 1.0, 0.0, 1.0);
         let b = Vec4::new(0.0, 0.0, 1.0, 1.0);
 
-        let dif = (mat*a - b).len();
-        assert!(dif < 0.001);
+        let diff = (mat*a - b).len();
+        assert!(diff < 0.001);
     }
 
     #[test]
@@ -162,7 +192,18 @@ mod tests {
 
         let a = Vec4::new(0.0, 1.0, 0.0, 1.0);
 
-        let dif = (mat_a*mat_b*a - a).len();
-        assert!(dif < 0.001);
+        let diff = (mat_a*mat_b*a - a).len();
+        assert!(diff < 0.001);
+    }
+
+    #[test]
+    fn quaternion_rotation() {
+        let quat: Quaternion<f32> = Quaternion::rotation(f32::consts::PI/2.0, Vec3::new(1.0, 0.0, 0.0)).into();
+
+        let a = Vec3::new(0.0, 1.0, 0.0);
+        let b = Vec3::new(0.0, 0.0, 1.0);
+
+        let diff = (quat*a - b).len();
+        assert!(diff < 0.001);
     }
 }
