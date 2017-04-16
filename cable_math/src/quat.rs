@@ -60,6 +60,15 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     pub fn normalize(&self) -> Quaternion<T> {
         *self / self.len()
     }
+
+    /// Calculates the angle between the two given quaternions
+    pub fn angle_between(a: Quaternion<T>, b: Quaternion<T>) -> T {
+        let unit = Vec3::new(T::one(), T::zero(), T::zero()); // Any unit vector would work
+        let a_dir = a*unit;
+        let b_dir = b*unit;
+
+        Vec3::dot(a_dir, b_dir).acos()
+    }
 }
 
 // Quaternion vector multiplication
@@ -204,6 +213,15 @@ mod tests {
         let b = Vec3::new(0.0, 0.0, 1.0);
 
         let diff = (quat*a - b).len();
+        assert!(diff < 0.001);
+    }
+
+    #[test]
+    fn angle_between() {
+        let a: Quaternion<f32> = Quaternion::rotation(f32::consts::PI/2.0, Vec3::new(1.0, 0.0, 0.0)).into();
+        let b: Quaternion<f32> = Quaternion::rotation(f32::consts::PI/2.0, Vec3::new(0.0, 1.0, 0.0)).into();
+
+        let diff = Quaternion::angle_between(a, b) - f32::consts::PI/2.0;
         assert!(diff < 0.001);
     }
 }
