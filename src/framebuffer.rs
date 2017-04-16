@@ -277,8 +277,8 @@ impl Framebuffer {
                    index, T::Primitive::gl_name(), format.gl_primitive_enum_name());
         }
 
-        if x + width >= self.width && y + height >= self.height {
-            panic!("Invalid call to get_pixel_data, The rectangle (x: {}, y: {}, width: {}, height: {}) is outside of the\
+        if x + width > self.width || y + height > self.height {
+            panic!("Invalid call to get_pixel_data, The rectangle (x: {}, y: {}, width: {}, height: {}) is outside of the \
                    region of the framebuffer (width: {}, height: {}).",
                    x, y, width, height, self.width, self.height);
         }
