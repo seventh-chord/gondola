@@ -61,13 +61,22 @@ impl<T: Num + Float + Copy> Quaternion<T> {
         *self / self.len()
     }
 
+    /// Calculates the dot (inner) product of the two given quaternions.
+    pub fn dot(a: Quaternion<T>, b: Quaternion<T>) -> T {
+        a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w
+    }
+
     /// Calculates the angle between the two given quaternions
     pub fn angle_between(a: Quaternion<T>, b: Quaternion<T>) -> T {
-        let unit = Vec3::new(T::one(), T::zero(), T::zero()); // Any unit vector would work
-        let a_dir = a*unit;
-        let b_dir = b*unit;
+        Quaternion::dot(a, b).acos()
+    }
 
-        Vec3::dot(a_dir, b_dir).acos()
+    /// Interpolates linearly between the two given quaternions. This works well as long as the
+    /// quaternions are not to different. `t` should be in the range `0..1`.
+    ///
+    /// nlerp stands for normalized linear interpolation.
+    pub fn nlerp(a: Quaternion<T>, b: Quaternion<T>, t: T) -> Quaternion<T> {
+        (a*(T::one() - t) + b*t).normalize()
     }
 }
 
@@ -120,6 +129,19 @@ impl<T: Num + Float + Copy> MulAssign for Quaternion<T> {
         self.y = y;
         self.z = z;
         self.w = w;
+    }
+}
+
+// Quaternion quaternion addition
+impl<T: Num + Float + Copy> Add for Quaternion<T> {
+    type Output = Self; 
+    fn add(self, other: Quaternion<T>) -> Self {
+        Quaternion {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+            w: self.w + other.w,
+        }
     }
 }
 
@@ -222,6 +244,18 @@ mod tests {
         let b: Quaternion<f32> = Quaternion::rotation(f32::consts::PI/2.0, Vec3::new(0.0, 1.0, 0.0)).into();
 
         let diff = Quaternion::angle_between(a, b) - f32::consts::PI/2.0;
+        assert!(diff < 0.001);
+    }
+
+    #[test]
+    fn nlerp() {
+        let a = Quaternion::rotation(f32::consts::PI/2.0, Vec3::new(1.0, 0.0, 0.0)).into();
+        let b = Quaternion::new();
+
+        let c = Quaternion::nlerp(a, b, 0.5);
+        let expected = Quaternion::rotation(f32::consts::PI/4.0, Vec3::new(1.0, 0.0, 0.0));
+
+        let diff = Quaternion::angle_between(c, expected);
         assert!(diff < 0.001);
     }
 }
