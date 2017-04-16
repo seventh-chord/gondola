@@ -4,13 +4,19 @@ use mat::Mat4;
 use vec::Vec3;
 use std::ops::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
 pub struct Quaternion<T: Num + Float + Copy> {
     pub x: T,
     pub y: T,
     pub w: T,
     pub z: T,
+}
+
+impl<T: Num + Float + Copy> Default for Quaternion<T> {
+    fn default() -> Quaternion<T> {
+        Quaternion::new()
+    }
 }
 
 impl<T: Num + Float + Copy> Quaternion<T> {
