@@ -60,7 +60,7 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
-    /// Creates a new matrix from a 4x4 array
+    /// Creates a new matrix from a 4x4 array.
     pub fn from_col_major(data: [[T; 4]; 4]) -> Mat4<T> {
         Mat4 {
             a11: data[0][0], a12: data[0][1], a13: data[0][2], a14: data[0][3],
@@ -70,7 +70,30 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
-    /// Transposes this matrix, mirroring all its values along the diagonal
+    /// Converts the given quaterion to a matrix.
+    pub fn from_quaternion(x: T, y: T, z: T, w: T) -> Mat4<T> {
+        let zero = T::zero();
+        let one = T::one();
+        let two = one + one;
+
+        Mat4 {
+            a11: one - two*y*y - two*z*z,
+            a12: two*x*y - two*z*w,
+            a13: two*x*z + two*y*w,
+            a14: zero,
+            a21: two*x*y + two*w*z,
+            a22: one - two*x*x - two*z*z,
+            a23: two*y*z - two*w*x,
+            a24: zero,
+            a31: two*x*z - two*w*y,
+            a32: two*y*z + two*w*x,
+            a33: one - two*x*x - two*y*y,
+            a34: zero,
+            a41: zero, a42: zero, a43: zero, a44: one,
+        }
+    }
+
+    /// Transposes this matrix, mirroring all its values along the diagonal.
     pub fn transpose(self) -> Mat4<T> {
         Mat4 {
             a11: self.a11, a12: self.a21, a13: self.a31, a14: self.a41,
@@ -80,7 +103,7 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
-    /// Calculates the determinant of this matrix
+    /// Calculates the determinant of this matrix.
     pub fn determinant(&self) -> T {
         // What a mess :/
         self.a11*self.a22*self.a33*self.a44 + self.a11*self.a23*self.a34*self.a42 + self.a11*self.a24*self.a32*self.a43

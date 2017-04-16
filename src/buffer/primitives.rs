@@ -102,50 +102,58 @@ pub enum BufferTarget {
 /// [`Vertex`]:          trait.Vertex.html
 /// [`VertexData`]:      trait.VertexData.html
 pub trait GlPrimitive: Sized {
-    fn glsl_scalar_name() -> Option<&'static str> { None }
-    fn glsl_vec_name() -> Option<&'static str>    { None }
+    fn glsl_scalar_name() -> &'static str;
+    fn glsl_vec_name() -> &'static str;
     fn rust_name() -> &'static str;
     fn gl_name() -> &'static str;
     fn gl_enum() -> GLenum;
 }
 
 impl GlPrimitive for GLfloat {
-    fn glsl_scalar_name() -> Option<&'static str> { Some("float") }
-    fn glsl_vec_name() -> Option<&'static str>    { Some("vec") }
+    fn glsl_scalar_name() -> &'static str { "float" }
+    fn glsl_vec_name() -> &'static str    { "vec" }
     fn rust_name() -> &'static str { "f32" }
     fn gl_name() -> &'static str   { "GLfloat" }
     fn gl_enum() -> GLenum { gl::FLOAT }
 }
 impl GlPrimitive for GLint {
-    fn glsl_scalar_name() -> Option<&'static str> { Some("int") }
-    fn glsl_vec_name() -> Option<&'static str>    { Some("ivec") }
+    fn glsl_scalar_name() -> &'static str { "int" }
+    fn glsl_vec_name() -> &'static str    { "ivec" }
     fn rust_name() -> &'static str { "i32" }
     fn gl_name() -> &'static str   { "GLint" }
     fn gl_enum() -> GLenum { gl::INT }
 }
 impl GlPrimitive for GLshort {
+    fn glsl_scalar_name() -> &'static str { "int" }
+    fn glsl_vec_name() -> &'static str    { "ivec" }
     fn rust_name() -> &'static str { "i16" }
     fn gl_name() -> &'static str   { "GLshort" }
     fn gl_enum() -> GLenum { gl::SHORT }
 }
 impl GlPrimitive for GLbyte {
+    fn glsl_scalar_name() -> &'static str { "int" }
+    fn glsl_vec_name() -> &'static str    { "ivec" }
     fn rust_name() -> &'static str { "i8" }
     fn gl_name() -> &'static str   { "GLbyte" }
     fn gl_enum() -> GLenum { gl::BYTE }
 }
 impl GlPrimitive for GLuint {
-    fn glsl_scalar_name() -> Option<&'static str> { Some("uint") }
-    fn glsl_vec_name() -> Option<&'static str>    { Some("uvec") }
+    fn glsl_scalar_name() -> &'static str { "uint" }
+    fn glsl_vec_name() -> &'static str    { "uvec" }
     fn rust_name() -> &'static str { "u32" }
     fn gl_name() -> &'static str   { "GLuint" }
     fn gl_enum() -> GLenum { gl::UNSIGNED_INT }
 }
 impl GlPrimitive for GLushort {
+    fn glsl_scalar_name() -> &'static str { "uint" }
+    fn glsl_vec_name() -> &'static str    { "uvec" }
     fn rust_name() -> &'static str { "u16" }
     fn gl_name() -> &'static str   { "GLushort" }
     fn gl_enum() -> GLenum { gl::UNSIGNED_SHORT }
 }
 impl GlPrimitive for GLubyte {
+    fn glsl_scalar_name() -> &'static str { "uint" }
+    fn glsl_vec_name() -> &'static str    { "uvec" }
     fn rust_name() -> &'static str { "u8" }
     fn gl_name() -> &'static str   { "GLubyte" }
     fn gl_enum() -> GLenum { gl::UNSIGNED_BYTE }
@@ -241,21 +249,9 @@ pub trait VertexData: Sized {
         let mut result = String::with_capacity(6);
 
         if primitives == 1 {
-            if let Some(scalar_name) = Self::Primitive::glsl_scalar_name() {
-                result.push_str(scalar_name);
-            } else {
-                panic!("Data type {}/{} is not supported for glsl yet. (At {}:{})", 
-                       Self::Primitive::rust_name(), Self::Primitive::gl_name(),
-                       file!(), line!());
-            }
+            result.push_str(Self::Primitive::glsl_scalar_name());
         } else if primitives > 1 && primitives <= 4 {
-            if let Some(vec_name) = Self::Primitive::glsl_vec_name() {
-                result.push_str(vec_name);
-            } else {
-                panic!("Data type {}/{} is not supported for glsl yet. (At {}:{})", 
-                       Self::Primitive::rust_name(), Self::Primitive::gl_name(),
-                       file!(), line!());
-            }
+            result.push_str(Self::Primitive::glsl_vec_name());
             result.push_str(&primitives.to_string());
         }
 
@@ -275,9 +271,11 @@ pub trait VertexData: Sized {
 impl<T: GlPrimitive> VertexData for T {
     type Primitive = T; 
 }
+
 impl<T: VertexData> VertexData for Mat4<T> {
     type Primitive = T::Primitive;
 }
+
 impl<T: VertexData> VertexData for Vec2<T> {
     type Primitive = T::Primitive;
 }
@@ -287,6 +285,7 @@ impl<T: VertexData> VertexData for Vec3<T> {
 impl<T: VertexData> VertexData for Vec4<T> {
     type Primitive = T::Primitive;
 }
+
 impl<T: VertexData> VertexData for (T, T) {
     type Primitive = T::Primitive;
 }
@@ -296,6 +295,7 @@ impl<T: VertexData> VertexData for (T, T, T) {
 impl<T: VertexData> VertexData for (T, T, T, T) {
     type Primitive = T::Primitive;
 }
+
 macro_rules! impl_array { ($count:expr) => {
     impl<T: VertexData> VertexData for [T; $count] {
         type Primitive = T::Primitive;

@@ -379,7 +379,7 @@ impl<T: Float> Vec3<T> {
     }
 }
 impl<T: Float> Vec4<T> {
-    /// Calculates the length of this vector
+    /// Calculates the length of this vector.
     pub fn len(&self) -> T {
         (self.x*self.x + self.y*self.y + self.z*self.z + self.w*self.w).sqrt()
     }
