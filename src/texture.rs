@@ -1,13 +1,15 @@
 
 //! Utilities for loading and using textures
 
+use std::io;
+use std::ptr;
+use std::fmt;
+use std::error;
+use std::path::{Path, PathBuf};
+use std::fs::File;
 use png;
 use gl;
 use gl::types::*;
-use std::io;
-use std::ptr;
-use std::path::Path;
-use std::fs::File;
 
 /// A wraper around a OpenGL texture object which can be modified
 #[derive(Debug)]
@@ -31,7 +33,7 @@ impl Texture {
     }
 
     /// Creates a texture from a image file.
-    pub fn from_file<P>(path: P) -> io::Result<Texture> where P: AsRef<Path> {
+    pub fn from_file<P>(path: P) -> Result<Texture, TextureError> where P: AsRef<Path> {
         let mut texture = Texture::new();
         texture.load_file(path)?;
         Ok(texture)
@@ -67,8 +69,9 @@ impl Texture {
     /// let mut texture = Texture::new();
     /// texture.load_file("assets/test.png").expect("Failed to load texture");
     /// ```
-    pub fn load_file<P>(&mut self, path: P) -> io::Result<()> where P: AsRef<Path> {
-        let (info, data) = load_image(path.as_ref())?;
+    pub fn load_file<P>(&mut self, path: P) -> Result<(), TextureError> where P: AsRef<Path> {
+        let path = path.as_ref();
+        let (info, data) = load_image(path)?;
         let texture_format = match (info.color_type, info.bit_depth) {
             (png::ColorType::RGBA, png::BitDepth::Eight) => TextureFormat::RGBA_8,
             (png::ColorType::RGB, png::BitDepth::Eight)  => TextureFormat::RGB_8,
@@ -76,10 +79,10 @@ impl Texture {
                 let message = format!(
                     "Unsuported texture format ({:?}, {:?}) in \"{}\" ({}:{})",
                     other.0, other.1,
-                    path.as_ref().to_string_lossy(),
+                    path.to_string_lossy(),
                     file!(), line!()
                 );
-                return Err(io::Error::new(io::ErrorKind::Other, message));
+                return Err(TextureError { source: path.to_owned(), error: io::Error::new(io::ErrorKind::Other, message) });
             }
         };
         self.load_data(&data, info.width, info.height, texture_format);
@@ -201,11 +204,25 @@ impl Drop for Texture {
 }
 
 /// Loads image data from a file
-fn load_image(path: &Path) -> io::Result<(png::OutputInfo, Vec<u8>)> {
-    let decoder = png::Decoder::new(File::open(path)?);
-    let (info, mut reader) = decoder.read_info()?;
+fn load_image(path: &Path) -> Result<(png::OutputInfo, Vec<u8>), TextureError> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) => return Err(TextureError { source: path.to_owned(), error: err }),
+    };
+
+    let decoder = png::Decoder::new(file);
+
+    let (info, mut reader) = match decoder.read_info() {
+        Ok(result) => result,
+        Err(err) => return Err(TextureError { source: path.to_owned(), error: err.into() }),
+    };
+
     let mut buf = vec![0; info.buffer_size()];
-    reader.next_frame(&mut buf)?;
+
+    match reader.next_frame(&mut buf) {
+        Ok(()) => {},
+        Err(err) => return Err(TextureError { source: path.to_owned(), error: err.into() }),
+    };
 
     Ok((info, buf))
 }
@@ -300,4 +317,29 @@ pub enum SwizzleComp {
     Alpha   = gl::ALPHA,
     One     = gl::ONE,
     Zero    = gl::ZERO,
+}
+
+/// A error which can occur during texture loading and creation.
+#[derive(Debug)]
+pub struct TextureError {
+    source: PathBuf,
+    error: io::Error,
+}
+
+impl error::Error for TextureError {
+    fn description(&self) -> &str {
+        self.error.description()
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        self.error.cause()
+    }
+}
+
+impl fmt::Display for TextureError {
+    fn fmt(&self, mut f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "For texture \"{}\": ", self.source.to_string_lossy())?;
+        self.error.fmt(&mut f)?;
+        Ok(())
+    }
 }

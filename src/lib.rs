@@ -102,7 +102,7 @@ pub fn run<T: Game + Sized>() {
     // Set up game
     let mut game = match T::setup(&mut state) {
         Err(err) => {
-            println!("Failed to launch game:\n{}", err);
+            println!("Failed to launch game:\n{:#?}", err);
             panic!();
         },
         Ok(game) => game,
