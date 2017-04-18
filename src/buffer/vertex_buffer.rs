@@ -3,7 +3,7 @@ use super::*;
 use gl;
 use gl::types::*;
 use std;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Range, Deref, DerefMut};
 
 /// A GPU buffer which holds a list of a custom vertex type. This struct also has utility methods
 /// for rendering the vertices as primitives.
@@ -295,6 +295,27 @@ impl<T: Vertex> VertexBuffer<T> {
         unsafe {
             gl::BindVertexArray(self.vao);
             gl::DrawArrays(self.primitive_mode as GLenum, 0, self.vertex_count as GLsizei);
+        }
+    }
+
+    /// Draws a subrange of the contents of this vertex buffer with the primitive mode specified at
+    /// construction. The start of the range is inclusive, and the end of the range is exclusive.
+    /// Panics if the range is outside of the bounds of this buffer, or the start of
+    /// the range lies after the end of the range.
+    ///
+    /// The range is in units of the vertex type `T` used with this buffer. For example, in a buffer
+    /// with 6 vertices constituting 2 triangles, `draw_range(3..6)` will draw the second triangle.
+    pub fn draw_range(&self, range: Range<usize>) {
+        assert!(range.start < range.end, 
+                "Call to draw_range with invalid range {}..{}, start must lie before end!",
+                range.start, range.end);
+        assert!(range.end <= self.vertex_count,
+                "Call to draw_range with invalid range {}..{}, end or range lies beyond end \
+                of buffer (len = {})", range.start, range.end, self.vertex_count);
+
+        unsafe {
+            gl::BindVertexArray(self.vao);
+            gl::DrawArrays(self.primitive_mode as GLenum, range.start as GLint, (range.end - range.start) as GLsizei);
         }
     }
 
