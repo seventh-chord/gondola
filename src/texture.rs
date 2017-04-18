@@ -158,6 +158,14 @@ impl Texture {
         }
     }
 
+    /// Unbinds the texture at the given texture unit.
+    pub fn unbind(unit: u32) {
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0 + unit);
+            gl::BindTexture(gl::TEXTURE_2D, 0);
+        }
+    }
+
     /// Sets the filter that is applied when this texture is rendered at a size larger
     /// or smaller sizes than the native size of the texture. A separate filter can be
     /// set for magnification and minification.
