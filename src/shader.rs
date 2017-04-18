@@ -10,6 +10,7 @@ use std::fs::File;
 use std::path::Path;
 use std::io::{BufRead, BufReader};
 use std::ffi::CString;
+use std::borrow::Borrow;
 use gl;
 use gl::types::*;
 use buffer::Vertex;
@@ -309,10 +310,13 @@ impl Shader {
 
     /// Sets the uniform with the given name to the given value. This prints a warning if no
     /// uniform with the given name exists.
-    pub fn set_uniform<T: UniformValue>(&self, uniform_name: &str, value: T) {
+    pub fn set_uniform<T, U>(&self, uniform_name: &str, value: U) 
+        where T: UniformValue,
+              U: Borrow<T>,
+    {
         if let Some(location) = self.get_uniform_location(uniform_name) {
             self.bind();
-            unsafe { value.set_uniform(location); }
+            unsafe { value.borrow().set_uniform(location); }
         } else {
             // The reason we simply print a error here is because it sometimes is convenient to
             // ignore a uniform while refactoring a shader. panicing or returning some result would
@@ -327,10 +331,13 @@ impl Shader {
     /// shader contains `uniform vec3 positions[2];`, `set_uniform_with_offset(1, "positions", ...)`
     /// will modify the second elment of the positions array.  This prints a warning if no uniform 
     /// with the given name exists.
-    pub fn set_uniform_with_offset<T: UniformValue>(&self, offset: usize, uniform_name: &str, value: T) {
+    pub fn set_uniform_with_offset<T, U>(&self, offset: usize, uniform_name: &str, value: U) 
+        where T: UniformValue,
+              U: Borrow<T>,
+    {
         if let Some(location) = self.get_uniform_location(uniform_name) {
             self.bind();
-            unsafe { value.set_uniform(location + offset as GLint); }
+            unsafe { value.borrow().set_uniform(location + offset as GLint); }
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
         }

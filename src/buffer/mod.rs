@@ -56,6 +56,10 @@ pub struct AttribBinding {
     /// If set to true, integer types will be parsed as floats and mapped to the range `0.0..1.0`
     /// for unsigned integers and `-1.0..1.0` for signed integers.
     pub normalized: bool,
+    /// If set to true, `glVertexAttribIPointer` is used instead of `glVertexAttribPointer`. This
+    /// is only valid if `primitive_tpye` is a integer primitive. If this is set to true,
+    /// `normalized` is ignored.
+    pub integer: bool,
     /// The distance, in bytes, between each set of primitives
     pub stride: usize,
     /// The index, in bytes, of the first byte of data
@@ -74,9 +78,15 @@ impl AttribBinding {
 
         unsafe {
             gl::EnableVertexAttribArray(self.index as GLuint);
-            gl::VertexAttribPointer(self.index as GLuint, self.primitives as GLint,
-                                    self.primitive_type as GLenum, self.normalized as GLboolean,
-                                    self.stride as GLsizei, self.offset as *const GLvoid);
+            if self.integer {
+                gl::VertexAttribIPointer(self.index as GLuint, self.primitives as GLint,
+                                         self.primitive_type as GLenum, self.stride as GLsizei, 
+                                         self.offset as *const GLvoid);
+            } else {
+                gl::VertexAttribPointer(self.index as GLuint, self.primitives as GLint,
+                                        self.primitive_type as GLenum, self.normalized as GLboolean,
+                                        self.stride as GLsizei, self.offset as *const GLvoid);
+            }
             gl::VertexAttribDivisor(self.index as GLuint, self.divisor as GLuint);
         }
     }

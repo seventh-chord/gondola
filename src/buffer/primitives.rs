@@ -107,6 +107,7 @@ pub trait GlPrimitive: Sized {
     fn rust_name() -> &'static str;
     fn gl_name() -> &'static str;
     fn gl_enum() -> GLenum;
+    fn is_integer() -> bool;
 }
 
 impl GlPrimitive for GLfloat {
@@ -115,6 +116,7 @@ impl GlPrimitive for GLfloat {
     fn rust_name() -> &'static str { "f32" }
     fn gl_name() -> &'static str   { "GLfloat" }
     fn gl_enum() -> GLenum { gl::FLOAT }
+    fn is_integer() -> bool { false }
 }
 impl GlPrimitive for GLint {
     fn glsl_scalar_name() -> &'static str { "int" }
@@ -122,6 +124,7 @@ impl GlPrimitive for GLint {
     fn rust_name() -> &'static str { "i32" }
     fn gl_name() -> &'static str   { "GLint" }
     fn gl_enum() -> GLenum { gl::INT }
+    fn is_integer() -> bool { true }
 }
 impl GlPrimitive for GLshort {
     fn glsl_scalar_name() -> &'static str { "int" }
@@ -129,6 +132,7 @@ impl GlPrimitive for GLshort {
     fn rust_name() -> &'static str { "i16" }
     fn gl_name() -> &'static str   { "GLshort" }
     fn gl_enum() -> GLenum { gl::SHORT }
+    fn is_integer() -> bool { true }
 }
 impl GlPrimitive for GLbyte {
     fn glsl_scalar_name() -> &'static str { "int" }
@@ -136,6 +140,7 @@ impl GlPrimitive for GLbyte {
     fn rust_name() -> &'static str { "i8" }
     fn gl_name() -> &'static str   { "GLbyte" }
     fn gl_enum() -> GLenum { gl::BYTE }
+    fn is_integer() -> bool { true }
 }
 impl GlPrimitive for GLuint {
     fn glsl_scalar_name() -> &'static str { "uint" }
@@ -143,6 +148,7 @@ impl GlPrimitive for GLuint {
     fn rust_name() -> &'static str { "u32" }
     fn gl_name() -> &'static str   { "GLuint" }
     fn gl_enum() -> GLenum { gl::UNSIGNED_INT }
+    fn is_integer() -> bool { true }
 }
 impl GlPrimitive for GLushort {
     fn glsl_scalar_name() -> &'static str { "uint" }
@@ -150,6 +156,7 @@ impl GlPrimitive for GLushort {
     fn rust_name() -> &'static str { "u16" }
     fn gl_name() -> &'static str   { "GLushort" }
     fn gl_enum() -> GLenum { gl::UNSIGNED_SHORT }
+    fn is_integer() -> bool { true }
 }
 impl GlPrimitive for GLubyte {
     fn glsl_scalar_name() -> &'static str { "uint" }
@@ -157,6 +164,7 @@ impl GlPrimitive for GLubyte {
     fn rust_name() -> &'static str { "u8" }
     fn gl_name() -> &'static str   { "GLubyte" }
     fn gl_enum() -> GLenum { gl::UNSIGNED_BYTE }
+    fn is_integer() -> bool { true }
 }
 
 /// This trait is used to mark types which can be used as indices in e.g. a element/index buffer.

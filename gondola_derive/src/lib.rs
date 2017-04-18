@@ -42,6 +42,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                             primitives: <#ty as ::gondola::buffer::VertexData>::primitives(),
                             primitive_type: <<#ty as ::gondola::buffer::VertexData>::Primitive as ::gondola::buffer::GlPrimitive>::gl_enum(),
                             normalized: false,
+                            integer: <<#ty as ::gondola::buffer::VertexData>::Primitive as ::gondola::buffer::GlPrimitive>::is_integer(),
                             stride: stride,
                             offset: offset,
                             divisor: 0,
