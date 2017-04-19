@@ -76,7 +76,11 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     ///
     /// nlerp stands for normalized linear interpolation.
     pub fn nlerp(a: Quaternion<T>, b: Quaternion<T>, t: T) -> Quaternion<T> {
-        (a*(T::one() - t) + b*t).normalize()
+        if Quaternion::dot(a, b) < T::zero() {
+            (a*(T::one() - t) - b*t).normalize()
+        } else {
+            (a*(T::one() - t) + b*t).normalize()
+        }
     }
 }
 
@@ -141,6 +145,17 @@ impl<T: Num + Float + Copy> Add for Quaternion<T> {
             y: self.y + other.y,
             z: self.z + other.z,
             w: self.w + other.w,
+        }
+    }
+}
+impl<T: Num + Float + Copy> Sub for Quaternion<T> {
+    type Output = Self; 
+    fn sub(self, other: Quaternion<T>) -> Self {
+        Quaternion {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+            w: self.w - other.w,
         }
     }
 }
