@@ -14,7 +14,9 @@ use std::borrow::Borrow;
 use gl;
 use gl::types::*;
 use buffer::Vertex;
-use cable_math::{Mat4, Vec2, Vec3, Vec4};
+
+mod uniform;
+pub use self::uniform::UniformValue;
 
 /// A shader that has not yet been fully compiled
 #[derive(Debug)]
@@ -29,7 +31,7 @@ pub struct ShaderPrototype {
 
 impl ShaderPrototype {
     /// Loads a shader from a file. The file should contain all the shader stages, with
-    /// each shader stage prepended by `-- {name}`, where name is one of `VERT`, `FRAG`
+    /// each shader stage prepended by `-- name`, where name is one of `VERT`, `FRAG`
     /// or `GEOM`.
     /// # Example file
     /// ```glsl
@@ -316,12 +318,26 @@ impl Shader {
     {
         if let Some(location) = self.get_uniform_location(uniform_name) {
             self.bind();
-            unsafe { value.borrow().set_uniform(location); }
+            unsafe { T::set_uniform(value.borrow(), location); }
         } else {
             // The reason we simply print a error here is because it sometimes is convenient to
             // ignore a uniform while refactoring a shader. panicing or returning some result would
             // force changing rust code when glsl code is changed, which slows down the development
             // process.
+            println!("Invalid uniform name: {}", uniform_name); 
+        }
+    }
+
+    /// Sets the uniform with the given name to the given slice of values. Note that this expects
+    /// the uniform with the given name to be a array. This prints a warning if no uniform with the 
+    /// given name exists.
+    pub fn set_uniform_slice<T>(&self, uniform_name: &str, slice: &[T]) 
+        where T: UniformValue,
+    {
+        if let Some(location) = self.get_uniform_location(uniform_name) {
+            self.bind();
+            unsafe { T::set_uniform_slice(slice, location); }
+        } else {
             println!("Invalid uniform name: {}", uniform_name); 
         }
     }
@@ -337,7 +353,7 @@ impl Shader {
     {
         if let Some(location) = self.get_uniform_location(uniform_name) {
             self.bind();
-            unsafe { value.borrow().set_uniform(location + offset as GLint); }
+            unsafe { T::set_uniform(value.borrow(), location + offset as GLint); }
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
         }
@@ -490,40 +506,6 @@ fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, ShaderError> {
         }
     }
 }
-
-/// Everything which implements this trait can be stured into the uniform value
-/// of a shader, assuming its implementation is valid
-pub trait UniformValue {
-    unsafe fn set_uniform(&self, location: GLint); 
-}
-// Implementations for vectors and matricies
-impl UniformValue for Vec2<f32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, self.x, self.y); } }
-impl UniformValue for Vec2<f64> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, self.x as f32, self.y as f32); } }
-impl UniformValue for Vec2<i32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2i(location, self.x, self.y); } }
-impl UniformValue for Vec2<u32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, self.x, self.y); } }
-impl UniformValue for Vec3<f32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, self.x, self.y, self.z); } }
-impl UniformValue for Vec3<f64> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, self.x as f32, self.y as f32, self.z as f32); } }
-impl UniformValue for Vec3<i32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3i(location, self.x, self.y, self.z); } }
-impl UniformValue for Vec3<u32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, self.x, self.y, self.z); } }
-impl UniformValue for Vec4<f32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, self.x, self.y, self.z, self.w); } }
-impl UniformValue for Vec4<f64> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, self.x as f32, self.y as f32, self.z as f32, self.w as f32); } }
-impl UniformValue for Vec4<i32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4i(location, self.x, self.y, self.z, self.w); } }
-impl UniformValue for Vec4<u32> { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, self.x, self.y, self.z, self.w); } }
-impl UniformValue for Mat4<f32> { unsafe fn set_uniform(&self, location: GLint) { gl::UniformMatrix4fv(location, 1, false as GLboolean, &(self.a11) as *const GLfloat); } }
-// Implementations for f32, i32 and u32 single values and tuples.
-impl UniformValue for f32                   { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1f(location, *self as GLfloat); } }
-impl UniformValue for (f32, f32)            { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2f(location, (*self).0 as GLfloat, (*self).1 as GLfloat); } }
-impl UniformValue for (f32, f32, f32)       { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3f(location, (*self).0 as GLfloat, (*self).1 as GLfloat, (*self).2 as GLfloat); } }
-impl UniformValue for (f32, f32, f32, f32)  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4f(location, (*self).0 as GLfloat, (*self).1 as GLfloat, (*self).2 as GLfloat, (*self).3 as GLfloat); } }
-impl UniformValue for i32                   { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1i(location, *self as GLint); } }
-impl UniformValue for (i32, i32)            { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2i(location, (*self).0 as GLint, (*self).1 as GLint); } }
-impl UniformValue for (i32, i32, i32)       { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3i(location, (*self).0 as GLint, (*self).1 as GLint, (*self).2 as GLint); } }
-impl UniformValue for (i32, i32, i32, i32)  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4i(location, (*self).0 as GLint, (*self).1 as GLint, (*self).2 as GLint, (*self).3 as GLint); } }
-impl UniformValue for u32                   { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1ui(location, *self as GLuint); } }
-impl UniformValue for (u32, u32)            { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform2ui(location, (*self).0 as GLuint, (*self).1 as GLuint); } }
-impl UniformValue for (u32, u32, u32)       { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform3ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint); } }
-impl UniformValue for (u32, u32, u32, u32)  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform4ui(location, (*self).0 as GLuint, (*self).1 as GLuint, (*self).2 as GLuint, (*self).3 as GLuint); } }
-impl UniformValue for bool                  { unsafe fn set_uniform(&self, location: GLint) { gl::Uniform1i(location, if *self { 1 } else { 0 }); } }
 
 /// Shorthand for loading a shader, propagating its outputs and inserting input declarations
 /// for a given vertex type. 
