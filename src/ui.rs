@@ -145,6 +145,12 @@ impl Ui {
         self.line_size = 0.0;
     }
 
+    /// Inserts a empty, invisible box. This only serves to advance the carret and create blank
+    /// space inside a complex ui.
+    pub fn spacer(&mut self, width: f32, height: f32) {
+        self.advance_caret(width, height);
+    }
+
     /// Advances the caret to the next line. The direction of a line depends on the line direction
     /// set by [`set_caret`].
     ///
@@ -261,24 +267,27 @@ impl Ui {
     /// default component size, and the text in it will be drawn based on that alignment. Returns
     /// true if the label is currently hovered.
     pub fn label(&mut self, text: &str, alignment: Option<Alignment>) {
-        let mut size = self.font.font().dimensions(text, FONT_SIZE);
+        let (width, height, actual_alignment);
 
-        let actual_alignment;
         match alignment {
             Some(alignment) => {
                 actual_alignment = alignment;
-                size.x = self.style.comp_width;
+                width = self.style.comp_width;
+                height = self.default_height();
             },
             None => {
                 actual_alignment = Alignment::Left;
+                width = self.font.font().width(text, FONT_SIZE);
+                height = self.default_height();
             },
         }
 
+        let size = Vec2::new(width, height);
         let pos = self.caret;
 
         text_in_quad(&mut self.font, pos, size, self.style.padding, 
                      text, actual_alignment, self.style.text_color);
-        self.advance_caret(size.x, size.y);
+        self.advance_caret(width, height);
     }
 
     /// Inserts the given string into the gui. If an alignment is given the label will have the

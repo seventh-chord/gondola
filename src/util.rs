@@ -15,7 +15,17 @@ pub mod graphics {
         }
     }
 
-    /// Prints all OpenGL errors
+    /// Sets the opengl scissor area. Note that this region is specified in screen space. That is, 
+    /// in the same coordinate system as [`viewport`]. Anything drawn outside this region will be discarded.
+    ///
+    /// [`viewport`]: fn.viewport.html
+    pub fn scissor(x: u32, y: u32, width: u32, height: u32) {
+        unsafe {
+            gl::Scissor(x as GLint, y as GLint, width as GLsizei, height as GLsizei);
+        }
+    } 
+
+    /// Prints all OpenGL errors.
     pub fn print_errors() {
         unsafe {
             while let Some(error) = get_error_message(gl::GetError()) {
@@ -23,10 +33,7 @@ pub mod graphics {
             }
         }
     }
-
-    /// Retrieves the strign asscociated with the given OpenGL error. Returns None
-    /// if there if no error occured.
-    pub fn get_error_message(error: GLenum) -> Option<String> {
+    fn get_error_message(error: GLenum) -> Option<String> {
         let value = match error {
             gl::INVALID_VALUE                   => "Invalid value",
             gl::INVALID_ENUM                    => "Invalid enum",
@@ -41,7 +48,7 @@ pub mod graphics {
     }
 
     /// Sets which side of a face to treat as the front face and which side of a face to cull. If
-    /// `None` is passed this disables culling.dire stra
+    /// `None` is passed this disables culling.
     ///
     /// For simplicity, you can simply call `graphics::set_culling(Some(Default::default()))`,
     /// which will set the winding order to counter-clockwise and cull-face to the back face.
