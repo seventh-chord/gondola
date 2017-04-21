@@ -15,15 +15,27 @@ pub mod graphics {
         }
     }
 
-    /// Sets the opengl scissor area. Note that this region is specified in screen space. That is, 
-    /// in the same coordinate system as [`viewport`]. Anything drawn outside this region will be discarded.
+    /// Enables the opengl scissor test, with the given area. Note that this region is specified in
+    /// screen space.  That is, in the same coordinate system as [`viewport`]. Anything drawn
+    /// outside this region will be discarded. Scissoring can be disabled with [`disable_scissor`].
     ///
     /// [`viewport`]: fn.viewport.html
-    pub fn scissor(x: u32, y: u32, width: u32, height: u32) {
+    /// [`disable_scissor`]: fn.disable_scissor.html
+    pub fn enable_scissor(x: u32, y: u32, width: u32, height: u32) {
         unsafe {
+            gl::Enable(gl::SCISSOR_TEST);
             gl::Scissor(x as GLint, y as GLint, width as GLsizei, height as GLsizei);
         }
     } 
+
+    /// Disables the opengl scissor test, which can be enabled with [`enable_scissor`]. 
+    ///
+    /// [`enable_scissor`]: fn.enable_scissor.html
+    pub fn disable_scissor() {
+        unsafe {
+            gl::Disable(gl::SCISSOR_TEST);
+        }
+    }
 
     /// Prints all OpenGL errors.
     pub fn print_errors() {
