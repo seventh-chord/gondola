@@ -11,4 +11,4 @@ serialize = ["serde"]
 [dependencies]
 num = "0.1.*"
 # Only needed if we want custom serialization derives for vector types
-serde = { version = "0.9", optional = true }
+serde = { version = "1.0", optional = true }

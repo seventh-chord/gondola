@@ -8,6 +8,6 @@ authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 proc-macro = true
 
 [dependencies]
-syn = "0.11.4"
-quote = "0.3.12"
+syn = "0.11.11"
+quote = "0.3"
 

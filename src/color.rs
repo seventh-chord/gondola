@@ -150,14 +150,14 @@ mod serialize {
         }
     }
 
-    impl Deserialize for Color {
-        fn deserialize<D: Deserializer>(d: D) -> Result<Self, D::Error> {
+    impl<'de> Deserialize<'de> for Color {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
             d.deserialize_str(ColorVisitor)
         }
     }
 
     struct ColorVisitor;
-    impl Visitor for ColorVisitor {
+    impl<'de> Visitor<'de> for ColorVisitor {
         type Value = Color;
 
         fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
