@@ -36,12 +36,13 @@ pub struct Ui {
 
     held: Option<Id>,
     focused: Option<Id>,
+    freeze_caret: bool,
 
     salt: String,
     internal_fmt_string: String,
     slider_map: HashMap<Id, f32>,
-
     textbox_map: HashMap<Id, TextboxInfo>,
+
     caret_blink_time: f32,
 
     // Input state
@@ -72,11 +73,13 @@ impl Ui {
 
             held: None,
             focused: None,
+            freeze_caret: false,
 
             salt: String::new(),
             internal_fmt_string: String::new(),
             slider_map: HashMap::new(),
             textbox_map: HashMap::new(),
+
             caret_blink_time: 0.0,
 
             mouse_pos: Vec2::zero(),
@@ -170,10 +173,13 @@ impl Ui {
         }
     }
     
-    /// Draws a separator and advances to the next line. See [`next_line`] for more info.
+    /// Draws a separator and advances to the next line. See [`next_line`] for more info. This
+    /// draws a separator long enough to cap a line with `component_length` components on a line. 
     ///
     /// [`next_line`]: struct.Ui.html#method.next_line
-    pub fn line_separator(&mut self) {
+    pub fn line_separator(&mut self, component_length: usize) {
+        let component_length = component_length as f32;
+
         match self.line_dir {
             LineDir::Horizontal => {
                 let width = self.style.separator_width;
@@ -184,18 +190,14 @@ impl Ui {
                     y: self.caret.y + self.line_size,
                 };
                 let b = Vec2 {
-                    x: self.caret.x - self.style.margin.x - width, 
+                    x: a.x + self.style.comp_width*component_length + self.style.margin.x*(component_length - 1.0),
                     y: a.y,
                 };
 
                 line(&mut self.draw_data, a, b, width, color);
             },
             LineDir::Vertical => {
-                let a = Vec2::new(self.caret_start.x, self.caret.y + self.line_size + self.style.margin.y/2.0); 
-                let b = Vec2::new(self.caret.x, self.caret.y + self.line_size + self.style.margin.y/2.0); 
-                let width = self.style.separator_width;
-                let color = self.style.separator_color;
-                line(&mut self.draw_data, a, b, width, color);
+                panic!("NYI at {}:{}", module_path!(), line!());
             },
         }
         self.next_line();
@@ -261,6 +263,55 @@ impl Ui {
 
         let pressed = self.held == Some(id) && hovered && self.mouse_state.released();
         (width, height, pressed)
+    }
+
+    /// Inserts a checkbox with the given label on its right into the gui. Returns `true` if the
+    /// state of the checkbox (stored in `value`) was changed.
+    pub fn checkbox_ptr(&mut self, text: &str, value: &mut bool) -> bool {
+        let (id, text) = id_and_text(text, CompType::Checkbox, &self.salt);
+
+        let height = self.default_height();
+        let width = height;
+        let text_width = self.font.font().width(text, FONT_SIZE);
+
+        let pos = self.caret;
+        let size = Vec2::new(width, height);
+
+        let hovered = self.mouse_pos.x > pos.x && self.mouse_pos.y > pos.y && 
+                      self.mouse_pos.x < pos.x + size.x && self.mouse_pos.y < pos.y + size.y;
+        if hovered && self.mouse_state.pressed() {
+            self.held = Some(id);
+        }
+
+        let color = if self.held == Some(id) {
+            self.style.hold_color
+        } else if hovered {
+            self.style.hover_color
+        } else {
+            self.style.base_color
+        };
+
+        quad(&mut self.draw_data, pos, size, color);
+        if *value {
+            let inset = Vec2::new(4.0, 4.0);
+            quad(&mut self.draw_data, pos + inset, size - inset*2.0, self.style.text_color);
+        }
+
+        let font_pos = {
+            let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+            pos + Vec2::new(width + self.style.margin.x, height - text_start)
+        };
+        self.font.cache(text, FONT_SIZE, font_pos, self.style.text_color);
+
+        let total_width = width + text_width + self.style.margin.x;
+        self.advance_caret(total_width, height);
+
+        if self.held == Some(id) && hovered && self.mouse_state.released() {
+            *value = !*value;
+            true
+        } else {
+            false
+        }
     }
 
     /// Inserts the given string into the gui. If an alignment is given the label will have the
@@ -518,6 +569,13 @@ impl Ui {
         }
     }
 
+    /// Sets whether the internal caret should be advanced. When frozen, multiple components can be
+    /// drawn on top of one another. This is really only useful when drawing labels with different
+    /// alignments which don't completely cover a single component slot.
+    pub fn freeze_caret(&mut self, freeze: bool) {
+        self.freeze_caret = freeze;
+    }
+
     fn draw_comp(&mut self, pos: Vec2<f32>, width: f32, height: f32, color: Color, text: &str, alignment: Alignment) {
         let size = Vec2::new(width, height);
         quad(&mut self.draw_data, pos, size, color);
@@ -527,11 +585,15 @@ impl Ui {
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
         match self.line_dir {
             LineDir::Horizontal => {
-                self.caret.x += comp_width + self.style.margin.x;
+                if !self.freeze_caret {
+                    self.caret.x += comp_width + self.style.margin.x;
+                }
                 self.line_size = f32::max(comp_height, self.line_size);
             },
             LineDir::Vertical => {
-                self.caret.y += comp_height + self.style.margin.y;
+                if !self.freeze_caret {
+                    self.caret.y += comp_height + self.style.margin.y;
+                }
                 self.line_size = f32::max(comp_width, self.line_size);
             },
         }
@@ -608,12 +670,14 @@ pub enum Alignment {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 struct Id(u64, CompType);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum CompType {
     Button,
     ToggleButton,
     Slider,
     Textbox,
+    Checkbox,
 }
 
 impl Id {
