@@ -24,6 +24,7 @@ pub struct InputManager {
     keyboard_states: [State; KEYBOARD_KEYS],
     type_buffer: String,
 
+    prev_event_count: usize, 
     event_source: mpsc::Receiver<Event>,
 }
 
@@ -37,6 +38,7 @@ impl InputManager {
             keyboard_states: [State::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
 
+            prev_event_count: 0,
             event_source: event_source,
         }
     }
@@ -56,7 +58,10 @@ impl InputManager {
             if *state == State::Pressed  { *state = State::Down; }
         } 
 
+        self.prev_event_count = 0; 
         for event in self.event_source.try_iter() {
+            self.prev_event_count += 1;
+
             match event {
                 Event::MouseMoved(x, y) => {
                     let old_mouse_pos = self.mouse_pos;
@@ -131,6 +136,13 @@ impl InputManager {
     /// Characters that have been typed. This is cleared each frame.
     pub fn typed(&self) -> &str {
         &self.type_buffer
+    }
+
+    /// The total number of events that occured between the last two calls to [`refresh`].
+    ///
+    /// [`refresh`]: struct.InputManager.html#fn.refresh
+    pub fn prev_event_count(&self) -> usize {
+        self.prev_event_count
     }
 }
 
