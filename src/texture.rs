@@ -69,9 +69,9 @@ impl Texture {
     /// let mut texture = Texture::new();
     /// texture.load_file("assets/test.png").expect("Failed to load texture");
     /// ```
-    pub fn load_file<P>(&mut self, path: P) -> Result<(), TextureError> where P: AsRef<Path> {
+    pub fn load_file<P: AsRef<Path>>(&mut self, path: P) -> Result<(), TextureError> {
         let path = path.as_ref();
-        let (info, data) = load_image(path)?;
+        let RawImageData { info, buf } = RawImageData::from_file(path)?;
         let texture_format = match (info.color_type, info.bit_depth) {
             (png::ColorType::RGBA, png::BitDepth::Eight) => TextureFormat::RGBA_8,
             (png::ColorType::RGB, png::BitDepth::Eight)  => TextureFormat::RGB_8,
@@ -82,10 +82,30 @@ impl Texture {
                     path.to_string_lossy(),
                     file!(), line!()
                 );
-                return Err(TextureError { source: path.to_owned(), error: io::Error::new(io::ErrorKind::Other, message) });
+                return Err(TextureError { source: Some(path.to_owned()), error: io::Error::new(io::ErrorKind::Other, message) });
             }
         };
-        self.load_data(&data, info.width, info.height, texture_format);
+        self.load_data(&buf, info.width, info.height, texture_format);
+        Ok(())
+    }
+
+    /// Attempts to load the given raw image data into this texture. For more info see
+    /// [`RawImageData`].
+    ///
+    /// [`RawImageData`]: struct.RawImageData.html
+    pub fn load_raw_image_data(&mut self, data: RawImageData) -> Result<(), TextureError> {
+        let texture_format = match (data.info.color_type, data.info.bit_depth) {
+            (png::ColorType::RGBA, png::BitDepth::Eight) => TextureFormat::RGBA_8,
+            (png::ColorType::RGB, png::BitDepth::Eight)  => TextureFormat::RGB_8,
+            other => {
+                let message = format!(
+                    "Unsuported texture format ({:?}, {:?}) ({}:{})",
+                    other.0, other.1, file!(), line!()
+                );
+                return Err(TextureError { source: None, error: io::Error::new(io::ErrorKind::Other, message) });
+            }
+        };
+        self.load_data(&data.buf, data.info.width, data.info.height, texture_format);
         Ok(())
     }
 
@@ -211,28 +231,51 @@ impl Drop for Texture {
     }
 }
 
-/// Loads image data from a file
-fn load_image(path: &Path) -> Result<(png::OutputInfo, Vec<u8>), TextureError> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(err) => return Err(TextureError { source: path.to_owned(), error: err }),
-    };
+/// Raw image data loaded from a png file. This data can then be loaded into a texture 
+/// using [`Texture::load_raw_image_data`]. When loading very large textures it can be
+/// beneficial to load the raw image data from the texture on a separate thread, and then
+/// pass it to a texture in the main thread for performance reasons.
+///
+/// Note that textures must allways be created in the same thread as they are used in, because 
+/// of OpenGL limitations. You can call [`RawImageData::from_file`] from anywhere, but only
+/// ever create textures in the rendering tread (usually the main thread).
+///
+/// [`Texture::load_raw_image_data`]: struct.Texture.html#method.load_raw_image_data
+/// [`RawImageData::from_file`]: struct.RawImageData.html#method.from_file
+pub struct RawImageData {
+    info: png::OutputInfo,
+    buf: Vec<u8>,
+}
 
-    let decoder = png::Decoder::new(file);
+impl RawImageData {
+    /// Does not invoke any OpenGL functions, and can thus be called from any thread.
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<RawImageData, TextureError> {
+        let path = path.as_ref();
 
-    let (info, mut reader) = match decoder.read_info() {
-        Ok(result) => result,
-        Err(err) => return Err(TextureError { source: path.to_owned(), error: err.into() }),
-    };
+        // Open file
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(err) => return Err(TextureError { source: Some(path.to_owned()), error: err }),
+        };
 
-    let mut buf = vec![0; info.buffer_size()];
+        let decoder = png::Decoder::new(file);
+        let (info, mut reader) = match decoder.read_info() {
+            Ok(result) => result,
+            Err(err) => return Err(TextureError { source: Some(path.to_owned()), error: err.into() }),
+        };
 
-    match reader.next_frame(&mut buf) {
-        Ok(()) => {},
-        Err(err) => return Err(TextureError { source: path.to_owned(), error: err.into() }),
-    };
+        // Read data into buffer (This is what makes texture loading slow)
+        let mut buf = vec![0; info.buffer_size()];
+        match reader.next_frame(&mut buf) {
+            Ok(()) => {},
+            Err(err) => return Err(TextureError { source: Some(path.to_owned()), error: err.into() }),
+        };
 
-    Ok((info, buf))
+        Ok(RawImageData {
+            info: info,
+            buf: buf,
+        })
+    }
 }
 
 /// Represents an OpenGL texture filter.
@@ -330,7 +373,7 @@ pub enum SwizzleComp {
 /// A error which can occur during texture loading and creation.
 #[derive(Debug)]
 pub struct TextureError {
-    source: PathBuf,
+    source: Option<PathBuf>,
     error: io::Error,
 }
 
@@ -346,7 +389,10 @@ impl error::Error for TextureError {
 
 impl fmt::Display for TextureError {
     fn fmt(&self, mut f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "For texture \"{}\": ", self.source.to_string_lossy())?;
+        if let Some(ref source) = self.source {
+            write!(f, "For texture \"{}\": ", source.to_string_lossy())?;
+        }
+
         self.error.fmt(&mut f)?;
         Ok(())
     }
