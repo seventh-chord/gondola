@@ -61,12 +61,22 @@ impl<T: Num + Copy> Mat4<T> {
     }
 
     /// Creates a new matrix from a 4x4 array.
-    pub fn from_col_major(data: [[T; 4]; 4]) -> Mat4<T> {
+    pub fn from_col_nested(data: [[T; 4]; 4]) -> Mat4<T> {
         Mat4 {
             a11: data[0][0], a12: data[0][1], a13: data[0][2], a14: data[0][3],
             a21: data[1][0], a22: data[1][1], a23: data[1][2], a24: data[1][3],
             a31: data[2][0], a32: data[2][1], a33: data[2][2], a34: data[2][3],
             a41: data[3][0], a42: data[3][1], a43: data[3][2], a44: data[3][3],
+        }
+    }
+
+    /// Creates a new matrix from a flat array
+    pub fn from_row_flat(data: [T; 16]) -> Mat4<T> {
+        Mat4 {
+            a11: data[0],  a12: data[1],  a13: data[2],  a14: data[3],
+            a21: data[4],  a22: data[5],  a23: data[6],  a24: data[7],
+            a31: data[8],  a32: data[9],  a33: data[10], a34: data[11],
+            a41: data[12], a42: data[13], a43: data[14], a44: data[15],
         }
     }
 
