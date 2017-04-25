@@ -1,5 +1,5 @@
 
-//! A color type, with utility methods for modifying colors and parsing colors from hex strings. 
+//! A color type, with utility methods for modifying colors and parsing colors from hex integers and strings. 
 
 use gl;
 use gl::types::*;
@@ -20,7 +20,7 @@ pub struct Color {
 impl Color {
     /// Creates a new, completly opaque (alpha = 1), color.
     ///
-    /// All parameters should be between 0 and 1, both inclusive.
+    /// All parameters are clamped so that they are between 0 and 1, both inclusive.
     pub fn rgb(r: f32, g: f32, b: f32) -> Color {
         Color {
             r: clamp(r, 0.0, 1.0),
@@ -32,7 +32,7 @@ impl Color {
 
     /// Creates a new color.
     ///
-    /// All parameters should be between 0 and 1, both inclusive.
+    /// All parameters are clamped so that they are between 0 and 1, both inclusive.
     pub fn rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
         Color {
             r: clamp(r, 0.0, 1.0),
@@ -42,11 +42,10 @@ impl Color {
         }
     }
 
-    /// Creates a color from a hex string. The string should be
-    /// of the format "#rrggbb" or "rrggbb", where each of r, g
-    /// and b is a hexadecimal digit.
-    ///
-    /// If the string is not valid, this returns solid white.
+    /// Creates a color from a hex string. The string should be of the format "#rrggbb" or
+    /// "rrggbb", where each of r, g and b is a hexadecimal digit. Note that this currently does
+    /// not support loading colors with a alpha channel. All colors created will be completly
+    /// opaque.
     pub fn hex(string: &str) -> Option<Color> {
         let value = {
             if string.len() == 6 {
@@ -97,8 +96,8 @@ impl Color {
         format!("#{:06x}", value)
     }
 
-    /// Creates a new color based on this color, with the red,
-    /// green and blue components multiplied by the given factor.
+    /// Creates a new color based on this color, with the red, green and blue components multiplied
+    /// by the given factor.
     pub fn with_lightness(&self, factor: f32) -> Color {
         Color {
             r: clamp(self.r*factor, 0.0, 1.0),

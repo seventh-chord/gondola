@@ -23,7 +23,7 @@ pub struct Texture {
 impl Texture { 
     /// Creates a texture from a raw OpenGL handle and some additional data. Intended for internal
     /// use only, use with care!
-    pub fn from_raw(texture: GLuint, format: TextureFormat, width: u32, height: u32) -> Texture {
+    pub fn wrap_gl_texture(texture: GLuint, format: TextureFormat, width: u32, height: u32) -> Texture {
         Texture {
             texture: texture,
             format: format,
@@ -39,7 +39,13 @@ impl Texture {
         Ok(texture)
     }
 
-    /// Creates a new texture without any ascociated data
+    /// Creates a new texture without any ascociated data. Use can use [`load_file`],
+    /// [`load_raw_image_data`] and [`load_data`] to set the data to be used used
+    /// with this texture.
+    ///
+    /// [`load_file`]:           struct.Texture.html#method.load_file
+    /// [`load_raw_image_data`]: struct.Texture.html#method.load_raw_image_data
+    /// [`load_data`]:           struct.Texture.html#method.load_data
     pub fn new() -> Texture {
         let mut texture = 0;
 
@@ -59,8 +65,8 @@ impl Texture {
     }
 
     /// Attempts to load data from the given image file into this texture. Note that
-    /// it is usually more convenient to create a new texture from a file using
-    /// [`from_file(path)`](struct.Texture.html#method.from_file)
+    /// it is usually more convenient to create a new texture directly from a file using
+    /// [`from_file(path)`](struct.Texture.html#method.from_file).
     ///
     /// # Example
     /// ```rust,no_run
@@ -109,7 +115,9 @@ impl Texture {
         Ok(())
     }
 
-    /// Sets the data this texture points to
+    /// Directly loads some color data into a texture. This function does not check to ensure that
+    /// the data is in the correct format, so you have to manually ensure that it is valid. This
+    /// function is intended for creating small debug textures.
     pub fn load_data(&mut self, data: &[u8], width: u32, height: u32, format: TextureFormat) {
         unsafe {
             gl::BindTexture(gl::TEXTURE_2D, self.texture);

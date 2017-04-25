@@ -8,14 +8,14 @@ pub mod graphics {
     use gl::types::*;
     use color::Color;
 
-    /// Sets the opengl viewport
+    /// Sets the OpenGL viewport
     pub fn viewport(x: u32, y: u32, width: u32, height: u32) {
         unsafe {
             gl::Viewport(x as GLint, y as GLint, width as GLsizei, height as GLsizei);
         }
     }
 
-    /// Enables the opengl scissor test, with the given area. Note that this region is specified in
+    /// Enables the OpenGL scissor test, with the given area. Note that this region is specified in
     /// screen space.  That is, in the same coordinate system as [`viewport`]. Anything drawn
     /// outside this region will be discarded. Scissoring can be disabled with [`disable_scissor`].
     ///
@@ -112,8 +112,7 @@ pub mod graphics {
         }
     } 
     
-    /// Clears the currently bound framebuffer to the given color. If no color is specified
-    /// only the backbuffer is cleared
+    /// Clears the currently bound framebuffer to the given color.
     pub fn clear(color: Option<Color>, depth: bool, stencil: bool) {
         unsafe {
             if let Some(color) = color {
@@ -139,8 +138,8 @@ pub mod graphics {
         }
     }
 
-    /// If passed `Some` enables the given blend settings, if passed `None` disables
-    /// blending
+    /// If passed `Some` enables the given blend settings. If passed `None` disables
+    /// blending.
     pub fn set_blending(blending: Option<BlendSettings>) {
         unsafe {
             if let Some(ref settings) = blending {
@@ -196,7 +195,6 @@ pub mod graphics {
         }
     }
 
-    /// OpenGL blend functions
     #[repr(u32)] // GLenum is u32
     #[derive(Copy, Clone, Debug)]
     pub enum BlendFactor {
@@ -215,7 +213,7 @@ pub mod graphics {
         ConstantAlpha           = gl::CONSTANT_ALPHA,
         OneMinusConstantAlpha   = gl::ONE_MINUS_CONSTANT_ALPHA,
     }
-    /// OpenGL blend equations
+
     #[repr(u32)] // GLenum is u32
     #[derive(Copy, Clone, Debug)]
     pub enum BlendFunction {
@@ -301,6 +299,6 @@ pub mod loading {
         } else {
             return Ok(false);
         }
-    }
+    } 
 }
 

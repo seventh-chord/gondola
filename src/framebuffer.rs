@@ -105,7 +105,7 @@ impl Framebuffer {
                     }
 
                     gl::FramebufferTexture(gl::FRAMEBUFFER, attachment, texture, 0);
-                    textures[i] = Some(Texture::from_raw(texture, format, properties.width, properties.height));
+                    textures[i] = Some(Texture::wrap_gl_texture(texture, format, properties.width, properties.height));
                 } else {
                     draw_buffers[i] = gl::NONE;
                 }
