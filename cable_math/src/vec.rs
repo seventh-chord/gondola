@@ -377,6 +377,22 @@ impl<T: Float> Vec3<T> {
             z: self.z,
         }
     }
+
+    /// Creates a unit vector in the direction specified by the given pitch and yaw. Both values
+    /// are expected to be in radians. If both pitch and yaw are 0 this returns `(1, 0, 0)`.
+    ///
+    /// Yaw is rotation around the y axis, and pitch is rotation around the x axis. Yaw is applied
+    /// first.
+    pub fn pitch_yaw(pitch: T, yaw: T) -> Vec3<T> {
+        let (sin_p, cos_p) = pitch.sin_cos();
+        let (sin_y, cos_y) = yaw.sin_cos();
+
+        Vec3 {
+            x: cos_y*cos_p,
+            y: sin_p,
+            z: sin_y*cos_p,
+        }
+    }
 }
 impl<T: Float> Vec4<T> {
     /// Calculates the length of this vector.
