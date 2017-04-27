@@ -127,12 +127,61 @@ pub fn run<T: Game + Sized>() {
                     }
                 }
                 other => {
+                    let custom_event = match other {
+                        glutin::Event::MouseMoved(x, y) => {
+                            let pos = Vec2::new(x as i32, y as i32);
+                            let delta = pos - state.prev_cursor_pos;
+                            state.prev_cursor_pos = pos;
+
+                            // set_cursor_position creates mose-moved events, we want to ignore those
+                            if state.cursor_state == CursorState::HiddenGrabbed {
+                                let center = state.win_size / 2;
+                                let center = Vec2::new(center.x as i32, center.y as i32);
+                                if pos == center {
+                                    continue;
+                                }
+                            }
+
+                            Event::MouseMoved {
+                                delta: delta,
+                                pos: pos,
+                            }
+                        },
+
+                        e => {
+                            Event::GlutinEvent(e)
+                        },
+                    };
+                    
                     // Send events to receivers, and remove those which are unable to receive.
                     state.event_sinks.retain(|sink| {
-                        sink.send(other.clone()).is_ok()
+                        sink.send(custom_event.clone()).is_ok()
                     });
                 },
             }
+        }
+
+        // Input state changes
+        for input_state_change in state.state_change_request_receiver.try_iter() {
+            match input_state_change {
+                StateRequest::ChangeCursorState(new_state) => {
+                    state.cursor_state = new_state;
+
+                    let glutin_cursor_state = match new_state {
+                        CursorState::Normal => glutin::CursorState::Normal,
+                        CursorState::Hidden => glutin::CursorState::Hide,
+                        CursorState::HiddenGrabbed => glutin::CursorState::Hide,
+                        CursorState::Grabbed => glutin::CursorState::Grab,
+                    };
+                    window.set_cursor_state(glutin_cursor_state).unwrap();
+                },
+            }
+        }
+
+        if state.cursor_state == CursorState::HiddenGrabbed {
+            let center = state.win_size / 2;
+            let center = Vec2::new(center.x as i32, center.y as i32);
+            window.set_cursor_position(center.x, center.y).unwrap();
         }
 
         // Logic and rendering
@@ -194,7 +243,12 @@ pub struct GameState {
     frame_accumulator: u32,
     delta_accumulator: u32,
 
-    event_sinks: Vec<mpsc::Sender<glutin::Event>>,
+    event_sinks: Vec<mpsc::Sender<Event>>,
+    state_change_request_receiver: mpsc::Receiver<StateRequest>,
+    state_change_request_sender: mpsc::Sender<StateRequest>,
+
+    prev_cursor_pos: Vec2<i32>,
+    cursor_state: CursorState,
 }
 
 /// Used with [`gondola::run`](fn.run.html)
@@ -217,6 +271,8 @@ pub trait Game: Sized {
 
 impl GameState {
     fn new() -> GameState {
+        let (state_change_request_sender, state_change_request_receiver) = mpsc::channel();
+
         GameState {
             win_size: Vec2::zero(),
             exit: false,
@@ -227,22 +283,49 @@ impl GameState {
             delta_accumulator: 0,
 
             event_sinks: Vec::new(),
+            state_change_request_receiver: state_change_request_receiver,
+            state_change_request_sender: state_change_request_sender,
+
+            prev_cursor_pos: Vec2::zero(),
+            cursor_state: CursorState::Normal,
         }
     }
 
     /// Generates a new receiver for glutin events. All events not consumed by the
     /// game itself will be received by this receiver. Note that all receiver receive
     /// all events, there is no notion of event consumption.
-    pub fn gen_event_receiver(&mut self) -> mpsc::Receiver<glutin::Event> {
+    pub fn gen_event_receiver(&mut self) -> mpsc::Receiver<Event> {
         let (sender, receiver) = mpsc::channel();
         self.event_sinks.push(sender);
         receiver
     }
 
+    /// Generates a new sender to transmit state change requests to the game core asynchronously.
+    pub fn gen_request_sender(&self) -> mpsc::Sender<StateRequest> {
+        self.state_change_request_sender.clone()
+    }
+
     /// Creates a new input manager which can be used to access the state of input devices.
     pub fn gen_input_manager(&mut self) -> InputManager {
         let receiver = self.gen_event_receiver();
-        InputManager::new(receiver)
+        let sender = self.gen_request_sender();
+        InputManager::new(receiver, sender)
     }
+}
+
+/// Because glutin does not handle some things in a very elegant fashion we have to work around
+/// some of its events with custom events.
+#[derive(Debug, Clone)]
+pub enum Event {
+    GlutinEvent(glutin::Event),
+    MouseMoved {
+        delta: Vec2<i32>,
+        pos: Vec2<i32>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum StateRequest {
+    ChangeCursorState(CursorState),
 }
 
