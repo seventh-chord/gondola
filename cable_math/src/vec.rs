@@ -344,8 +344,8 @@ impl<T: Float> Vec3<T> {
     /// ```
     /// use cable_math::Vec3;
     ///
-    /// let a = Vec3::new(1.0, 0.0, 0.0); // +x
-    /// let b = Vec3::new(0.0, 0.0, -1.0); // -z
+    /// let a = Vec3::new(0.0, 0.0, -1.0); // -z
+    /// let b = Vec3::new(-1.0, 0.0, 0.0); // -x
     ///
     /// let dif = b - a.rotate_y(1.571); // Approximately π/2
     ///
@@ -355,7 +355,7 @@ impl<T: Float> Vec3<T> {
         let cos = angle.cos();
         let sin = angle.sin();
         Vec3 {
-            x: self.x*cos - self.z*sin,
+            x: self.x*cos + self.z*sin,
             y: self.y,
             z: -self.x*sin + self.z*cos,
         }
