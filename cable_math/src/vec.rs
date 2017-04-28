@@ -310,13 +310,16 @@ impl<T: Float> Vec3<T> {
     }
 
     /// Rotates this vector by the given amount of radians around the x-axis in the
-    /// counter-clockwise direction.
+    /// counter-clockwise direction, acroding to the right hand rule.
+    ///
+    /// This rotates through the quadrants in the following order: +y, +z, -y, -z.
+    ///
     /// # Example
     /// ```
     /// use cable_math::Vec3;
     ///
-    /// let a = Vec3::new(1.0, 0.0, 1.0);
-    /// let b = Vec3::new(1.0, -1.0, 0.0);
+    /// let a = Vec3::new(0.0, 0.0, 1.0); // +z
+    /// let b = Vec3::new(0.0, -1.0, 0.0); // -y
     ///
     /// let dif = b - a.rotate_x(1.571); // Approximately π/2
     ///
@@ -333,13 +336,16 @@ impl<T: Float> Vec3<T> {
     }
 
     /// Rotates this vector by the given amount of radians around the y-axis in the
-    /// counter-clockwise direction.
+    /// counter-clockwise direction, acording to the right hand rule.
+    ///
+    /// This rotates through the quadrants in the following order: +x, -z, -x, +z.
+    ///
     /// # Example
     /// ```
     /// use cable_math::Vec3;
     ///
-    /// let a = Vec3::new(1.0, -1.0, 1.0);
-    /// let b = Vec3::new(-1.0, -1.0, 1.0);
+    /// let a = Vec3::new(1.0, 0.0, 0.0); // +x
+    /// let b = Vec3::new(0.0, 0.0, -1.0); // -z
     ///
     /// let dif = b - a.rotate_y(1.571); // Approximately π/2
     ///
@@ -351,18 +357,21 @@ impl<T: Float> Vec3<T> {
         Vec3 {
             x: self.x*cos - self.z*sin,
             y: self.y,
-            z: self.x*sin + self.z*cos,
+            z: -self.x*sin + self.z*cos,
         }
     }
 
     /// Rotates this vector by the given amount of radians around the z-axis in the
-    /// counter-clockwise direction.
+    /// counter-clockwise direction, acording to the right hand rule.
+    ///
+    /// This rotates through the quadrants in the following order: +x, +y, -x, -y
+    ///
     /// # Example
     /// ```
     /// use cable_math::Vec3;
     ///
-    /// let a = Vec3::new(1.0, 0.0, 1.0);
-    /// let b = Vec3::new(0.0, 1.0, 1.0);
+    /// let a = Vec3::new(-1.0, 0.0, 0.0); // -x
+    /// let b = Vec3::new(0.0, -1.0, 0.0); // -y
     ///
     /// let dif = b - a.rotate_z(1.571); // Approximately π/2
     ///
