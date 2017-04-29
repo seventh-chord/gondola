@@ -125,12 +125,27 @@ pub fn run<T: Game + Sized>() {
                         graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
                         game.on_resize(&state);
                     }
-                }
+                },
+                glutin::Event::Focused(focused) => {
+                    state.focused = focused;
+
+                    if focused {
+                        let glutin_cursor_state = match state.cursor_state {
+                            CursorState::Normal => glutin::CursorState::Normal,
+                            CursorState::Hidden => glutin::CursorState::Hide,
+                            CursorState::HiddenGrabbed => glutin::CursorState::Hide,
+                            CursorState::Grabbed => glutin::CursorState::Grab,
+                        }; 
+                        window.set_cursor_state(glutin_cursor_state).unwrap();
+                    } else {
+                        window.set_cursor_state(glutin::CursorState::Normal).unwrap();
+                    }
+                },
                 other => {
                     let custom_event = match other {
                         glutin::Event::MouseMoved(x, y) => {
                             let pos = Vec2::new(x as i32, y as i32);
-                            let delta = pos - state.prev_cursor_pos;
+                            let mut delta = pos - state.prev_cursor_pos;
                             state.prev_cursor_pos = pos;
 
                             // set_cursor_position creates mose-moved events, we want to ignore those
@@ -140,17 +155,22 @@ pub fn run<T: Game + Sized>() {
                                 if pos == center {
                                     continue;
                                 }
+
+                                // The focused state is almost exclusively used to control the
+                                // camera. When we don't have focus we don't want the camera to
+                                // move even if the cursor is moving around above the screen.
+                                // Because of this we just disable mouse deltas in that case.
+                                if !state.focused {
+                                    delta = Vec2::zero();
+                                }
                             }
 
-                            Event::MouseMoved {
-                                delta: delta,
-                                pos: pos,
-                            }
+                            Event::MouseMoved { delta, pos }
                         },
 
-                        e => {
-                            Event::GlutinEvent(e)
-                        },
+                        // We usually dont want to create a custom event, so unless we have custom
+                        // logic for a specific event type we just pass on the glutin event.
+                        e => Event::GlutinEvent(e),
                     };
                     
                     // Send events to receivers, and remove those which are unable to receive.
@@ -178,7 +198,7 @@ pub fn run<T: Game + Sized>() {
             }
         }
 
-        if state.cursor_state == CursorState::HiddenGrabbed {
+        if state.cursor_state == CursorState::HiddenGrabbed && state.focused {
             let center = state.win_size / 2;
             let center = Vec2::new(center.x as i32, center.y as i32);
             window.set_cursor_position(center.x, center.y).unwrap();
@@ -238,6 +258,8 @@ pub struct GameState {
     /// half second. Note that this is only an average; it does not reflect rapid fluctuations of 
     /// delta times.
     pub average_framerate: f32,
+    /// If true the game window currently has focus. 
+    pub focused: bool,
 
     // Used to calculate framerate
     frame_accumulator: u32,
@@ -281,6 +303,8 @@ impl GameState {
             average_framerate: -1.0,
             frame_accumulator: 0,
             delta_accumulator: 0,
+
+            focused: false, // We get a Focused(true) event once the window opens
 
             event_sinks: Vec::new(),
             state_change_request_receiver: state_change_request_receiver,
