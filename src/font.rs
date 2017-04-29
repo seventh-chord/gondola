@@ -9,7 +9,7 @@
 use gl;
 use gl::types::*;
 use rusttype;
-use rusttype::{Scale, Rect, point, GlyphId, PositionedGlyph};
+use rusttype::{Scale, point, GlyphId, PositionedGlyph};
 use rusttype::gpu_cache::*;
 use std::io;
 use std::io::prelude::*;
@@ -36,7 +36,7 @@ const CACHE_SIZE: usize = 500;
 /// [`CachedFont`]: struct.CachedFont.html
 pub struct Font {
     font: rusttype::Font<'static>,
-    cache: Cache,
+    gpu_cache: Cache,
     cache_texture: Texture,
     shader: Shader,
 }
@@ -57,16 +57,14 @@ impl Font {
         Ok(Font::with_rusttype_font(font))
     }
     fn with_rusttype_font(font: rusttype::Font<'static>) -> Font {
-        let cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.1, 0.1);
+        let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.1, 0.1);
 
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_TEX_SIZE, CACHE_TEX_SIZE, TextureFormat::R_8);
         cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
         Font {
-            font: font,
-            cache: cache,
-            cache_texture: cache_texture,
+            font, gpu_cache, cache_texture,
             shader: build_shader(),
         }
     }
@@ -211,39 +209,50 @@ impl Font {
         v_metrics.line_gap
     }
 
-    /// Writes data needed to render the given text into the given render cache. Multiple pieces of
-    /// text can be written into the render cache before rendering it. This allows for efficient
+    /// Retrieves the texture in which glyphs for this font are cached. This texture can change
+    /// from frame to frame.
+    pub fn texture(&self) -> &Texture {
+        &self.cache_texture
+    }
+
+    /// Writes data needed to render the given text into the given buffer. Multiple pieces of
+    /// text can be written into a single buffer before rendering it. This allows for efficient
     /// rendering of large sets of text.
-    pub fn cache(&mut self, draw_cache: &mut DrawCache, text: &str, text_size: f32, offset: Vec2<f32>, color: Color) {
+    ///
+    /// Normally you would want to use either [`DrawCache`] to get a buffer for rendering, or
+    /// [`CachedFont`] for a compined `Font` and `DrawCache`.
+    pub fn cache<T>(
+        &mut self, buf: &mut Vec<T>,
+        text: &str, text_size: f32, scale: f32, offset: Vec2<f32>, color: Color
+    )
+        where T: AsFontVert,
+    {
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
         for PlacementInfo { glyph, .. } in iter {
-            if let Ok(Some((uv, pos))) = self.cache.rect_for(0, &glyph) {
-                FontVert::to_buffer(&mut draw_cache.buffer_data, pos, uv, color);
+            if let Ok(Some((uv, pos))) = self.gpu_cache.rect_for(0, &glyph) {
+                let x1 = (pos.min.x as f32 - offset.x)*scale + offset.x;
+                let x2 = (pos.max.x as f32 - offset.x)*scale + offset.x;
+                let y1 = (pos.min.y as f32 - offset.y)*scale + offset.y;
+                let y2 = (pos.max.y as f32 - offset.y)*scale + offset.y;
+
+                buf.push(T::gen(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y), color));
+                buf.push(T::gen(Vec2::new(x2, y1), Vec2::new(uv.max.x, uv.min.y), color));
+                buf.push(T::gen(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y), color));
+
+                buf.push(T::gen(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y), color));
+                buf.push(T::gen(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y), color));
+                buf.push(T::gen(Vec2::new(x1, y2), Vec2::new(uv.min.x, uv.max.y), color));
             }
 
-            self.cache.queue_glyph(0, glyph);
+            self.gpu_cache.queue_glyph(0, glyph);
         }
 
         let ref mut tex = self.cache_texture;
-        self.cache.cache_queued(|rect, data| {
+        self.gpu_cache.cache_queued(|rect, data| {
             tex.load_data_to_region(data,
                                     rect.min.x, rect.min.y,
                                     rect.width(), rect.height());
         }).unwrap();
-    }
-
-    /// Draws teh data stored in the given draw cache. Note that you should call
-    /// [`DrawCache::update_vbo`] before drawing a cache, and you probably want to
-    /// call [`DrawCache::clear`] afterwards.
-    ///
-    /// [`DrawCache::update_vbo`]:  struct.DrawCache.html#method.update_vbo
-    /// [`DrawCache::clear`]:       struct.DrawCache.html#method.clear
-    pub fn draw_cache(&mut self, cache: &DrawCache) {
-        graphics::set_blending(Some(graphics::BlendSettings::default()));
-        self.shader.bind();
-        self.cache_texture.bind(0);
-        cache.buffer.draw();
-        graphics::set_blending(None);
     }
 }
 
@@ -357,19 +366,43 @@ impl CachedFont {
     /// [`draw`](struct.CachedFont.html#method.draw). Usually you want to cache all text you want
     /// to draw in a given frame and then draw it all in a single call.
     pub fn cache(&mut self, text: &str, size: f32, pos: Vec2<f32>, color: Color) {
-        self.font.cache(&mut self.draw_cache, text, size, pos, color);
+        self.font.cache(&mut self.draw_cache.buffer_data, text, size, 1.0, pos, color);
     }
 
     /// Draws all text in the internal cache and then clears the cache
     pub fn draw(&mut self) {
         self.draw_cache.update_vbo();
-        self.font.draw_cache(&self.draw_cache);
+
+        graphics::set_blending(Some(graphics::BlendSettings::default()));
+        self.font.shader.bind();
+        self.font.cache_texture.bind(0);
+        self.draw_cache.buffer.draw();
+        graphics::set_blending(None);
+
         self.draw_cache.clear();
     }
 
     pub fn font(&self) -> &Font { &self.font }
     pub fn font_mut(&mut self) -> &mut Font { &mut self.font }
 }
+
+impl Clone for CachedFont {
+    fn clone(&self) -> CachedFont {
+        CachedFont {
+            font: self.font.clone(),
+            draw_cache: DrawCache::new(),
+        }
+    }
+}
+
+/// This trait can be used to allow drawing fonts into buffers with a custom vertex type.
+/// This is primarily used in [`Font::cache`].
+///
+/// [`Font::cache`]: struct.Font.html#method.cache
+pub trait AsFontVert: Vertex {
+    fn gen(pos: Vec2<f32>, uv: Vec2<f32>, color: Color) -> Self;
+}
+
 #[derive(Debug)]
 #[repr(C)]
 struct FontVert {
@@ -377,6 +410,7 @@ struct FontVert {
     uv: Vec2<f32>,
     color: Color,
 }
+
 // We cannot use the custom derive from within this crate
 impl Vertex for FontVert {
     fn bytes_per_vertex() -> usize { ::std::mem::size_of::<FontVert>() }
@@ -402,6 +436,13 @@ impl Vertex for FontVert {
     fn gen_transform_feedback_decl(_name_prefix: &str) -> String { String::new() }
     fn gen_transform_feedback_outputs(_name_prefix: &str) -> Vec<String> { Vec::new() }
 }
+
+impl AsFontVert for FontVert {
+    fn gen(pos: Vec2<f32>, uv: Vec2<f32>, color: Color) -> FontVert {
+        FontVert { pos, uv, color }
+    }
+}
+
 const VERT_SRC: &'static str = "
     #version 330 core
 
@@ -442,45 +483,6 @@ fn build_shader() -> Shader {
             println!("{}", err); // Print the error properly
             panic!();
         }
-    }
-}
-impl FontVert {
-    fn to_buffer(data: &mut Vec<FontVert>, pos: Rect<i32>, uv: Rect<f32>, color: Color,) {
-        let x1 = pos.min.x as f32;
-        let x2 = pos.max.x as f32;
-        let y1 = pos.min.y as f32;
-        let y2 = pos.max.y as f32;
-        data.push(FontVert {
-            pos: Vec2::new(x1, y1),
-            uv: Vec2::new(uv.min.x, uv.min.y),
-            color: color,
-        });
-        data.push(FontVert {
-            pos: Vec2::new(x2, y1),
-            uv: Vec2::new(uv.max.x, uv.min.y),
-            color: color,
-        });
-        data.push(FontVert {
-            pos: Vec2::new(x2, y2),
-            uv: Vec2::new(uv.max.x, uv.max.y),
-            color: color,
-        });
-
-        data.push(FontVert {
-            pos: Vec2::new(x1, y1),
-            uv: Vec2::new(uv.min.x, uv.min.y),
-            color: color,
-        });
-        data.push(FontVert {
-            pos: Vec2::new(x2, y2),
-            uv: Vec2::new(uv.max.x, uv.max.y),
-            color: color,
-        });
-        data.push(FontVert {
-            pos: Vec2::new(x1, y2),
-            uv: Vec2::new(uv.min.x, uv.max.y),
-            color: color,
-        });
     }
 }
 
