@@ -29,8 +29,6 @@ const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture 
 const VERTS_PER_CHAR: usize = 6;
 const CACHE_SIZE: usize = 500;
 
-const MATRIX_BINDING: usize = 0;
-
 /// A font. This struct can be used both to store data in and to draw data from a [`DrawCache`]. 
 /// Usually a [`CachedFont`] will be more convenient.
 ///
@@ -40,14 +38,24 @@ pub struct Font {
     font: rusttype::Font<'static>,
     gpu_cache: Cache,
     cache_texture: Texture,
+    matrix_binding: usize,
     shader: Shader,
 }
 
 impl Font {
-    /// Constructs a new font from the given font file. The file should be in either trutype (`.ttf`) or
-    /// opentype (`.otf`) format. See [rusttype documentation](https://docs.rs/rusttype) for a complete 
+    /// Constructs a new font from the given font file. The file should be in either trutype
+    /// (`.ttf`) or opentype (`.otf`) format. See [rusttype documentation][1] for a complete 
     /// overview of font support. 
-    pub fn from_file<P>(p: P) -> io::Result<Font> where P: AsRef<Path> {
+    ///
+    /// `matrix_binding` specifies a uniform buffer binding index. A [`PrimitiveBuffer`] with
+    /// `BufferTarget::Uniform` with a projection matrix (Usually you would want a orthographic
+    /// matrix) stored at the first index has to be bound to this index using
+    /// [`PrimitiveBuffer::bind_base(matrix_binding)`].
+    ///
+    /// [1]: https://docs.rs/rusttype
+    /// [`PrimitiveBuffer`]: ../buffer/struct.PrimitiveBuffer.html
+    /// [`PrimitiveBuffer::bind_base(matrix_binding)`]: ../buffer/struct.PrimitiveBuffer.html#method.bind_base
+    pub fn from_file<P>(p: P, matrix_binding: usize) -> io::Result<Font> where P: AsRef<Path> {
         let mut file = File::open(p)?;
         
         let mut data = Vec::new();
@@ -56,9 +64,10 @@ impl Font {
         let font_collection = rusttype::FontCollection::from_bytes(data);
         let font = font_collection.font_at(0).unwrap();
 
-        Ok(Font::with_rusttype_font(font))
+        Ok(Font::with_rusttype_font(font, matrix_binding))
     }
-    fn with_rusttype_font(font: rusttype::Font<'static>) -> Font {
+
+    fn with_rusttype_font(font: rusttype::Font<'static>, matrix_binding: usize) -> Font {
         let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.1, 0.1);
 
         let mut cache_texture = Texture::new();
@@ -66,8 +75,8 @@ impl Font {
         cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
         Font {
-            font, gpu_cache, cache_texture,
-            shader: build_shader(),
+            font, gpu_cache, cache_texture, matrix_binding,
+            shader: build_shader(matrix_binding),
         }
     }
 
@@ -263,7 +272,7 @@ impl Clone for Font {
     fn clone(&self) -> Font {
         // Cloning a rusttype font is cheap as data is internally stored in a
         // `Arc<Box<&[u8]>>`, which is cheap to clone.
-        Font::with_rusttype_font(self.font.clone())
+        Font::with_rusttype_font(self.font.clone(), self.matrix_binding)
     }
 }
 
@@ -346,12 +355,16 @@ pub struct CachedFont {
 }
 
 impl CachedFont {
-    /// Constructs a new cached font from the given font file. The file should be in either trutype (`.ttf`)
-    /// or opentype (`.otf`) format. See [rusttype documentation](https://docs.rs/rusttype) for a complete 
-    /// overview of font support. 
-    pub fn from_file<P>(p: P) -> io::Result<CachedFont> where P: AsRef<Path> {
+    /// Constructs a new cached font from the given font file. The file should be in either trutype
+    /// (`.ttf`) or opentype (`.otf`) format. See [rusttype documentation][1] for a complete overview of font support. 
+    ///
+    /// See [`Font`] documentation for mor information on `matrix_binding`.
+    ///
+    /// [1]: https://docs.rs/rusttype
+    /// [`Font`]: struct.Font.html
+    pub fn from_file<P>(p: P, matrix_binding: usize) -> io::Result<CachedFont> where P: AsRef<Path> {
         Ok(CachedFont {
-            font: Font::from_file(p)?,
+            font: Font::from_file(p, matrix_binding)?,
             draw_cache: DrawCache::new(),
         })
     }
@@ -478,11 +491,11 @@ const FRAG_SRC: &'static str = "
         color = vert_color * texture2D(tex_sampler, vert_uv);
     }
 ";
-fn build_shader() -> Shader {
+fn build_shader(matrix_binding: usize) -> Shader {
     let proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
     match proto.build() {
         Ok(shader) => {
-            shader.bind_uniform_block("matrix_block", MATRIX_BINDING);
+            shader.bind_uniform_block("matrix_block", matrix_binding);
             shader
         }
         Err(err) => {

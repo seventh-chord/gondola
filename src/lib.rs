@@ -25,7 +25,6 @@ extern crate bitflags;
 extern crate serde;
 
 mod color;
-mod matrix_buffer;
 mod input;
 
 pub mod texture;
@@ -39,7 +38,6 @@ pub mod ui;
 
 pub use color::*;
 pub use input::*;
-pub use matrix_buffer::*;
 pub use util::graphics;
 
 use cable_math::Vec2;
@@ -100,7 +98,7 @@ pub fn run<T: Game + Sized>() {
     // Set up game
     let mut game = match T::setup(&mut state) {
         Err(err) => {
-            println!("Failed to launch game:\n{:#?}", err);
+            println!("Failed to launch game:\n{}", err);
             panic!();
         },
         Ok(game) => game,

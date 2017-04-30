@@ -288,9 +288,9 @@ impl<T: VertexData> PrimitiveBuffer<T> {
 
     /// Calls `glBindBufferBase` for this buffer, with the given index. This is used
     /// in conjunctions with e.g. uniform buffers.
-    pub fn bind_base(&mut self, index: GLuint) {
+    pub fn bind_base(&self, index: usize) {
         unsafe {
-            gl::BindBufferBase(self.target as GLenum, index, self.buffer);
+            gl::BindBufferBase(self.target as GLenum, index as GLuint, self.buffer);
         }
     }
 }

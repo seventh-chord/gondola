@@ -11,7 +11,6 @@ use cable_math::{Vec2, Mat4};
 
 use color::Color;
 use font::{Font, CachedFont};
-use matrix_buffer::MatrixBuffer;
 use input::{InputManager, Key, State};
 use shader::{Shader, ShaderPrototype};
 use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
@@ -26,7 +25,6 @@ pub struct Ui {
     pub style: Style,
 
     projection_mat: Mat4<f32>,
-    mat_buffer: MatrixBuffer,
 
     font: CachedFont,
     shader: Shader,
@@ -65,7 +63,6 @@ impl Ui {
             style: Default::default(),
 
             projection_mat: Mat4::identity(),
-            mat_buffer: MatrixBuffer::new(0),
 
             font: CachedFont::from_font(font.clone()),
             shader: build_shader(),
@@ -127,8 +124,6 @@ impl Ui {
     /// buffers and binds new shaders. No special opengl state is required to be set when calling
     /// this function. Note that this function does not necessarily reset the state it changes.
     pub fn draw(&mut self) {
-        self.mat_buffer.store(&[self.projection_mat]);
-
         self.draw_vbo.clear();
         self.draw_vbo.put(0, &self.draw_data);
         self.draw_data.clear();

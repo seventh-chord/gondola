@@ -327,7 +327,46 @@ impl Shader {
         }
     }
 
-    /// TODO: DOCS DOCS DOCS DOCS DOCS DOCS DOCS  TODO: DOCS DOCS DOCS DOCS DOCS DOCS DOCS
+    /// Sets up the uniform block with the given name to retrieve data from the given binding
+    /// index. A [`PrimitiveBuffer`] with `BufferTarget::Uniform` can then be bound to that same
+    /// index using [`PrimitiveBuffer::bind_base(matrix_binding)`]. The data in that buffer can
+    /// then be accessed from the uniform block in the shader.
+    ///
+    /// Using uniform blocks with uniform buffers is usefull, as the same data can be accessed
+    /// by multiple shaders.
+    ///
+    /// OpenGL is required to support at least 36 binding indices.
+    ///
+    /// # Example
+    ///
+    /// In `shader.glsl`:
+    ///
+    /// ```glsl 
+    /// layout(shared,std140) // These layout qualifiers are needed
+    /// uniform matrix_block { 
+    ///     mat4 model_view_projection_matrix; 
+    /// };
+    ///
+    /// void main() {
+    ///     gl_Position = model_view_projection_matrix * vec4(...);
+    /// }
+    /// ```
+    ///
+    /// In `main.rs`:
+    ///
+    /// ```rust,no_run
+    /// let shader = load_shader!("shader.glsl", ...); 
+    /// shader.bind_uniform_block("matrix_block", 23); // `matrix_block` now gets data from index 23.
+    ///
+    /// let buffer = PrimitiveBuffer::new(BufferTarget::Uniform, BufferUsage::DynamicDraw);
+    /// buffer.bind_base(23); // `buffer` now gives data to index 23.
+    ///
+    /// buffer.put_at_start(Mat4::ortho( ... )); 
+    /// // The shader now sees `model_view_projection_matrix` as a orthographic projection matrix.
+    /// ```
+    /// 
+    /// [`PrimitiveBuffer`]: ../buffer/struct.PrimitiveBuffer.html
+    /// [`PrimitiveBuffer::bind_base(matrix_binding)`]: ../buffer/struct.PrimitiveBuffer.html#method.bind_base
     pub fn bind_uniform_block(&self, block_name: &str, binding_index: usize) {
         unsafe {
             let c_str = CString::new(block_name).unwrap();

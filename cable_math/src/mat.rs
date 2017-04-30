@@ -174,10 +174,9 @@ impl<T: Num + Copy> Mat4<T> {
         let a34 = T::zero() - ((far+near) / (far - near));
 
         Mat4 {
-            a11: a11, a12: T::zero(), a13: T::zero(), a14: a14,
-            a21: T::zero(), a22: a22, a23: T::zero(), a24: a24,
-            a31: T::zero(), a32: T::zero(), a33: a33, a34: a34,
-            a41: T::zero(), a42: T::zero(), a43: T::zero(), a44: T::one()
+            a11, a22, a33,
+            a14, a24, a34,
+            .. Mat4::identity()
         }
     }
 
