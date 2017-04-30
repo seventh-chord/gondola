@@ -7,7 +7,7 @@ use gl::types::*;
 use std::ops::Range;
 use std::collections::HashMap;
 use std::fmt::Write;
-use cable_math::{Vec2, Mat4};
+use cable_math::Vec2;
 
 use color::Color;
 use font::{Font, CachedFont};
@@ -18,13 +18,9 @@ use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
 const FONT_SIZE: f32 = 14.0;
 const CARET_BLINK_RATE: f32 = 0.53;
 
-const MATRIX_BINDING: usize = 0;
-
 /// A struct for using a imediate mode gui. 
 pub struct Ui {
     pub style: Style,
-
-    projection_mat: Mat4<f32>,
 
     font: CachedFont,
     shader: Shader,
@@ -58,14 +54,20 @@ impl Ui {
     /// Creates a new imediate mode gui system with the given font. Note that the font will be
     /// copied internally, so you can pass a reference to a font you are using elsewhere in your
     /// program.
-    pub fn new(font: &Font) -> Ui {
+    ///
+    /// `matrix_binding` specifies a uniform buffer binding index. A [`PrimitiveBuffer`] with
+    /// `BufferTarget::Uniform` with a projection matrix (Usually you would want a orthographic
+    /// matrix) stored at the first index has to be bound to this index using
+    /// [`PrimitiveBuffer::bind_base(matrix_binding)`].
+    ///
+    /// [`PrimitiveBuffer`]: ../buffer/struct.PrimitiveBuffer.html
+    /// [`PrimitiveBuffer::bind_base(matrix_binding)`]: ../buffer/struct.PrimitiveBuffer.html#method.bind_base
+    pub fn new(font: &Font, matrix_binding: usize) -> Ui {
         Ui {
             style: Default::default(),
 
-            projection_mat: Mat4::identity(),
-
             font: CachedFont::from_font(font.clone()),
-            shader: build_shader(),
+            shader: build_shader(matrix_binding),
             draw_data: Vec::with_capacity(500),
             draw_vbo: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 500),
 
@@ -96,9 +98,7 @@ impl Ui {
     /// gui creation functions.
     ///
     /// `delta` should be the time since the last call to `update`, in seconds.
-    pub fn update(&mut self, delta: f32, input: &InputManager, window_size: Vec2<u32>) {
-        self.projection_mat = Mat4::ortho(0.0, window_size.x as f32, 0.0, window_size.y as f32, -1.0, 1.0);
-
+    pub fn update(&mut self, delta: f32, input: &InputManager) { 
         self.mouse_pos = input.mouse_pos();
         self.mouse_state = input.mouse_key(0);
         self.typed.clear();
@@ -803,11 +803,11 @@ const FRAG_SRC: &'static str = "
     }
 ";
 
-fn build_shader() -> Shader {
+fn build_shader(matrix_binding: usize) -> Shader {
     let proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
     match proto.build() {
         Ok(shader) => {
-            shader.bind_uniform_block("matrix_block", MATRIX_BINDING);
+            shader.bind_uniform_block("matrix_block", matrix_binding);
             shader
         },
         Err(err) => {
