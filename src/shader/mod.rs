@@ -357,7 +357,7 @@ impl Shader {
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
         }
-    }
+    } 
 }
 
 impl Drop for Shader {
@@ -531,7 +531,7 @@ fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, ShaderError> {
 /// # Prefixes
 /// When a shader has many inputs and outputs it can be usefull to prefix all variables from a
 /// given source with a common prefix, to avoid naming conflicts. This can be done by appending
-/// `["prefix"]` to the vertex type. 
+/// `: "prefix"` to the vertex type. 
 ///
 /// For example, if 
 ///
@@ -539,7 +539,7 @@ fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, ShaderError> {
 ///
 /// then
 ///
-/// `load_shader!("...", Vert ["in_"])` generates `layout(...) in vec3 in_position`
+/// `load_shader!("...", Vert: "in_")` generates `layout(...) in vec3 in_position`
 ///
 /// [`Vertex`]: buffer/trait.Vertex.html
 ///
@@ -565,18 +565,19 @@ fn compile(src: &str, shader_type: GLenum) -> Result<GLuint, ShaderError> {
 /// ```
 #[macro_export]
 macro_rules! load_shader {
+    // Aliases for shorter formats
     ($src:expr, $vert:ty) => {
-        load_shader!($src, $vert [""])
+        load_shader!($src, $vert: "")
     };
     ($src:expr, $vert:ty => $target:ty) => {
-        load_shader!($src, $vert => $target ["out_"]);
+        load_shader!($src, $vert => $target: "out_");
     };
-    ($src:expr, $vert:ty => $target:ty [$target_prefix:expr]) => {
-        load_shader!($src, $vert [""] => $target [$target_prefix]);
+    ($src:expr, $vert:ty => $target:ty: $target_prefix:expr) => {
+        load_shader!($src, $vert: "" => $target: $target_prefix);
     };
 
     // With custom prefixes
-    ($src:expr, $vert:ty [$vert_prefix:expr]) => {
+    ($src:expr, $vert:ty: $vert_prefix:expr) => {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
@@ -584,7 +585,7 @@ macro_rules! load_shader {
             prototype.build()
         })
     };
-    ($src:expr, $vert:ty [$vert_prefix:expr] => $target:ty [$target_prefix:expr]) => {
+    ($src:expr, $vert:ty: $vert_prefix:expr => $target:ty: $target_prefix:expr) => {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
             prototype.bind_to_matrix_storage();
