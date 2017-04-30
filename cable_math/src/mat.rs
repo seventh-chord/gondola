@@ -162,7 +162,7 @@ impl<T: Num + Copy> Mat4<T> {
         } * (T::one() / det)
     }
 
-    /// Creates a new orthographic projection matrix
+    /// Creates a new orthographic projection matrix.
     pub fn ortho(left: T, right: T, top: T, bottom: T, near: T, far: T) -> Mat4<T> {
         let two = T::one() + T::one();
         let a11 = two / (right-left);
@@ -181,7 +181,7 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
-    /// Creates a translation matrix
+    /// Creates a translation matrix.
     pub fn translation(translation: Vec3<T>) -> Mat4<T> {
         Mat4 {
             a14: translation.x, a24: translation.y, a34: translation.z,
@@ -189,7 +189,31 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
-    /// Creates a scaling matrix
+    /// Creates a translation matrix which translates only along the x axis.
+    pub fn translation_x(x: T) -> Mat4<T> {
+        Mat4 {
+            a14: x,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a translation matrix which translates only along the y axis.
+    pub fn translation_y(y: T) -> Mat4<T> {
+        Mat4 {
+            a24: y,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a translation matrix which translates only along the z axis.
+    pub fn translation_z(z: T) -> Mat4<T> {
+        Mat4 {
+            a34: z,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a scaling matrix.
     pub fn scaling(scale: Vec3<T>) -> Mat4<T> {
         Mat4 {
             a11: scale.x, a22: scale.y, a33: scale.z,

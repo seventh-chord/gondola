@@ -25,7 +25,7 @@ extern crate bitflags;
 extern crate serde;
 
 mod color;
-mod matrix_stack;
+mod matrix_buffer;
 mod input;
 
 pub mod texture;
@@ -39,7 +39,7 @@ pub mod ui;
 
 pub use color::*;
 pub use input::*;
-pub use matrix_stack::*;
+pub use matrix_buffer::*;
 pub use util::graphics;
 
 use cable_math::Vec2;
@@ -56,7 +56,7 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 /// ```rust,no_run
 /// extern crate gondola;
 ///
-/// use gondola::{Game, GameResult, GameState, MatrixStack};
+/// use gondola::{Game, GameResult, GameState};
 ///
 /// fn main() {
 ///     gondola::run::<Pong>();
@@ -75,7 +75,7 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 ///         // All logic goes here.
 ///     }
 ///
-///     fn draw(&mut self, state: &GameState, mut mat_stack: &mut MatrixStack) {
+///     fn draw(&mut self, state: &GameState) {
 ///         // All rendering goes here
 ///     }
 /// }
@@ -96,8 +96,6 @@ pub fn run<T: Game + Sized>() {
         Vec2::new(width, height)
     };
     graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
-
-    let mut mat_stack = MatrixStack::new();
 
     // Set up game
     let mut game = match T::setup(&mut state) {
@@ -206,7 +204,7 @@ pub fn run<T: Game + Sized>() {
 
         // Logic and rendering
         game.update(delta as u32, &mut state);
-        game.draw(&state, &mut mat_stack);
+        game.draw(&state);
         window.swap_buffers().unwrap();
         graphics::print_errors();
 
@@ -280,7 +278,7 @@ pub trait Game: Sized {
     /// Called once every frame, before drawing.
     fn update(&mut self, delta: u32, state: &mut GameState);
     /// Called once every frame, after updating.
-    fn draw(&mut self, state: &GameState, mat_stack: &mut MatrixStack);
+    fn draw(&mut self, state: &GameState);
 
     /// Called whenever the game window is resized
     fn on_resize(&mut self, _state: &GameState) {}

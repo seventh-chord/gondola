@@ -24,8 +24,6 @@ pub struct ShaderPrototype {
     vert_src: String,
     frag_src: String,
     geom_src: String,
-    bind_to_matrix_storage: bool,
-
     transform_feedback_outputs: Option<Vec<String>>,
 }
 
@@ -94,7 +92,6 @@ impl ShaderPrototype {
             vert_src: vert_src,
             geom_src: geom_src,
             frag_src: frag_src,
-            bind_to_matrix_storage: false,
             transform_feedback_outputs: None,
         })
     }
@@ -105,7 +102,6 @@ impl ShaderPrototype {
             vert_src: String::from(vert_src),
             geom_src: String::from(geom_src),
             frag_src: String::from(frag_src),
-            bind_to_matrix_storage: false,
             transform_feedback_outputs: None,
         }
     }
@@ -129,21 +125,6 @@ impl ShaderPrototype {
             let vert_out = create_inputs(&self.vert_src, true);
             prepend_code(&mut self.geom_src, &vert_out);
         }
-    }
-
-    /// Binds this shader to matrix stack storage, so that it automatically has access to the currently 
-    /// set matrix stacks without the need to set uniforms every time a shader is bound. This gives 
-    /// access to the uniforms `mvp`, `model_mat` and `normal_mat` from shaders. `normal_mat` is based 
-    /// on the model matrix.
-    ///
-    /// *Implementation note*: Matricies are stored at the last valid uniform buffer binding index.
-    pub fn bind_to_matrix_storage(&mut self) {
-        let uniform_block_decl = "layout(shared,std140) uniform MatrixBlock { mat4 mvp; mat4 model_mat; mat4 normal_mat; };";
-        prepend_code(&mut self.vert_src, uniform_block_decl);
-        if !self.geom_src.is_empty() {
-            prepend_code(&mut self.geom_src, uniform_block_decl);
-        }
-        self.bind_to_matrix_storage = true;
     }
 
     /// Adds input declarations for the given vertex to this shader. The generated shader can then be 
@@ -172,20 +153,7 @@ impl ShaderPrototype {
         let frag_src = if self.frag_src.is_empty() { None } else { Some(self.frag_src.as_str()) };
         let geom_src = if self.geom_src.is_empty() { None } else { Some(self.geom_src.as_str()) };
 
-        match Shader::new(vert_src, geom_src, frag_src, self.transform_feedback_outputs.clone()) {
-            Ok(shader) => {
-                if self.bind_to_matrix_storage {
-                    unsafe {
-                        let binding_index = ::matrix_stack::get_uniform_binding_index();
-                        let c_str = CString::new("MatrixBlock").unwrap();
-                        let block_index = gl::GetUniformBlockIndex(shader.program, c_str.as_ptr());
-                        gl::UniformBlockBinding(shader.program, block_index, binding_index);
-                    }
-                }
-                Ok(shader)
-            },
-            Err(err) => Err(err)
-        }
+        Shader::new(vert_src, geom_src, frag_src, self.transform_feedback_outputs.clone())
     }
 }
 
@@ -357,7 +325,20 @@ impl Shader {
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
         }
-    } 
+    }
+
+    /// TODO: DOCS DOCS DOCS DOCS DOCS DOCS DOCS  TODO: DOCS DOCS DOCS DOCS DOCS DOCS DOCS
+    pub fn bind_uniform_block(&self, block_name: &str, binding_index: usize) {
+        unsafe {
+            let c_str = CString::new(block_name).unwrap();
+            let block_index = gl::GetUniformBlockIndex(self.program, c_str.as_ptr());
+            if block_index == gl::INVALID_INDEX {
+                println!("Invalid uniform");
+            } else {
+                gl::UniformBlockBinding(self.program, block_index, binding_index as GLuint);
+            }
+        }
+    }
 }
 
 impl Drop for Shader {
@@ -580,7 +561,6 @@ macro_rules! load_shader {
     ($src:expr, $vert:ty: $vert_prefix:expr) => {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
-            prototype.bind_to_matrix_storage();
             prototype.with_input_vert::<$vert>($vert_prefix);
             prototype.build()
         })
@@ -588,7 +568,6 @@ macro_rules! load_shader {
     ($src:expr, $vert:ty: $vert_prefix:expr => $target:ty: $target_prefix:expr) => {
         ::gondola::shader::ShaderPrototype::from_file($src).and_then(|mut prototype| {
             prototype.propagate_outputs();
-            prototype.bind_to_matrix_storage();
             prototype.with_input_vert::<$vert>($vert_prefix);
             prototype.with_transform_output_vert::<$target>($target_prefix);
             prototype.build()

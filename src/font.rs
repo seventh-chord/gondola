@@ -29,6 +29,8 @@ const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture 
 const VERTS_PER_CHAR: usize = 6;
 const CACHE_SIZE: usize = 500;
 
+const MATRIX_BINDING: usize = 0;
+
 /// A font. This struct can be used both to store data in and to draw data from a [`DrawCache`]. 
 /// Usually a [`CachedFont`] will be more convenient.
 ///
@@ -453,10 +455,12 @@ const VERT_SRC: &'static str = "
     out vec2 vert_uv;
     out vec4 vert_color;
 
-    // Matrix block is inserted automatically
+    layout(shared,std140) uniform matrix_block { 
+        mat4 model_view_projection; 
+    };
 
     void main() {
-        gl_Position = mvp * vec4(pos, 0.0, 1.0);
+        gl_Position = model_view_projection * vec4(pos, 0.0, 1.0);
         vert_uv = uv;
         vert_color = color;
     }
@@ -475,10 +479,12 @@ const FRAG_SRC: &'static str = "
     }
 ";
 fn build_shader() -> Shader {
-    let mut proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
-    proto.bind_to_matrix_storage();
+    let proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
     match proto.build() {
-        Ok(shader) => shader,
+        Ok(shader) => {
+            shader.bind_uniform_block("matrix_block", MATRIX_BINDING);
+            shader
+        }
         Err(err) => {
             println!("{}", err); // Print the error properly
             panic!();

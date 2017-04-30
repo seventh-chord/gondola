@@ -7,23 +7,27 @@ use gl::types::*;
 use std::ops::Range;
 use std::collections::HashMap;
 use std::fmt::Write;
-use cable_math::Vec2;
+use cable_math::{Vec2, Mat4};
 
 use color::Color;
 use font::{Font, CachedFont};
+use matrix_buffer::MatrixBuffer;
 use input::{InputManager, Key, State};
-use matrix_stack::MatrixStack;
 use shader::{Shader, ShaderPrototype};
 use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
 
 const FONT_SIZE: f32 = 14.0;
 const CARET_BLINK_RATE: f32 = 0.53;
 
+const MATRIX_BINDING: usize = 0;
+
 /// A struct for using a imediate mode gui. 
 pub struct Ui {
     pub style: Style,
 
-    mat_stack: MatrixStack,
+    projection_mat: Mat4<f32>,
+    mat_buffer: MatrixBuffer,
+
     font: CachedFont,
     shader: Shader,
     draw_data: Vec<Vert>,
@@ -60,7 +64,9 @@ impl Ui {
         Ui {
             style: Default::default(),
 
-            mat_stack: MatrixStack::new(),
+            projection_mat: Mat4::identity(),
+            mat_buffer: MatrixBuffer::new(0),
+
             font: CachedFont::from_font(font.clone()),
             shader: build_shader(),
             draw_data: Vec::with_capacity(500),
@@ -94,7 +100,7 @@ impl Ui {
     ///
     /// `delta` should be the time since the last call to `update`, in seconds.
     pub fn update(&mut self, delta: f32, input: &InputManager, window_size: Vec2<u32>) {
-        self.mat_stack.ortho(0.0, window_size.x as f32, 0.0, window_size.y as f32, -1.0, 1.0);
+        self.projection_mat = Mat4::ortho(0.0, window_size.x as f32, 0.0, window_size.y as f32, -1.0, 1.0);
 
         self.mouse_pos = input.mouse_pos();
         self.mouse_state = input.mouse_key(0);
@@ -121,7 +127,7 @@ impl Ui {
     /// buffers and binds new shaders. No special opengl state is required to be set when calling
     /// this function. Note that this function does not necessarily reset the state it changes.
     pub fn draw(&mut self) {
-        self.mat_stack.update_buffer();
+        self.mat_buffer.store(&[self.projection_mat]);
 
         self.draw_vbo.clear();
         self.draw_vbo.put(0, &self.draw_data);
@@ -782,10 +788,12 @@ const VERT_SRC: &'static str = "
 
     out vec4 vert_col;
 
-    // Matrix block is inserted automatically
+    layout(shared,std140) uniform matrix_block { 
+        mat4 projection; 
+    };
 
     void main() {
-        gl_Position = mvp * vec4(pos, 0.0, 1.0);
+        gl_Position = projection * vec4(pos, 0.0, 1.0);
         vert_col = color;
     }
 ";
@@ -801,12 +809,14 @@ const FRAG_SRC: &'static str = "
 ";
 
 fn build_shader() -> Shader {
-    let mut proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
-    proto.bind_to_matrix_storage();
+    let proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
     match proto.build() {
-        Ok(shader) => shader,
+        Ok(shader) => {
+            shader.bind_uniform_block("matrix_block", MATRIX_BINDING);
+            shader
+        },
         Err(err) => {
-            println!("{}", err); // Print the error properly
+            println!("{}", err); // Print the error properly before panicing
             panic!();
         }
     }
