@@ -68,7 +68,7 @@ impl Font {
     }
 
     fn with_rusttype_font(font: rusttype::Font<'static>, matrix_binding: usize) -> Font {
-        let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.1, 0.1);
+        let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.5, 0.5);
 
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_TEX_SIZE, CACHE_TEX_SIZE, TextureFormat::R_8);
@@ -246,8 +246,24 @@ impl Font {
         where T: AsFontVert,
     {
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
-        for PlacementInfo { glyph, .. } in iter {
-            if let Ok(Some((uv, pos))) = self.gpu_cache.rect_for(0, &glyph) {
+        let glyphs = iter.collect::<Vec<_>>();
+
+        // Cache stuff on gpu
+        for &PlacementInfo { ref glyph, .. } in glyphs.iter() {
+            self.gpu_cache.queue_glyph(0, glyph.clone());
+        }
+        let ref mut tex = self.cache_texture;
+        self.gpu_cache.cache_queued(|rect, data| {
+            tex.load_data_to_region(
+                data,
+                rect.min.x, rect.min.y,
+                rect.width(), rect.height()
+            );
+        }).unwrap();
+
+        // Output vertices
+        for &PlacementInfo { ref glyph, .. } in glyphs.iter() {
+            if let Ok(Some((uv, pos))) = self.gpu_cache.rect_for(0, glyph) {
                 let x1 = (pos.min.x as f32 - offset.x)*scale + offset.x;
                 let x2 = (pos.max.x as f32 - offset.x)*scale + offset.x;
                 let y1 = (pos.min.y as f32 - offset.y)*scale + offset.y;
@@ -261,16 +277,8 @@ impl Font {
                 buf.push(T::gen(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y), color));
                 buf.push(T::gen(Vec2::new(x1, y2), Vec2::new(uv.min.x, uv.max.y), color));
             }
-
-            self.gpu_cache.queue_glyph(0, glyph);
         }
 
-        let ref mut tex = self.cache_texture;
-        self.gpu_cache.cache_queued(|rect, data| {
-            tex.load_data_to_region(data,
-                                    rect.min.x, rect.min.y,
-                                    rect.width(), rect.height());
-        }).unwrap();
     }
 }
 
