@@ -101,7 +101,7 @@ impl Font {
     /// [`height`]:     struct.Font.html#method.width
     /// [`dimensions`]: struct.Font.html#method.dimensions
     pub fn height(&self, text: &str, text_size: f32) -> f32 {
-        self.dimensions(text, text_size).x
+        self.dimensions(text, text_size).y
     }
 
     /// Calculates the dimensions, in pixels, of the given string if it where to be rendered at the
@@ -113,11 +113,15 @@ impl Font {
     /// [`width`]:  struct.Font.html#method.width
     pub fn dimensions(&self, text: &str, text_size: f32) -> Vec2<f32> {
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        let first_line_height = iter.vertical_advance;
+
         let mut max = Vec2::zero();
         for PlacementInfo { caret, .. } in iter {
             max.x = f32::max(caret.x, max.x);
             max.y = f32::max(caret.y, max.y);
         }
+
+        max.y += first_line_height; 
         max
     }
 
