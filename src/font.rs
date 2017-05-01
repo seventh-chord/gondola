@@ -232,6 +232,9 @@ impl Font {
     ///
     /// Normally you would want to use either [`DrawCache`] to get a buffer for rendering, or
     /// [`CachedFont`] for a compined `Font` and `DrawCache`.
+    ///
+    /// [`DrawCache`]: struct.DrawCache.html
+    /// [`CachedFont`]: struct.CachedFont.html
     pub fn cache<T>(
         &mut self, buf: &mut Vec<T>,
         text: &str, text_size: f32, scale: f32, offset: Vec2<f32>, color: Color
