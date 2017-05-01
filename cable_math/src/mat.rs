@@ -212,13 +212,21 @@ impl<T: Num + Copy> Mat4<T> {
         }
     }
 
-    /// Creates a scaling matrix.
-    pub fn scaling(scale: Vec3<T>) -> Mat4<T> {
+    /// Creates a scaling matrix which scales by the given amount along all axes.
+    pub fn scaling(scale: T) -> Mat4<T> {
+        Mat4 {
+            a11: scale, a22: scale, a33: scale,
+            .. Mat4::identity()
+        }
+    }
+
+    /// Creates a scaling matrix which scales by a unique amount along each axis.
+    pub fn scaling_by_axes(scale: Vec3<T>) -> Mat4<T> {
         Mat4 {
             a11: scale.x, a22: scale.y, a33: scale.z,
             .. Mat4::identity()
         }
-    } 
+    }
 }
 
 impl<T: Float + Copy> Mat4<T> {
