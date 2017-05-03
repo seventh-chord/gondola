@@ -104,6 +104,9 @@ pub fn run<T: Game + Sized>() {
         Ok(game) => game,
     };
 
+    // We run a resize event here, because some platforms don't send a Resized event on startup.
+    game.on_resize(&state);
+
     let mut delta: u64 = 16;
 
     'main_loop:
@@ -116,7 +119,9 @@ pub fn run<T: Game + Sized>() {
                 glutin::Event::Closed => break 'main_loop,
                 glutin::Event::Resized(..) => {
                     let (width, height) = window.get_inner_size_pixels().unwrap();
-                    if width != 0 && height != 0 {
+                    let changed = state.win_size.x != width || state.win_size.y != height;
+
+                    if width != 0 && height != 0 && changed {
                         state.win_size = Vec2::new(width, height);
                         graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
                         game.on_resize(&state);
