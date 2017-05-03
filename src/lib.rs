@@ -250,6 +250,9 @@ pub struct GameState {
     pub win_size: Vec2<u32>,
     /// If set to true the game will exit after rendering.
     pub exit: bool,
+    /// If true the game window currently has focus. 
+    pub focused: bool,
+
     /// The number of milliseconds per frame this game should aim to run at. Set to 16
     /// for 60 fps. If the main loop takes less time than this amount the game will
     /// sleep until a total of `target_delta` has ellapsed. If set to `None` the game will
@@ -259,9 +262,6 @@ pub struct GameState {
     /// half second. Note that this is only an average; it does not reflect rapid fluctuations of 
     /// delta times.
     pub average_framerate: f32,
-    /// If true the game window currently has focus. 
-    pub focused: bool,
-
     // Used to calculate framerate
     frame_accumulator: u32,
     delta_accumulator: u32,
@@ -270,6 +270,8 @@ pub struct GameState {
     state_change_request_receiver: mpsc::Receiver<StateRequest>,
     state_change_request_sender: mpsc::Sender<StateRequest>,
 
+    // To work around some input issue we need to track some input state here. Most input state
+    // is however tracked by the input manager.
     prev_cursor_pos: Vec2<i32>,
     cursor_state: CursorState,
 }
@@ -283,12 +285,15 @@ pub trait Game: Sized {
     /// Called once every frame, after updating.
     fn draw(&mut self, state: &GameState);
 
-    /// Called whenever the game window is resized
+    /// Called whenever the game window is resized. This function is guaranteed to be called
+    /// once whenever the game is started. When called, this function is allways called before
+    /// `update` and `resize`.
     fn on_resize(&mut self, _state: &GameState) {}
     /// Called after the main game loop exists. This method is not called if the main
-    /// loop `panic!`s.
-    fn close(&mut self) {} // Most simple games dont need any special logic here
+    /// loop `panic!`s. Most simple games don't need any logic here.
+    fn close(&mut self) {} 
 
+    /// The name dipslayed in the title bar of the games window.
     fn name() -> &'static str { "Unnamed game (Override Game::name to change title)" }
 }
 
