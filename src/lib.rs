@@ -82,11 +82,18 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 pub fn run<T: Game + Sized>() {
     let event_loop = glutin::EventsLoop::new();
 
+    // We can use conditional compilation to set this for other platforms
+    let gl_request = glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3));
+
     // Create window
     let result = glutin::WindowBuilder::new()
         .with_title(T::name())
-//        .with_vsync()
+//        .with_vsync() // Is enabled by default on linux with nvidia
         .with_srgb(Some(false))
+
+        .with_gl(gl_request)
+        .with_gl_profile(glutin::GlProfile::Core)
+
         .build(&event_loop);
 
     let window = match result {
