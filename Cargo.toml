@@ -11,13 +11,10 @@ serialize = ["serde"]
 [dependencies]
 gondola_derive = { path = "gondola_derive" }
 cable_math = { path = "cable_math" }
-glutin = "0.7"
+glutin = "0.8"
 gl = "*"
 rusttype = "0.2"
 bitflags = "0.8"
 # Only needed if we want custom serialization derives for color types
 serde = { version = "1.0", optional = true }
-
-[dependencies.png]
-version = "0.6"
-features = [] # We dont want encoding, just decoding
+png = { version = "0.6", features = [] }

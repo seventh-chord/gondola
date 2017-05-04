@@ -43,6 +43,7 @@ pub use util::graphics;
 use cable_math::Vec2;
 use std::time::{Instant, Duration};
 use std::sync::mpsc;
+use std::thread;
 
 /// The most generic result type possible. Used in top-level
 pub type GameResult<T> = Result<T, Box<std::error::Error>>;
@@ -79,13 +80,42 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 /// }
 /// ```
 pub fn run<T: Game + Sized>() {
+    let event_loop = glutin::EventsLoop::new();
+
     // Create window
-    let window = glutin::Window::new().unwrap();
+    let result = glutin::WindowBuilder::new()
+        .with_title(T::name())
+//        .with_vsync()
+        .with_srgb(Some(false))
+        .build(&event_loop);
+
+    let window = match result {
+        Ok(window) => window,
+        Err(err) => {
+            println!("Failed to open window:\n{}", err);
+            panic!();
+        },
+    };
+
     unsafe {
         window.make_current().unwrap();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
     window.set_title(T::name());
+
+    // Use a separate thread to read events, and send them back to the main thread
+    let (main_event_sender, main_event_receiver) = mpsc::channel::<glutin::Event>();
+    thread::spawn(move|| {
+        event_loop.run_forever(|event| {
+            let send_result = main_event_sender.send(event);
+
+            // If we receive a error the receiving end is gone, meaning that the main thread 
+            // has stopped
+            if send_result.is_err() {
+                event_loop.interrupt();
+            }
+        });
+    });
 
     // Set up game state
     let mut state = GameState::new();
@@ -107,17 +137,19 @@ pub fn run<T: Game + Sized>() {
     // We run a resize event here, because some platforms don't send a Resized event on startup.
     game.on_resize(&state);
 
-    let mut delta: u64 = 16;
+    let mut delta: u64 = 16; 
 
     'main_loop:
     loop {
         let start_time = Instant::now();
 
         // Events
-        for event in window.poll_events() {
+        for event in main_event_receiver.try_iter() {
+            let glutin::Event::WindowEvent { event, .. } = event; // Legacy api, woo
+
             match event {
-                glutin::Event::Closed => break 'main_loop,
-                glutin::Event::Resized(..) => {
+                glutin::WindowEvent::Closed => break 'main_loop,
+                glutin::WindowEvent::Resized(..) => {
                     let (width, height) = window.get_inner_size_pixels().unwrap();
                     let changed = state.win_size.x != width || state.win_size.y != height;
 
@@ -127,7 +159,7 @@ pub fn run<T: Game + Sized>() {
                         game.on_resize(&state);
                     }
                 },
-                glutin::Event::Focused(focused) => {
+                glutin::WindowEvent::Focused(focused) => {
                     state.focused = focused;
 
                     if focused {
@@ -144,7 +176,7 @@ pub fn run<T: Game + Sized>() {
                 },
                 other => {
                     let custom_event = match other {
-                        glutin::Event::MouseMoved(x, y) => {
+                        glutin::WindowEvent::MouseMoved(x, y) => {
                             let pos = Vec2::new(x as i32, y as i32);
                             let mut delta = pos - state.prev_cursor_pos;
                             state.prev_cursor_pos = pos;
@@ -347,7 +379,7 @@ impl GameState {
 /// some of its events with custom events.
 #[derive(Debug, Clone)]
 pub enum Event {
-    GlutinEvent(glutin::Event),
+    GlutinEvent(glutin::WindowEvent),
     MouseMoved {
         delta: Vec2<i32>,
         pos: Vec2<i32>,

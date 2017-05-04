@@ -71,7 +71,7 @@ impl InputManager {
             if let Event::GlutinEvent(glutin_event) = event {
                 // Handle raw glutin events 
                 match glutin_event {
-                    glutin::Event::MouseInput(state, button) => {
+                    glutin::WindowEvent::MouseInput(state, button) => {
                         let index = match button {
                             MouseButton::Left => 0,
                             MouseButton::Right => 1,
@@ -85,7 +85,7 @@ impl InputManager {
                             };
                         }
                     },
-                    glutin::Event::MouseWheel(delta, _) => {
+                    glutin::WindowEvent::MouseWheel(delta, _) => {
                         match delta {
                             MouseScrollDelta::LineDelta(x, y) => {
                                 self.mouse_scroll += Vec2::new(x, y);
@@ -95,7 +95,7 @@ impl InputManager {
                             },
                         }
                     },
-                    glutin::Event::KeyboardInput(state, key, _name) => {
+                    glutin::WindowEvent::KeyboardInput(state, key, _name, _modifier_state) => {
     //                    if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
                         let ref mut internal_state = self.keyboard_states[key as usize];
                         match state {
@@ -109,7 +109,7 @@ impl InputManager {
                             ElementState::Released => *internal_state = State::Released,
                         };
                     },
-                    glutin::Event::ReceivedCharacter(c) => self.type_buffer.push(c),
+                    glutin::WindowEvent::ReceivedCharacter(c) => self.type_buffer.push(c),
                     _ => {},
                 }
             } else {
