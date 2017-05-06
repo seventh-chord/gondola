@@ -15,7 +15,6 @@ use input::{InputManager, Key, State};
 use shader::{Shader, ShaderPrototype};
 use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
 
-const FONT_SIZE: f32 = 14.0;
 const CARET_BLINK_RATE: f32 = 0.53;
 
 /// A struct for using a imediate mode gui. 
@@ -260,7 +259,12 @@ impl Ui {
         } else {
             self.style.base_color
         };
-        self.draw_comp(pos, width, height, color, text, Alignment::Center);
+
+        let size = Vec2::new(width, height);
+
+        quad(&mut self.draw_data, pos, size, color);
+        text_in_quad(&mut self.font, self.style.font_size, pos, size, self.style.padding,
+                     text, Alignment::Center, self.style.text_color);
 
         let pressed = self.held == Some(id) && hovered && self.mouse_state.released();
         (width, height, pressed)
@@ -273,7 +277,7 @@ impl Ui {
 
         let height = self.default_height();
         let width = height;
-        let text_width = self.font.font().width(text, FONT_SIZE);
+        let text_width = self.font.font().width(text, self.style.font_size);
 
         let pos = self.caret;
         let size = Vec2::new(width, height);
@@ -285,28 +289,32 @@ impl Ui {
         }
 
         let color = if self.held == Some(id) {
-            self.style.hold_color
+            (self.style.hold_color, self.style.top_hold_color)
         } else if hovered {
-            self.style.hover_color
+            (self.style.hover_color, self.style.top_hold_color)
         } else {
-            self.style.base_color
+            (self.style.base_color, self.style.top_color)
         };
 
-        quad(&mut self.draw_data, pos, size, color);
+        // Draw checkbox
+        quad(&mut self.draw_data, pos, size, color.0);
         if *value {
             let inset = Vec2::new(4.0, 4.0);
-            quad(&mut self.draw_data, pos + inset, size - inset*2.0, self.style.text_color);
+            quad(&mut self.draw_data, pos + inset, size - inset*2.0, color.1);
         }
 
+        // Draw label
         let font_pos = {
-            let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+            let text_start = self.style.padding.y/2.0 - self.font.font().descent(self.style.font_size);
             pos + Vec2::new(width + self.style.margin.x, height - text_start)
         };
-        self.font.cache(text, FONT_SIZE, font_pos, self.style.text_color);
+        self.font.cache(text, self.style.font_size, font_pos, self.style.text_color);
 
+        // Properly advance caret
         let total_width = width + text_width + self.style.margin.x;
         self.advance_caret(total_width, height);
 
+        // Return true if the box state was changed
         if self.held == Some(id) && hovered && self.mouse_state.released() {
             *value = !*value;
             true
@@ -329,7 +337,7 @@ impl Ui {
             },
             None => {
                 actual_alignment = Alignment::Left;
-                width = self.font.font().width(text, FONT_SIZE);
+                width = self.font.font().width(text, self.style.font_size);
                 height = self.default_height();
             },
         }
@@ -337,7 +345,7 @@ impl Ui {
         let size = Vec2::new(width, height);
         let pos = self.caret;
 
-        text_in_quad(&mut self.font, pos, size, self.style.padding, 
+        text_in_quad(&mut self.font, self.style.font_size, pos, size, self.style.padding, 
                      text, actual_alignment, self.style.text_color);
         self.advance_caret(width, height);
     }
@@ -357,7 +365,7 @@ impl Ui {
             },
             None => {
                 actual_alignment = Alignment::Left;
-                width = self.font.font().width(text, FONT_SIZE);
+                width = self.font.font().width(text, self.style.font_size);
                 height = self.default_height();
             },
         }
@@ -370,7 +378,7 @@ impl Ui {
 
         let color = if hovered { self.style.text_color_hovered } else { self.style.text_color };
 
-        text_in_quad(&mut self.font, pos, size, self.style.padding, 
+        text_in_quad(&mut self.font, self.style.font_size, pos, size, self.style.padding, 
                      text, actual_alignment, color);
         self.advance_caret(width, height);
 
@@ -445,13 +453,22 @@ impl Ui {
         if *value < range.start { *value = range.start; }
         if *value > range.end   { *value = range.end; }
 
+        let color = if hovered || self.held == Some(id) {
+            (self.style.hover_color, self.style.top_hold_color)
+        } else {
+            (self.style.base_color, self.style.top_color)
+        }; 
+
+        let text = &self.internal_fmt_string;
+        let size = Vec2::new(width, height);
+
         // Main bar
-        let color = if hovered && self.held != Some(id) { self.style.hover_color } else { self.style.base_color };
-        let text = &self.internal_fmt_string.clone();
-        self.draw_comp(pos, width, height, color, text, Alignment::Center);
+        quad(&mut self.draw_data, pos, size, color.0);
+        text_in_quad(&mut self.font, self.style.font_size, pos, size, self.style.padding,
+                     text, Alignment::Center, self.style.text_color);
+
         // Slidy thing
-        let color = if self.held == Some(id) { self.style.top_hold_color } else { self.style.top_color };
-        quad(&mut self.draw_data, slider_pos, slider_size, color);
+        quad(&mut self.draw_data, slider_pos, slider_size, color.1);
 
         changed
     }
@@ -476,8 +493,8 @@ impl Ui {
             // Place caret at correct location
             let click_pos = self.mouse_pos.x - pos.x - self.style.padding.x/2.0;
             let TextboxInfo { ref mut text, ref mut caret } = *self.textbox_map.entry(id).or_insert(Default::default());
-            let (visible_range, _) = self.font.font().visible_area(&text, FONT_SIZE, width - self.style.padding.x, *caret);
-            if let Some(clicked) = self.font.font().hovered_char(&text[visible_range.clone()], FONT_SIZE, click_pos) {
+            let (visible_range, _) = self.font.font().visible_area(&text, self.style.font_size, width - self.style.padding.x, *caret);
+            if let Some(clicked) = self.font.font().hovered_char(&text[visible_range.clone()], self.style.font_size, click_pos) {
                 *caret = visible_range.start + clicked;
             } else {
                 *caret = text.len();
@@ -544,17 +561,17 @@ impl Ui {
             let caret = if self.focused == Some(id) { *caret } else { text.len() };
 
             let (visible_range, draw_caret_pos) =
-                self.font.font().visible_area(&text, FONT_SIZE,
+                self.font.font().visible_area(&text, self.style.font_size,
                                               width - self.style.padding.x,
                                               caret);
             let slice = &text[visible_range];
 
             // Draw text
             let text_pos = {
-                let text_start = self.style.padding.y/2.0 - self.font.font().descent(FONT_SIZE);
+                let text_start = self.style.padding.y/2.0 - self.font.font().descent(self.style.font_size);
                 pos + Vec2::new(self.style.padding.x/2.0, height - text_start)
             };
-            self.font.cache(slice, FONT_SIZE, text_pos, self.style.text_color);
+            self.font.cache(slice, self.style.font_size, text_pos, self.style.text_color);
 
             // Draw caret
             if self.focused == Some(id) && self.caret_blink_time % (2.0*CARET_BLINK_RATE) < CARET_BLINK_RATE {
@@ -575,12 +592,6 @@ impl Ui {
     /// alignments which don't completely cover a single component slot.
     pub fn freeze_caret(&mut self, freeze: bool) {
         self.freeze_caret = freeze;
-    }
-
-    fn draw_comp(&mut self, pos: Vec2<f32>, width: f32, height: f32, color: Color, text: &str, alignment: Alignment) {
-        let size = Vec2::new(width, height);
-        quad(&mut self.draw_data, pos, size, color);
-        text_in_quad(&mut self.font, pos, size, self.style.padding, text, alignment, self.style.text_color);
     } 
 
     fn advance_caret(&mut self, comp_width: f32, comp_height: f32) {
@@ -601,7 +612,7 @@ impl Ui {
     }
 
     fn default_height(&self) -> f32 {
-        self.font.font().line_height(FONT_SIZE) + self.style.padding.y
+        self.font.font().line_height(self.style.font_size) + self.style.padding.y
     }
 } 
 
@@ -628,6 +639,7 @@ pub struct Style {
     pub caret_width: f32,
     pub separator_width: f32,
     pub comp_width: f32,
+    pub font_size: f32,
 }
 impl Default for Style {
     fn default() -> Style {
@@ -647,6 +659,7 @@ impl Default for Style {
             separator_width: 2.0,
             margin: Vec2::new(5.0, 5.0),
             comp_width: 150.0,
+            font_size: 14.0,
         }
     }
 }
@@ -730,24 +743,32 @@ fn line(buf: &mut Vec<Vert>, a: Vec2<f32>, b: Vec2<f32>, width: f32, color: Colo
     buf.push(Vert { pos: a + normal, color: color });
 }
 
-fn text_in_quad(font: &mut CachedFont, pos: Vec2<f32>, size: Vec2<f32>, padding: Vec2<f32>, text: &str, alignment: Alignment, color: Color) {
+fn text_in_quad(font: &mut CachedFont,
+                font_size: f32,
+                pos: Vec2<f32>,
+                size: Vec2<f32>,
+                padding: Vec2<f32>,
+                text: &str,
+                alignment: Alignment,
+                color: Color) 
+{ 
     let text_pos = match alignment {
         Alignment::Left => {
-            let text_start = padding.y/2.0 - font.font().descent(FONT_SIZE);
+            let text_start = padding.y/2.0 - font.font().descent(font_size);
             pos + Vec2::new(padding.x/2.0, size.y - text_start)
         },
         Alignment::Right => {
-            let text_width = font.font().width(text, FONT_SIZE);
-            let text_v_offset = padding.y/2.0 - font.font().descent(FONT_SIZE);
+            let text_width = font.font().width(text, font_size);
+            let text_v_offset = padding.y/2.0 - font.font().descent(font_size);
             pos + Vec2::new(size.x - padding.x/2.0 - text_width, size.y - text_v_offset)
         },
         Alignment::Center => {
-            let text_width = font.font().width(text, FONT_SIZE);
-            let text_v_offset = padding.y/2.0 - font.font().descent(FONT_SIZE);
+            let text_width = font.font().width(text, font_size);
+            let text_v_offset = padding.y/2.0 - font.font().descent(font_size);
             pos + Vec2::new(size.x/2.0 - text_width/2.0, size.y - text_v_offset)
         },
     };
-    font.cache(text, FONT_SIZE, text_pos, color);
+    font.cache(text, font_size, text_pos, color);
 }
 
 // We cannot use the custom derive from within this crate
@@ -778,28 +799,28 @@ impl Vertex for Vert {
 const VERT_SRC: &'static str = "
     #version 330 core
 
-    layout(location = 0) in vec2 pos;
-    layout(location = 1) in vec4 color;
+    layout(location = 0) in vec2 in_pos;
+    layout(location = 1) in vec4 in_color;
 
-    out vec4 vert_col;
+    out vec4 v_color;
 
     layout(shared,std140) uniform matrix_block { 
         mat4 projection; 
     };
 
     void main() {
-        gl_Position = projection * vec4(pos, 0.0, 1.0);
-        vert_col = color;
+        gl_Position = projection * vec4(in_pos, 0.0, 1.0);
+        v_color = in_color;
     }
 ";
 const FRAG_SRC: &'static str = "
     #version 330 core
 
-    in vec4 vert_col;
+    in vec4 v_color;
     out vec4 color;
 
     void main() {
-        color = vert_col;
+        color = v_color;
     }
 ";
 
@@ -811,7 +832,10 @@ fn build_shader(matrix_binding: usize) -> Shader {
             shader
         },
         Err(err) => {
-            println!("{}", err); // Print the error properly before panicing
+            // We should only ever panic if the code of the shader declared above is invalid, in
+            // which should be caught during testing.
+            // Print the error properly before panicing.
+            println!("{}", err); 
             panic!();
         }
     }
