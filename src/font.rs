@@ -98,7 +98,7 @@ impl Font {
     ///
     /// Also see [`dimensions`] and [`width`].
     ///
-    /// [`height`]:     struct.Font.html#method.width
+    /// [`width`]:      struct.Font.html#method.width
     /// [`dimensions`]: struct.Font.html#method.dimensions
     pub fn height(&self, text: &str, text_size: f32) -> f32 {
         self.dimensions(text, text_size).y
@@ -123,6 +123,39 @@ impl Font {
 
         max.y += first_line_height; 
         max
+    }
+
+    /// Calculates the dimensions of a single line of text. Any newlines in the given string
+    /// are ignored.
+    pub fn line_dimensions(&self, text: &str, text_size: f32) -> LineDimensions {
+        let mut last_glyph: Option<GlyphId> = None;
+        let mut dimensions = LineDimensions::default();
+
+        let scale = Scale::uniform(text_size);
+
+        for c in text.chars() {
+            let glyph = if let Some(glyph) = self.font.glyph(c) {
+                glyph
+            } else {
+                continue;
+            };
+
+            // Apply kerning
+            if let Some(prev) = last_glyph.take() {
+                dimensions.width += self.font.pair_kerning(scale, prev, glyph.id());
+            }
+            last_glyph = Some(glyph.id());
+
+            let glyph = glyph.scaled(scale);
+            dimensions.width += glyph.h_metrics().advance_width;
+
+            if let Some(bounding) = glyph.exact_bounding_box() {
+                dimensions.descent = f32::max(dimensions.descent, bounding.max.y);
+                dimensions.ascent = f32::min(dimensions.ascent, bounding.min.y);
+            }
+        }
+
+        dimensions
     }
 
     /// Calculates which region of the given piece of text will be visible in a viewport with the
@@ -601,5 +634,17 @@ impl<'a> Iterator for PlacementIter<'a> {
         }
         None
     } 
+}
+
+/// The exact dimensions of a single line of text.
+#[derive(Debug, Copy, Clone, Default)]
+pub struct LineDimensions {
+    /// The distance from the baseline to the top of the highest-reaching glyph. This is
+    /// usually negative, as negative y (lower line numbers) is up on paper.
+    pub ascent: f32,
+    /// The distance from the baseline to the bottom of the lowest-reaching glyph. This is
+    /// usually positive, as positive y (higher line numbers) is down on paper.
+    pub descent: f32,
+    pub width: f32,
 }
 
