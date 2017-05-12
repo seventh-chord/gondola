@@ -648,3 +648,10 @@ pub struct LineDimensions {
     pub width: f32,
 }
 
+impl LineDimensions {
+    /// The total height of this line. `descent` - `ascent`.
+    pub fn height(&self) -> f32 {
+        self.descent - self.ascent
+    }
+}
+
