@@ -269,6 +269,36 @@ impl<T: Float> Vec2<T> {
             y: self.y.round(),
         }
     }
+
+    /// Treating the two given vectors as complex numbers, with `x` being the real part and `y`
+    /// being the imaginary part, this function algebraically multiplies the two values. Complex
+    /// multiplication is commutative.
+    ///
+    /// In general, this function can be used to quickly rotate vectors: Multiplying (with complex
+    /// multiplication) by a unit vector pointing in some angle is the same as rotating the other
+    /// vector by that angle. [For more information][1].
+    ///
+    /// [1]: https://en.wikipedia.org/wiki/Imaginary_number#Geometric_interpretation
+    ///
+    /// # Example
+    /// ```
+    /// use cable_math::Vec2;
+    ///
+    /// let angle = 4.3; 
+    /// let a = Vec2::polar(1.0, angle); 
+    /// let b = Vec2::new(4.0, 5.0);
+    ///
+    /// let complexly_rotated = Vec2::complex_mul(a, b);
+    /// let simply_rotated = b.rotate(angle);
+    ///
+    /// assert!((complexly_rotated - simply_rotated).len() < 0.001);
+    /// ```
+    pub fn complex_mul(a: Vec2<T>, b: Vec2<T>) -> Vec2<T> {
+        Vec2 {
+            x: a.x*b.x - a.y*b.y,
+            y: a.x*b.y + a.y*b.x,
+        }
+    }
 }
 impl<T: Float> Vec3<T> {
     /// Calculates the length of this vector
