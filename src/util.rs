@@ -138,6 +138,39 @@ pub mod graphics {
         }
     }
 
+    /// Sets the function used to check if a fragment passes the depth test. The initial value is
+    /// `Less`. See [`DepthFunction`] for more info.
+    ///
+    /// [`DepthFunction`]: enum.DepthFunction.html
+    pub fn set_depth_function(depth_function: DepthFunction) {
+        unsafe {
+            gl::DepthFunc(depth_function as GLenum);
+        }
+    }
+
+    #[repr(u32)] // GLenum is u32
+    #[derive(Copy, Clone, Debug)]
+    pub enum DepthFunction {
+        /// The depth test never passes.
+        Never           = gl::NEVER,
+        /// The depth test always passes.
+        Always         = gl::ALWAYS,
+        /// Only passes if the new fragment is at exactly the same depth as the old fragment.
+        Equal           = gl::EQUAL,
+        /// Only passes if the new fragment is at a different depth from the old fragment.
+        NotEqual        = gl::NOTEQUAL,
+
+        /// Only passes if the new fragment is closer than the old fragment.
+        Less            = gl::LESS,
+        /// Only passes if the new fragment is closer than or at the same depth as the old fragment.
+        LessOrEqual     = gl::LEQUAL,
+
+        /// Only passes if the new fragment is further away than the old fragment.
+        Greater         = gl::GREATER,
+        /// Only passes if the new fragment is further away or at the same depth as the old fragment.
+        GreaterOrEqual  = gl::GEQUAL,
+    }
+
     /// If passed `Some` enables the given blend settings. If passed `None` disables
     /// blending.
     pub fn set_blending(blending: Option<BlendSettings>) {
