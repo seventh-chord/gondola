@@ -84,6 +84,22 @@ impl Color {
         let b = b as f32 / 255.0;
 
         Color { r: r, g: g, b: b, a: 1.0 }
+    } 
+
+    /// Same as [`hex_int`], but allows specifying the alpha channel. `alpha` should be between 0
+    /// and 1, both inclusive.
+    ///
+    /// [`hex_int`]: struct.Color.html#method.hex_int
+    pub fn hex_int_alpha(value: u32, alpha: f32) -> Color {
+        let r = value >> 16 & 0xff;
+        let g = value >> 8 & 0xff;
+        let b = value & 0xff;
+
+        let r = r as f32 / 255.0;
+        let g = g as f32 / 255.0;
+        let b = b as f32 / 255.0;
+
+        Color { r: r, g: g, b: b, a: alpha }
     }
 
     /// Converts this color to a hex string like "#ffa13b". Note that this function currently
