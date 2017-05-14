@@ -80,55 +80,102 @@ impl Font {
         }
     }
 
-    /// Calculates the width, in pixels, of the given string if it where to be rendered at the
-    /// given size. This takes newlines into acount, meaning that for a multiline string this will
-    /// return the length of the longest line.
-    ///
-    /// Also see [`dimensions`] and [`height`].
-    ///
-    /// [`height`]:     struct.Font.html#method.height
-    /// [`dimensions`]: struct.Font.html#method.dimensions
+    /// Calculates the width in pixels of the given string if it where to be rendered at the given
+    /// size. This takes newlines into acount. 
     pub fn width(&self, text: &str, text_size: f32) -> f32 {
-        self.dimensions(text, text_size).x
-    }
+        let mut prev_glyph: Option<GlyphId> = None; 
+        let mut caret = Vec2::zero();
+        let mut max_x = 0.0;
 
-    /// Calculates the height, in pixels, of the given string if it where to be rendered at the
-    /// given size. This takes newlines into acount, meaning that for a multiline string this will
-    /// return the sum of the height of each individual line.
-    ///
-    /// Also see [`dimensions`] and [`width`].
-    ///
-    /// [`width`]:      struct.Font.html#method.width
-    /// [`dimensions`]: struct.Font.html#method.dimensions
-    pub fn height(&self, text: &str, text_size: f32) -> f32 {
-        self.dimensions(text, text_size).y
+        let scale = Scale::uniform(text_size);
+
+        for c in text.chars() {
+            let glyph = if let Some(glyph) = self.font.glyph(c) {
+                glyph
+            } else {
+                continue;
+            }; 
+
+            if c.is_control() {
+                if c == '\n' {
+                    caret.x = 0.0;
+                }
+                continue;
+            }
+
+            // Apply kerning
+            if let Some(prev) = prev_glyph.take() {
+                caret.x += self.font.pair_kerning(scale, prev, glyph.id());
+            }
+            prev_glyph = Some(glyph.id());
+
+            let glyph = glyph.scaled(scale);
+            caret.x += glyph.h_metrics().advance_width;
+
+            if caret.x > max_x { max_x = caret.x } 
+        }
+
+        max_x
     }
 
     /// Calculates the dimensions, in pixels, of the given string if it where to be rendered at the
-    /// given size. This takes newlines into acount.
-    ///
-    /// Also see [`width`] and [`height`].
-    ///
-    /// [`height`]: struct.Font.html#method.height
-    /// [`width`]:  struct.Font.html#method.width
-    pub fn dimensions(&self, text: &str, text_size: f32) -> Vec2<f32> {
-        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
-        let first_line_height = iter.vertical_advance;
+    /// given size. This takes newlines into acount. 
+    /// Returns the size of the string, in addition to the ascent of the first line. If the text is
+    /// offset downwards by this amount the top of the text will be at the previous baseline.
+    pub fn dimensions(&self, text: &str, text_size: f32) -> (Vec2<f32>, f32) {
+        let mut prev_glyph: Option<GlyphId> = None; 
+        let mut first_line = true;
+        let mut first_ascent = 0.0;
+        let mut caret = Vec2::zero();
+        let mut max_x = 0.0;
 
-        let mut max = Vec2::zero();
-        for PlacementInfo { caret, .. } in iter {
-            max.x = f32::max(caret.x, max.x);
-            max.y = f32::max(caret.y, max.y);
+        let scale = Scale::uniform(text_size);
+        let v_metrics = self.font.v_metrics(scale);
+        let vertical_advance = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap; 
+
+        for c in text.chars() {
+            let glyph = if let Some(glyph) = self.font.glyph(c) {
+                glyph
+            } else {
+                continue;
+            };
+
+            // Move to new line
+            if c.is_control() {
+                if c == '\n' {
+                    first_line = false;
+                    if caret.x > max_x { max_x = caret.x }
+                    caret.x = 0.0;
+                    caret.y += vertical_advance;
+                    prev_glyph = None; //No kerning after newline
+                }
+                continue;
+            }
+
+            // Apply kerning
+            if let Some(prev) = prev_glyph.take() {
+                caret.x += self.font.pair_kerning(scale, prev, glyph.id());
+            }
+            prev_glyph = Some(glyph.id());
+
+            let glyph = glyph.scaled(scale);
+            caret.x += glyph.h_metrics().advance_width;
+
+            if first_line {
+                if let Some(bounding) = glyph.exact_bounding_box() {
+                    first_ascent = f32::max(first_ascent, -bounding.min.y);
+                }
+            }
         }
 
-        max.y += first_line_height; 
-        max
+        if caret.x > max_x { max_x = caret.x } 
+        (Vec2::new(max_x, caret.y + first_ascent), first_ascent)
     }
 
     /// Calculates the dimensions of a single line of text. Any newlines in the given string
     /// are ignored.
     pub fn line_dimensions(&self, text: &str, text_size: f32) -> LineDimensions {
-        let mut last_glyph: Option<GlyphId> = None;
+        let mut prev_glyph: Option<GlyphId> = None;
         let mut dimensions = LineDimensions::default();
 
         let scale = Scale::uniform(text_size);
@@ -141,10 +188,10 @@ impl Font {
             };
 
             // Apply kerning
-            if let Some(prev) = last_glyph.take() {
+            if let Some(prev) = prev_glyph.take() {
                 dimensions.width += self.font.pair_kerning(scale, prev, glyph.id());
             }
-            last_glyph = Some(glyph.id());
+            prev_glyph = Some(glyph.id());
 
             let glyph = glyph.scaled(scale);
             dimensions.width += glyph.h_metrics().advance_width;
@@ -563,7 +610,7 @@ struct PlacementIter<'a> {
 
     offset: Vec2<f32>,
     caret: Vec2<f32>,
-    last_glyph: Option<GlyphId>,
+    prev_glyph: Option<GlyphId>,
     vertical_advance: f32,
 }
 struct PlacementInfo<'a> {
@@ -586,7 +633,7 @@ impl<'a> PlacementIter<'a> {
 
             offset: offset,
             caret: offset,
-            last_glyph: None,
+            prev_glyph: None,
             vertical_advance: vertical_advance,
         }
     }
@@ -604,7 +651,7 @@ impl<'a> Iterator for PlacementIter<'a> {
                 if c == '\n' {
                     self.caret.x = self.offset.x;
                     self.caret.y += self.vertical_advance;
-                    self.last_glyph = None; //No kerning after newline
+                    self.prev_glyph = None; //No kerning after newline
                 }
                 continue;
             }
@@ -616,10 +663,10 @@ impl<'a> Iterator for PlacementIter<'a> {
             };
 
             // Apply kerning
-            if let Some(prev) = self.last_glyph.take() {
+            if let Some(prev) = self.prev_glyph.take() {
                 self.caret.x += self.font.pair_kerning(self.scale, prev, glyph.id());
             }
-            self.last_glyph = Some(glyph.id());
+            self.prev_glyph = Some(glyph.id());
 
             let glyph = glyph
                 .scaled(self.scale)
