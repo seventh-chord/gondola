@@ -29,6 +29,10 @@ const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture 
 const VERTS_PER_CHAR: usize = 6;
 const CACHE_SIZE: usize = 500;
 
+// There might be some official sepc for how tabs should work. Note that this is multiplied by the
+// current font size.
+const TAB_WIDTH: f32 = 1.5; 
+
 /// A font. This struct can be used both to store data in and to draw data from a [`DrawCache`]. 
 /// Usually a [`CachedFont`] will be more convenient.
 ///
@@ -100,6 +104,13 @@ impl Font {
                 if c == '\n' {
                     caret.x = 0.0;
                 }
+                // Align to next tab stop
+                if c == '\t' {
+                    let tab_width = TAB_WIDTH*text_size;
+                    caret.x /= tab_width;
+                    caret.x = (caret.x + 1.0).round();
+                    caret.x *= tab_width;
+                }
                 continue;
             }
 
@@ -148,6 +159,13 @@ impl Font {
                     caret.x = 0.0;
                     caret.y += vertical_advance;
                     prev_glyph = None; //No kerning after newline
+                }
+                // Align to next tab stop
+                if c == '\t' {
+                    let tab_width = TAB_WIDTH*text_size;
+                    caret.x /= tab_width;
+                    caret.x = (caret.x + 1.0).round();
+                    caret.x *= tab_width;
                 }
                 continue;
             }
@@ -652,6 +670,16 @@ impl<'a> Iterator for PlacementIter<'a> {
                     self.caret.x = self.offset.x;
                     self.caret.y += self.vertical_advance;
                     self.prev_glyph = None; //No kerning after newline
+                }
+                // Align to next tab stop
+                if c == '\t' {
+                    let tab_width = TAB_WIDTH*self.scale.x;
+
+                    let mut x = self.caret.x;
+                    x = (x - self.offset.x)/tab_width;
+                    x = (x + 1.0).round();
+                    x = x*tab_width + self.offset.x;
+                    self.caret.x = x;
                 }
                 continue;
             }
