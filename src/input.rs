@@ -21,8 +21,8 @@ pub struct InputManager {
     mouse_pos: Vec2<f32>,
     mouse_delta: Vec2<f32>,
     mouse_scroll: Vec2<f32>,
-    mouse_states: [State; MOUSE_KEYS],
-    keyboard_states: [State; KEYBOARD_KEYS],
+    mouse_states: [KeyState; MOUSE_KEYS],
+    keyboard_states: [KeyState; KEYBOARD_KEYS],
     type_buffer: String,
 
     prev_event_count: usize, 
@@ -39,8 +39,8 @@ impl InputManager {
             mouse_pos: Vec2::zero(),
             mouse_delta: Vec2::zero(),
             mouse_scroll: Vec2::zero(),
-            mouse_states: [State::Up; MOUSE_KEYS],
-            keyboard_states: [State::Up; KEYBOARD_KEYS],
+            mouse_states: [KeyState::Up; MOUSE_KEYS],
+            keyboard_states: [KeyState::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
 
             prev_event_count: 0,
@@ -56,12 +56,12 @@ impl InputManager {
         self.type_buffer.clear();
 
         for state in self.mouse_states.iter_mut() {
-            if *state == State::Released { *state = State::Up; }
-            if *state == State::Pressed  { *state = State::Down; }
+            if *state == KeyState::Released { *state = KeyState::Up; }
+            if *state == KeyState::Pressed  { *state = KeyState::Down; }
         }
         for state in self.keyboard_states.iter_mut() {
-            if *state == State::Released { *state = State::Up; }
-            if *state == State::Pressed  { *state = State::Down; }
+            if *state == KeyState::Released { *state = KeyState::Up; }
+            if *state == KeyState::Pressed  { *state = KeyState::Down; }
         } 
 
         self.prev_event_count = 0; 
@@ -80,8 +80,8 @@ impl InputManager {
                         } as usize;
                         if index < self.mouse_states.len() {
                             self.mouse_states[index] = match state {
-                                ElementState::Pressed => State::Pressed,
-                                ElementState::Released => State::Released,
+                                ElementState::Pressed => KeyState::Pressed,
+                                ElementState::Released => KeyState::Released,
                             };
                         }
                     },
@@ -101,12 +101,12 @@ impl InputManager {
                         match state {
                             ElementState::Pressed => {
                                 *internal_state = if internal_state.down() {
-                                    State::PressedRepeat
+                                    KeyState::PressedRepeat
                                 } else {
-                                    State::Pressed
+                                    KeyState::Pressed
                                 }
                             },
-                            ElementState::Released => *internal_state = State::Released,
+                            ElementState::Released => *internal_state = KeyState::Released,
                         };
                     },
                     glutin::WindowEvent::ReceivedCharacter(c) => self.type_buffer.push(c),
@@ -135,7 +135,7 @@ impl InputManager {
     pub fn mouse_scroll(&self) -> f32 { self.mouse_scroll.y }
     /// The state of the given mouse key. Panics if `key` is greater than 4. The left
     /// mouse key is 0, the right key is 1 and the middle key is 2.
-    pub fn mouse_key(&self, key: u8) -> State {
+    pub fn mouse_key(&self, key: u8) -> KeyState {
         let key = key as usize;
         if key >= self.mouse_states.len() {
             panic!("{} is not a valid index for a mouse key");
@@ -144,7 +144,7 @@ impl InputManager {
     }
     /// The state of the given keyboard key. Note that `Key` represent scancodes.
     /// See [`Key`](enum.Key.html) for more info
-    pub fn key(&self, key: Key) -> State {
+    pub fn key(&self, key: Key) -> KeyState {
         self.keyboard_states[key as usize]
     }
     /// Characters that have been typed. This is cleared each frame.
@@ -168,7 +168,7 @@ impl InputManager {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum State {
+pub enum KeyState {
     /// The button is not held down.
     Up,
     /// The button is being held down. In the previous frame it was not held down.
@@ -180,13 +180,13 @@ pub enum State {
     /// The button is not being held down. In the previous frame it was held down.
     Released,
 }
-impl State {
+impl KeyState {
     /// Returns true if the button is being held down (`Down` or `Pressed`) and
     /// false otherwise (`Up`, `Released` or `PressedRepeat`).
     pub fn down(self) -> bool {
         match self {
-            State::Up | State::Released => false,
-            State::Down | State::Pressed | State::PressedRepeat => true,
+            KeyState::Up | KeyState::Released => false,
+            KeyState::Down | KeyState::Pressed | KeyState::PressedRepeat => true,
         }
     }
     /// Returns true if the button is not being held down (`Up` or `Released`) and
@@ -196,16 +196,16 @@ impl State {
     }
     /// Returns true if the button is being held down, but was not held down in the last
     /// frame (`Pressed`)
-    pub fn pressed(self) -> bool { self == State::Pressed }
+    pub fn pressed(self) -> bool { self == KeyState::Pressed }
     /// Returns true either if this button is being held down and was not held down in the
     /// last frame (`Pressed`), or if the repeat action has been triggered by the key being
     /// held down for an extended amount of time (`PressedRepeat`).
     pub fn pressed_repeat(self) -> bool {
-        self == State::Pressed || self == State::PressedRepeat
+        self == KeyState::Pressed || self == KeyState::PressedRepeat
     }
     /// Returns true if the button is being not held down, but was held down in the last
     /// frame (`Released`)
-    pub fn released(self) -> bool { self == State::Released }
+    pub fn released(self) -> bool { self == KeyState::Released }
 }
 
 /// Codes for most keys. Note that these are scancodes, so they refer to a position

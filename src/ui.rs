@@ -11,7 +11,7 @@ use cable_math::Vec2;
 
 use color::Color;
 use font::{Font, CachedFont};
-use input::{InputManager, Key, State};
+use input::{InputManager, Key, KeyState};
 use shader::{Shader, ShaderPrototype};
 use buffer::{Vertex, VertexBuffer, PrimitiveMode, BufferUsage};
 
@@ -44,7 +44,7 @@ pub struct Ui {
 
     // Input state
     mouse_pos: Vec2<f32>,
-    mouse_state: State,
+    mouse_state: KeyState,
     move_left: bool, move_right: bool,
     typed: String,
 }
@@ -87,7 +87,7 @@ impl Ui {
             caret_blink_time: 0.0,
 
             mouse_pos: Vec2::zero(),
-            mouse_state: State::Up,
+            mouse_state: KeyState::Up,
             move_left: false, move_right: false,
             typed: String::new(),
         }
