@@ -1,6 +1,6 @@
 
 use num::*;
-use mat::Mat4;
+use mat::{Mat4, Mat3};
 use vec::Vec3;
 use std::ops::*;
 
@@ -203,6 +203,12 @@ impl<T: Num + Float + Copy> DivAssign<T> for Quaternion<T> {
 impl<T: Num + Float + Copy> From<Quaternion<T>> for Mat4<T> {
     fn from(quat: Quaternion<T>) -> Mat4<T> {
         Mat4::from_quaternion(quat.x, quat.y, quat.z, quat.w)
+    }
+}
+
+impl<T: Num + Float + Copy> From<Quaternion<T>> for Mat3<T> {
+    fn from(quat: Quaternion<T>) -> Mat3<T> {
+        Mat3::from_quaternion(quat.x, quat.y, quat.z, quat.w)
     }
 }
 

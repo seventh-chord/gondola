@@ -3,7 +3,7 @@
 
 extern crate cable_math;
 
-use cable_math::{Vec3, Vec4, Mat4, Quaternion};
+use cable_math::{Vec2, Vec3, Vec4, Mat3, Mat4, Quaternion};
 
 // Random angles between
 const TEST_ANGLES: [f32; 100] = [
@@ -16,7 +16,11 @@ const TEST_ANGLES: [f32; 100] = [
     -2.9516, -2.9516, 0.3768, 0.4396, 0.7536, -1.6328, -2.2608, -2.198, -1.0676, 0.942, -2.4492, 
 ];
 
-fn test_equal(a: Vec3<f32>, b: Vec3<f32>) {
+fn test_equal_v3(a: Vec3<f32>, b: Vec3<f32>) {
+    let diff = (a - b).len();
+    assert!(diff < 0.001, "Expected a = {} and b = {} to be equal.", a, b);
+}
+fn test_equal_v2(a: Vec2<f32>, b: Vec2<f32>) {
     let diff = (a - b).len();
     assert!(diff < 0.001, "Expected a = {} and b = {} to be equal.", a, b);
 }
@@ -31,15 +35,15 @@ fn quaternion_vector_rotation_coherency() {
 
         a = a.rotate_x(angle);
         b = Quaternion::rotation(angle, Vec3::new(1.0, 0.0, 0.0)) * b;
-        test_equal(a, b);
+        test_equal_v3(a, b);
 
         a = a.rotate_y(angle);
         b = Quaternion::rotation(angle, Vec3::new(0.0, 1.0, 0.0)) * b;
-        test_equal(a, b);
+        test_equal_v3(a, b);
 
         a = a.rotate_z(angle);
         b = Quaternion::rotation(angle, Vec3::new(0.0, 0.0, 1.0)) * b;
-        test_equal(a, b);
+        test_equal_v3(a, b);
     }
 }
 
@@ -53,20 +57,20 @@ fn matrix_vector_rotation() {
 
         a = a.rotate_x(angle);
         b = Mat4::rotation_x(angle) * b;
-        test_equal(a, b.xyz());
+        test_equal_v3(a, b.xyz());
 
         a = a.rotate_y(angle);
         b = Mat4::rotation_y(angle) * b;
-        test_equal(a, b.xyz());
+        test_equal_v3(a, b.xyz());
 
         a = a.rotate_z(angle);
         b = Mat4::rotation_z(angle) * b;
-        test_equal(a, b.xyz());
+        test_equal_v3(a, b.xyz());
     }
 }
 
 #[test]
-fn quat_to_matrix_vector_rotation() {
+fn quat_to_mat4_vector_rotation() {
     let mut a = Vec3::new(1.0, 0.0, 0.0);
     let mut b = Vec4::from3(a, 1.0);
 
@@ -76,16 +80,70 @@ fn quat_to_matrix_vector_rotation() {
         a = a.rotate_x(angle);
         let quat = Quaternion::rotation(angle, Vec3::new(1.0, 0.0, 0.0));
         b = Mat4::from(quat) * b;
-        test_equal(a, b.xyz());
+        test_equal_v3(a, b.xyz());
 
         a = a.rotate_y(angle);
         let quat = Quaternion::rotation(angle, Vec3::new(0.0, 1.0, 0.0));
         b = Mat4::from(quat) * b;
-        test_equal(a, b.xyz());
+        test_equal_v3(a, b.xyz());
 
         a = a.rotate_z(angle);
         let quat = Quaternion::rotation(angle, Vec3::new(0.0, 0.0, 1.0));
         b = Mat4::from(quat) * b;
-        test_equal(a, b.xyz());
+        test_equal_v3(a, b.xyz());
+    }
+}
+
+#[test]
+fn quat_to_mat3_vector_rotation() {
+    let mut a = Vec3::new(1.0, 0.0, 0.0);
+    let mut b = a;
+
+    for angle in TEST_ANGLES.iter() {
+        let angle = *angle;
+
+        a = a.rotate_x(angle);
+        let quat = Quaternion::rotation(angle, Vec3::new(1.0, 0.0, 0.0));
+        b = Mat3::from(quat) * b;
+        test_equal_v3(a, b);
+
+        a = a.rotate_y(angle);
+        let quat = Quaternion::rotation(angle, Vec3::new(0.0, 1.0, 0.0));
+        b = Mat3::from(quat) * b;
+        test_equal_v3(a, b);
+
+        a = a.rotate_z(angle);
+        let quat = Quaternion::rotation(angle, Vec3::new(0.0, 0.0, 1.0));
+        b = Mat3::from(quat) * b;
+        test_equal_v3(a, b);
+    }
+}
+
+/// Checks if various methods of 2d rotation work in the same way
+#[test]
+fn rotation_2d() {
+    let initial = Vec2::new(5.0, 3.0);
+    let mut a = initial;
+    let mut b = initial; 
+    let mut c = initial; 
+    let mut d = initial; 
+    let mut e = initial; 
+    let mut f = initial; 
+
+    for &angle in TEST_ANGLES.iter() {
+        // Rotate each vector using a different method
+        a = a.rotate(angle); 
+        b = Vec2::complex_mul(Vec2::polar(1.0, angle), b);
+        c = (Mat3::rotation(angle) * Vec3::from2(c, 1.0)).xy();
+        d = (Mat3::rotation(angle) * Vec3::from2(d, 0.0)).xy();
+        e = Mat3::rotation(angle).transform_dir(e);
+        f = Mat3::rotation(angle).transform_pos(f);
+
+        // Check if all methods result in the same rotation
+        test_equal_v2(a, b);
+        test_equal_v2(a, c);
+        test_equal_v2(a, d);
+        test_equal_v2(a, e);
+        test_equal_v2(a, f);
     }
 }

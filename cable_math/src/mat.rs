@@ -456,6 +456,19 @@ impl<T: Num + Copy> Mat3<T> {
             .. Mat3::identity()
         }
     }
+
+    /// Transforms the given vector as if it was a direction, ignoring translation but applying
+    /// scaling and rotation. This is equal to multiplying a `Vec3` with equal x and y values, and
+    /// z set to 0 by this matrix.
+    pub fn transform_dir(&self, dir: Vec2<T>) -> Vec2<T> {
+        (*self * Vec3::from2(dir, T::zero())).xy() 
+    }
+
+    /// Transforms the given vector as if it was a position. This is equal to multiplying a `Vec3`
+    /// with equal x and y values, and z set to 1 by this matrix.
+    pub fn transform_pos(&self, pos: Vec2<T>) -> Vec2<T> {
+        (*self * Vec3::from2(pos, T::one())).xy() 
+    }
 }
 
 impl<T: Float + Copy> Mat3<T> {
@@ -465,8 +478,8 @@ impl<T: Float + Copy> Mat3<T> {
         let sin = angle.sin();
         let cos = angle.cos();
         Mat3 {
-            a22: cos, a23: -sin,
-            a32: sin, a33: cos,
+            a11: cos, a12: -sin,
+            a21: sin, a22: cos,
             .. Mat3::identity()
         }
     }
