@@ -10,7 +10,7 @@ use serde::de::{Visitor, SeqAccess, Error};
 
 use quat::Quaternion;
 use vec::{Vec2, Vec3, Vec4};
-use mat::Mat4;
+use mat::{Mat3, Mat4};
 
 impl<T: Serialize> Serialize for Vec2<T> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
@@ -78,6 +78,22 @@ impl<T: Serialize> Serialize for Mat4<T> {
     }
 }
 
+impl<T: Serialize> Serialize for Mat3<T> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut tuple = s.serialize_tuple(9)?;
+        tuple.serialize_element(&self.a11)?;
+        tuple.serialize_element(&self.a12)?;
+        tuple.serialize_element(&self.a13)?;
+        tuple.serialize_element(&self.a21)?;
+        tuple.serialize_element(&self.a22)?;
+        tuple.serialize_element(&self.a23)?;
+        tuple.serialize_element(&self.a31)?;
+        tuple.serialize_element(&self.a32)?;
+        tuple.serialize_element(&self.a33)?;
+        tuple.end()
+    }
+}
+
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Vec2<T> {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_tuple(2, Vec2Visitor::new())
@@ -111,6 +127,15 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mat4<T>
 {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_tuple(16, Mat4Visitor::new())
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mat3<T> 
+    where T: Deserialize<'de>,
+          T: Num + Float + Copy,
+{
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_tuple(9, Mat3Visitor::new())
     }
 }
 
@@ -263,5 +288,33 @@ impl<'de, T> Visitor<'de> for Mat4Visitor<T>
             }
         }
         Ok(Mat4::from_row_flat(values))
+    }
+}
+
+struct Mat3Visitor<T>(PhantomData<T>);
+impl<T> Mat3Visitor<T> {
+    fn new() -> Self { Mat3Visitor(PhantomData) }
+}
+impl<'de, T> Visitor<'de> for Mat3Visitor<T> 
+    where T: Deserialize<'de>,
+          T: Num + Float + Copy,
+{
+    type Value = Mat3<T>;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("A sequence of length 9")
+    }
+
+    fn visit_seq<A>(self, mut a: A) -> Result<Self::Value, A::Error> 
+        where A: SeqAccess<'de>,
+    {
+        let mut values = [T::zero(); 9];
+        for i in 0..values.len() {
+            match a.next_element()? {
+                Some(x) => values[i] = x,
+                None => return Err(A::Error::invalid_length(i, &"Sequence of length 9")),
+            }
+        }
+        Ok(Mat3::from_row_flat(values))
     }
 }

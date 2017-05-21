@@ -299,6 +299,13 @@ impl<T: Float> Vec2<T> {
             y: a.x*b.y + a.y*b.x,
         }
     }
+
+    /// Finds the complex transpose of this vector. This basically just changes the sign of the `y`
+    /// comopnent. When used with `complex_mul`, the transpose of a vector yields the oposite
+    /// rotation.
+    pub fn transpose(self) -> Vec2<T> {
+        Vec2 { x: self.x, y: -self.y }
+    }
 }
 impl<T: Float> Vec3<T> {
     /// Calculates the length of this vector
