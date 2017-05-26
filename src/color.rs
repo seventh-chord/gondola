@@ -42,6 +42,41 @@ impl Color {
         }
     }
 
+    /// Creates a new color, converting the given values to rgb. The returned color will be
+    /// completly opaque. `saturation` and `lightness` given values are clammped to be between 
+    /// 0 and 1, both inclusive.
+    pub fn hsl(hue: f32, saturation: f32, lightness: f32) -> Color {
+        let saturation = clamp(saturation, 0.0, 1.0);
+        let lightness = clamp(lightness, 0.0, 1.0);
+        let hue = hue % 1.0;
+
+        if saturation <= 0.0 {
+            return Color { r: lightness, g: lightness, b: lightness, a: 1.0 };
+        }
+
+        let q = if lightness < 0.5 {
+            lightness * (1.0 + saturation)
+        } else {
+            lightness + saturation - lightness*saturation
+        };
+        let p = 2.0*lightness - q;
+
+        let hue_to_rgb = |hue| {
+            let hue = hue % 1.0;
+            if hue < 1.0/6.0 { return p + (q - p)*6.0*hue }
+            if hue < 1.0/2.0 { return q }
+            if hue < 2.0/3.0 { return p + (q - p)*(2.0/3.0 - hue)*6.0 }
+            return p;
+        };
+
+        Color { 
+            r: hue_to_rgb(hue + 1.0/3.0),
+            g: hue_to_rgb(hue),
+            b: hue_to_rgb(hue - 1.0/3.0),
+            a: 1.0,
+        }
+    }
+
     /// Creates a color from a hex string. The string should be of the format "#rrggbb" or
     /// "rrggbb", where each of r, g and b is a hexadecimal digit. Note that this currently does
     /// not support loading colors with a alpha channel. All colors created will be completly
