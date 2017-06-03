@@ -713,13 +713,6 @@ fn id_and_text<'a, 'b>(text: &'a str, ty: CompType, salt: &'b str) -> (Id, &'a s
     (id, name)
 }
 
-#[derive(Debug)]
-#[repr(C)]
-struct Vert {
-    pos: Vec2<f32>,
-    color: Color,
-}
-
 fn quad(buf: &mut Vec<Vert>, pos: Vec2<f32>, size: Vec2<f32>, color: Color){
     let min = pos;
     let max = pos + size;
@@ -771,7 +764,14 @@ fn text_in_quad(font: &mut CachedFont,
     font.cache(text, font_size, text_pos, color);
 }
 
-// We cannot use the custom derive from within this crate
+#[derive(Debug, Clone)]
+#[repr(C)]
+struct Vert {
+    pos: Vec2<f32>,
+    color: Color,
+}
+
+// We cannot use the custom derive from within this crate :/
 impl Vertex for Vert {
     fn bytes_per_vertex() -> usize { mem::size_of::<Vert>() }
     fn setup_attrib_pointers() {

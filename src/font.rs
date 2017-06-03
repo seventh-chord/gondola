@@ -28,7 +28,7 @@ const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture 
 
 // There might be some official sepc for how tabs should work. Note that this is multiplied by the
 // current font size.
-const TAB_WIDTH: f32 = 1.5; 
+const TAB_WIDTH: f32 = 1.5;
 
 /// A single font style. This is not used directly for text rendering, but rather specifies how
 /// text should be layed out according to a given font. It also provides rasterized glyphs that are

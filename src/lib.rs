@@ -34,11 +34,13 @@ pub mod buffer;
 pub mod util;
 pub mod framebuffer;
 pub mod font;
+pub mod draw_group;
 //pub mod ui; // Temporarily disabled. Broken due to changes in font code. Should be rewritten to use draw_group
 
 pub use color::*;
 pub use input::*;
 pub use util::graphics;
+pub use draw_group::DrawGroup;
 
 use cable_math::Vec2;
 use std::time::{Instant, Duration};
