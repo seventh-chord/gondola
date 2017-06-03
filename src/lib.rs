@@ -34,7 +34,7 @@ pub mod buffer;
 pub mod util;
 pub mod framebuffer;
 pub mod font;
-pub mod ui;
+//pub mod ui; // Temporarily disabled. Broken due to changes in font code. Should be rewritten to use draw_group
 
 pub use color::*;
 pub use input::*;

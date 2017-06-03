@@ -19,47 +19,33 @@ use std::str::Chars;
 use std::ops::Range;
 
 use cable_math::Vec2;
+
 use texture::{Texture, SwizzleComp, TextureFormat};
-use buffer::{Vertex, VertexBuffer, BufferUsage, PrimitiveMode};
-use shader::{ShaderPrototype, Shader};
+use buffer::Vertex;
 use color::Color;
-use util::graphics;
 
 const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture size: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_TEXTURE_SIZE
-const VERTS_PER_CHAR: usize = 6;
-const CACHE_SIZE: usize = 500;
 
 // There might be some official sepc for how tabs should work. Note that this is multiplied by the
 // current font size.
 const TAB_WIDTH: f32 = 1.5; 
 
-/// A font. This struct can be used both to store data in and to draw data from a [`DrawCache`]. 
-/// Usually a [`CachedFont`] will be more convenient.
-///
-/// [`DrawCache`]:  struct.DrawCache.html
-/// [`CachedFont`]: struct.CachedFont.html
+/// A single font style. This is not used directly for text rendering, but rather specifies how
+/// text should be layed out according to a given font. It also provides rasterized glyphs that are
+/// needed when drawing text.
 pub struct Font {
     font: rusttype::Font<'static>,
     gpu_cache: Cache,
     cache_texture: Texture,
-    matrix_binding: usize,
-    shader: Shader,
 }
 
 impl Font {
     /// Constructs a new font from the given font file. The file should be in either trutype
     /// (`.ttf`) or opentype (`.otf`) format. See [rusttype documentation][1] for a complete 
     /// overview of font support. 
-    ///
-    /// `matrix_binding` specifies a uniform buffer binding index. A [`PrimitiveBuffer`] with
-    /// `BufferTarget::Uniform` with a projection matrix (Usually you would want a orthographic
-    /// matrix) stored at the first index has to be bound to this index using
-    /// [`PrimitiveBuffer::bind_base(matrix_binding)`].
-    ///
+    /// 
     /// [1]: https://docs.rs/rusttype
-    /// [`PrimitiveBuffer`]: ../buffer/struct.PrimitiveBuffer.html
-    /// [`PrimitiveBuffer::bind_base(matrix_binding)`]: ../buffer/struct.PrimitiveBuffer.html#method.bind_base
-    pub fn from_file<P>(p: P, matrix_binding: usize) -> io::Result<Font> where P: AsRef<Path> {
+    pub fn from_file<P>(p: P) -> io::Result<Font> where P: AsRef<Path> {
         let mut file = File::open(p)?;
         
         let mut data = Vec::new();
@@ -68,20 +54,17 @@ impl Font {
         let font_collection = rusttype::FontCollection::from_bytes(data);
         let font = font_collection.font_at(0).unwrap();
 
-        Ok(Font::with_rusttype_font(font, matrix_binding))
+        Ok(Font::with_rusttype_font(font))
     }
 
-    fn with_rusttype_font(font: rusttype::Font<'static>, matrix_binding: usize) -> Font {
+    fn with_rusttype_font(font: rusttype::Font<'static>) -> Font {
         let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.5, 0.5);
 
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_TEX_SIZE, CACHE_TEX_SIZE, TextureFormat::R_8);
         cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
-        Font {
-            font, gpu_cache, cache_texture, matrix_binding,
-            shader: build_shader(matrix_binding),
-        }
+        Font { font, gpu_cache, cache_texture }
     }
 
     /// Calculates the width in pixels of the given string if it where to be rendered at the given
@@ -385,141 +368,7 @@ impl Clone for Font {
     fn clone(&self) -> Font {
         // Cloning a rusttype font is cheap as data is internally stored in a
         // `Arc<Box<&[u8]>>`, which is cheap to clone.
-        Font::with_rusttype_font(self.font.clone(), self.matrix_binding)
-    }
-}
-
-/// A draw cache contains the raw data that is sent to the GPU when rendering font. This struct is
-/// used to temporarily store data during cached rendering. Large amounts of text can be written to
-/// the cache and then drawn with a single rendercall, allowing for more efficient rendering.
-///
-/// The cache can be filled with [`Font::cache`], and its contents can be drawn with [`Font::draw_cache`].
-/// Note that the internal vertex buffer needs to be updated with [`DrawCache::update_vbo`] before
-/// rendering. You probably also want to clear the buffer with [`DrawCache::clear`] after rendering,
-/// otherwise the same data will be redrawn in the next frame.
-///
-/// Note that a cache should only ever be used with a single [`Font`] per call to [`Font::draw_cache`]. 
-/// This is because a `DrawCache` has no knowledge of which font provided the data stored in it. Failing 
-/// to comply to this rule will lead to garbled text beeing rendered.
-///
-/// If you do not need the `Font` - `DrawCache` separation you might want to concider using
-/// [`CachedFont`] instead, as it provides a draw cache and a font in a
-/// single cohesive package.
-///
-/// [`Font`]:                   struct.Font.html
-/// [`Font::cache`]:            struct.Font.html#method.cache
-/// [`Font::draw_cache`]:       struct.Font.html#method.draw_cache
-/// [`DrawCache::update_vbo`]:  struct.DrawCache.html#method.update_vbo
-/// [`DrawCache::clear`]:       struct.DrawCache.html#method.clear
-/// [`CachedFont`]:             struct.CachedFont.html
-pub struct DrawCache {
-    buffer: VertexBuffer<FontVert>,
-    buffer_data: Vec<FontVert>,
-}
-
-impl DrawCache {
-    /// Constructs a new, empty, draw cache
-    pub fn new() -> DrawCache {
-        let vertices = VERTS_PER_CHAR * CACHE_SIZE;
-        DrawCache {
-            buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, vertices),
-            buffer_data: Vec::with_capacity(vertices),
-        }
-    }
-
-    /// When drawing to this cache, data is by default stored on the CPU side. This method moves
-    /// data over to the GPU.
-    pub fn update_vbo(&mut self) {
-        self.buffer.clear();
-        self.buffer.put(0, &self.buffer_data);
-    }
-
-    /// Removes all data from this cache. Note that this does not call any expensive operations,
-    /// it simply sets the size of the internal buffers to 0.
-    pub fn clear(&mut self) {
-        self.buffer.clear();
-        self.buffer_data.clear();
-    }
-}
-
-/// A thin wrapper around a [`Font`] coupled with a [`DrawCache`]. This is intended for simple text
-/// rendering, and is probably adequate for most usecases.
-///
-/// # Example
-/// ```rust,ignore
-/// use gondola::font::CachedFont;
-/// use cable_math::Vec2;
-///
-/// let mut font = CachedFont::from_file("assets/comic_sans.ttf").unwrap();
-///
-/// loop {
-///     // Main logic goes here ...
-///     font.cache("Hello world\nTesting", 14.0, Vec2::new(50.0, 50.0));
-///     font.cache("ax² + bx + c = 0", 14.0, Vec2::new(50.0, 100.0));
-///     font.draw();
-/// }
-/// ```
-///
-/// [`Font`]:       struct.Font.html
-/// [`DrawCache`]:  struct.DrawCache.html
-pub struct CachedFont {
-    font: Font,
-    draw_cache: DrawCache,
-}
-
-impl CachedFont {
-    /// Constructs a new cached font from the given font file. The file should be in either trutype
-    /// (`.ttf`) or opentype (`.otf`) format. See [rusttype documentation][1] for a complete overview of font support. 
-    ///
-    /// See [`Font`] documentation for mor information on `matrix_binding`.
-    ///
-    /// [1]: https://docs.rs/rusttype
-    /// [`Font`]: struct.Font.html
-    pub fn from_file<P>(p: P, matrix_binding: usize) -> io::Result<CachedFont> where P: AsRef<Path> {
-        Ok(CachedFont {
-            font: Font::from_file(p, matrix_binding)?,
-            draw_cache: DrawCache::new(),
-        })
-    }
-
-    /// Wrapps the given font in a cached font
-    pub fn from_font(font: Font) -> CachedFont {
-        CachedFont {
-            font: font,
-            draw_cache: DrawCache::new(),
-        }
-    }
-
-    /// Adds the given piece of text to the internal draw cache. Cached text can be drawn with 
-    /// [`draw`](struct.CachedFont.html#method.draw). Usually you want to cache all text you want
-    /// to draw in a given frame and then draw it all in a single call.
-    pub fn cache(&mut self, text: &str, size: f32, pos: Vec2<f32>, color: Color) {
-        self.font.cache(&mut self.draw_cache.buffer_data, text, size, 1.0, pos, color);
-    }
-
-    /// Draws all text in the internal cache and then clears the cache
-    pub fn draw(&mut self) {
-        self.draw_cache.update_vbo();
-
-        graphics::set_blending(Some(graphics::BlendSettings::default()));
-        self.font.shader.bind();
-        self.font.cache_texture.bind(0);
-        self.draw_cache.buffer.draw();
-        graphics::set_blending(None);
-
-        self.draw_cache.clear();
-    }
-
-    pub fn font(&self) -> &Font { &self.font }
-    pub fn font_mut(&mut self) -> &mut Font { &mut self.font }
-}
-
-impl Clone for CachedFont {
-    fn clone(&self) -> CachedFont {
-        CachedFont {
-            font: self.font.clone(),
-            draw_cache: DrawCache::new(),
-        }
+        Font::with_rusttype_font(self.font.clone())
     }
 }
 
@@ -568,53 +417,6 @@ impl Vertex for FontVert {
 impl AsFontVert for FontVert {
     fn gen(pos: Vec2<f32>, uv: Vec2<f32>, color: Color) -> FontVert {
         FontVert { pos, uv, color }
-    }
-}
-
-const VERT_SRC: &'static str = "
-    #version 330 core
-
-    layout(location = 0) in vec2 pos;
-    layout(location = 1) in vec2 uv;
-    layout(location = 2) in vec4 color;
-
-    out vec2 vert_uv;
-    out vec4 vert_color;
-
-    layout(shared,std140) uniform matrix_block { 
-        mat4 model_view_projection; 
-    };
-
-    void main() {
-        gl_Position = model_view_projection * vec4(pos, 0.0, 1.0);
-        vert_uv = uv;
-        vert_color = color;
-    }
-";
-const FRAG_SRC: &'static str = "
-    #version 330 core
-
-    in vec2 vert_uv;
-    in vec4 vert_color;
-    out vec4 color;
-
-    uniform sampler2D tex_sampler;
-
-    void main() {
-        color = vert_color * texture2D(tex_sampler, vert_uv);
-    }
-";
-fn build_shader(matrix_binding: usize) -> Shader {
-    let proto = ShaderPrototype::new_prototype(VERT_SRC, "", FRAG_SRC);
-    match proto.build() {
-        Ok(shader) => {
-            shader.bind_uniform_block("matrix_block", matrix_binding);
-            shader
-        }
-        Err(err) => {
-            println!("{}", err); // Print the error properly
-            panic!();
-        }
     }
 }
 
