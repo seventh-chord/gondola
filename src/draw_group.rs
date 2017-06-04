@@ -4,7 +4,6 @@
 use std::f32;
 use std::io;
 use std::path::Path;
-use std::error::Error;
 use std::hash::Hash;
 use std::collections::HashMap;
 
@@ -86,13 +85,13 @@ impl Region {
 impl<F> DrawGroup<F> 
   where F: Eq + Hash + Copy,
 {
-    pub fn new() -> Result<Self, Box<Error>> {
+    pub fn new() -> Self {
         let shader = build_shader();
 
         let mut white_texture = Texture::new();
         white_texture.load_data(&[0xff, 0xff, 0xff], 1, 1, TextureFormat::RGB_8);
 
-        Ok(DrawGroup {
+        DrawGroup {
             vertices: Vec::with_capacity(2048),
             state_changes: Vec::with_capacity(256),
 
@@ -104,7 +103,7 @@ impl<F> DrawGroup<F>
 
             changed: false,
             buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 2048),
-        })
+        }
     }
 
     pub fn load_font<P: AsRef<Path>>(&mut self, key: F, path: P) -> io::Result<()> {

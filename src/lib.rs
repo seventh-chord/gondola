@@ -37,15 +37,17 @@ pub mod font;
 pub mod draw_group;
 //pub mod ui; // Temporarily disabled. Broken due to changes in font code. Should be rewritten to use draw_group
 
+use std::time::{Instant, Duration};
+use std::sync::mpsc;
+use std::ops::{Add, Sub, AddAssign, SubAssign};
+use std::thread;
+
+use cable_math::Vec2;
+
 pub use color::*;
 pub use input::*;
 pub use util::graphics;
 pub use draw_group::DrawGroup;
-
-use cable_math::Vec2;
-use std::time::{Instant, Duration};
-use std::sync::mpsc;
-use std::thread;
 
 /// The most generic result type possible. Used in top-level
 pub type GameResult<T> = Result<T, Box<std::error::Error>>;
@@ -146,7 +148,8 @@ pub fn run<T: Game + Sized>() {
     // We run a resize event here, because some platforms don't send a Resized event on startup.
     game.on_resize(&state);
 
-    let mut delta: u64 = 16; 
+    // Having a decent guess for the first frame resolves some stuttering issues
+    let mut delta = Timing::from_ms(16); 
 
     'main_loop:
     loop {
@@ -247,7 +250,7 @@ pub fn run<T: Game + Sized>() {
         }
 
         // Logic and rendering
-        game.update(delta as u32, &mut state);
+        game.update(delta, &mut state);
         game.draw(&state);
         window.swap_buffers().unwrap();
         graphics::print_errors();
@@ -256,28 +259,18 @@ pub fn run<T: Game + Sized>() {
             break 'main_loop;
         }
 
-        // Timing
-        if let Some(target_delta) = state.target_delta {
-            let target_delta = Duration::from_millis(target_delta as u64);
-            let elapsed = start_time.elapsed();
-            if elapsed < target_delta {
-                std::thread::sleep(target_delta - elapsed); // This is not very precice :/
-            }
-        }
-        let delta_dur = start_time.elapsed();
-        delta = delta_dur.as_secs()*1000 + (delta_dur.subsec_nanos() as u64)/1000000;
+        delta = start_time.elapsed().into();
 
         // Calculate average framerate
         state.frame_accumulator += 1;
-        state.delta_accumulator += delta as u32;
-        if state.delta_accumulator > 500 { // Update every half second
+        state.delta_accumulator += delta;
+        if state.delta_accumulator > Timing::from_ms(500) { // Update every half second
             let frames = state.frame_accumulator as f32;
-            let time = (state.delta_accumulator as f32) * 0.001;
-
-            state.average_framerate = frames / time;
+            let seconds = state.delta_accumulator.as_secs_float();
+            state.average_framerate = frames / seconds;
 
             state.frame_accumulator = 0;
-            state.delta_accumulator = 0;
+            state.delta_accumulator = Timing::zero();
         }
     }
 
@@ -294,18 +287,13 @@ pub struct GameState {
     /// If true the game window currently has focus. 
     pub focused: bool,
 
-    /// The number of milliseconds per frame this game should aim to run at. Set to 16
-    /// for 60 fps. If the main loop takes less time than this amount the game will
-    /// sleep until a total of `target_delta` has ellapsed. If set to `None` the game will
-    /// never sleep, and run as fast as possible.
-    pub target_delta: Option<u32>,
     /// The number of frames that where displayed in the last second. This number is updated every 
     /// half second. Note that this is only an average; it does not reflect rapid fluctuations of 
     /// delta times.
     pub average_framerate: f32,
     // Used to calculate framerate
     frame_accumulator: u32,
-    delta_accumulator: u32,
+    delta_accumulator: Timing,
 
     event_sinks: Vec<mpsc::Sender<Event>>,
     state_change_request_receiver: mpsc::Receiver<StateRequest>,
@@ -322,7 +310,7 @@ pub trait Game: Sized {
     /// Called before the main loop. Resources and initial state should be set up here.
     fn setup(state: &mut GameState) -> GameResult<Self>;
     /// Called once every frame, before drawing.
-    fn update(&mut self, delta: u32, state: &mut GameState);
+    fn update(&mut self, delta: Timing, state: &mut GameState);
     /// Called once every frame, after updating.
     fn draw(&mut self, state: &GameState);
 
@@ -345,11 +333,10 @@ impl GameState {
         GameState {
             win_size: Vec2::zero(),
             exit: false,
-            target_delta: Some(15),
 
             average_framerate: -1.0,
             frame_accumulator: 0,
-            delta_accumulator: 0,
+            delta_accumulator: Timing::zero(),
 
             focused: false, // We get a Focused(true) event once the window opens
 
@@ -400,3 +387,61 @@ pub enum StateRequest {
     ChangeCursorState(CursorState),
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Timing(u64); 
+
+impl Timing {
+    pub fn zero() -> Timing { Timing(0) }
+
+    pub fn from_ms(ms: u64) -> Timing { Timing(ms * 1_000_000) } 
+    pub fn from_secs(s: u64) -> Timing { Timing(s * 1_000_000_000) } 
+    pub fn from_secs_float(s: f32) -> Timing { Timing((s * 1_000_000_000.0) as u64) } 
+
+    /// Converts this timing to seconds, truncating any overflow. 1.999 ms will be converted to 1 ms.
+    pub fn as_ms(self) -> u64 { self.0 / 1_000_000 }
+
+    /// Converts this timing to seconds, truncating any overflow. 1.999 seconds will be converted to 1.
+    pub fn as_secs(self) -> u64 { self.0 / 1_000_000_000 }
+
+    pub fn as_secs_float(self) -> f32 { self.0 as f32 / 1_000_000_000.0 }
+}
+
+impl Add for Timing {
+    type Output = Timing;
+    fn add(self, rhs: Timing) -> Timing {
+        Timing(self.0 + rhs.0)
+    }
+}
+
+impl Sub for Timing {
+    type Output = Timing;
+    fn sub(self, rhs: Timing) -> Timing {
+        Timing(self.0 - rhs.0)
+    }
+}
+
+impl AddAssign for Timing {
+    fn add_assign(&mut self, rhs: Timing) {
+        self.0 += rhs.0;
+    }
+}
+
+impl SubAssign for Timing {
+    fn sub_assign(&mut self, rhs: Timing) {
+        self.0 -= rhs.0;
+    }
+}
+
+impl From<Duration> for Timing {
+    fn from(d: Duration) -> Timing {
+        Timing(d.as_secs()*1_000_000_000 + (d.subsec_nanos() as u64))
+    }
+}
+
+impl From<Timing> for Duration {
+    fn from(t: Timing) -> Duration {
+        let nanos = t.0 % 1_000_000_000;
+        let secs = t.0 / 1_000_000_000;
+        Duration::new(secs, nanos as u32)
+    }
+}
