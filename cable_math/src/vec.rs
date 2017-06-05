@@ -270,6 +270,22 @@ impl<T: Float> Vec2<T> {
         }
     }
 
+    /// Rounds all values of this vector down to the nearest integer multiple (Applying `floor`)
+    pub fn floor(self) -> Vec2<T> {
+        Vec2 {
+            x: self.x.floor(),
+            y: self.y.floor(),
+        }
+    }
+    
+    /// Rounds all values of this vector up to the nearest integer multiple (Applying `ceil`)
+    pub fn ceil(self) -> Vec2<T> {
+        Vec2 {
+            x: self.x.ceil(),
+            y: self.y.ceil(),
+        }
+    }
+
     /// Treating the two given vectors as complex numbers, with `x` being the real part and `y`
     /// being the imaginary part, this function algebraically multiplies the two values. Complex
     /// multiplication is commutative.
@@ -343,6 +359,24 @@ impl<T: Float> Vec3<T> {
             x: self.x.round(),
             y: self.y.round(),
             z: self.z.round(),
+        }
+    }
+
+    /// Rounds all values of this vector down to the nearest integer multiple (Applying `floor`)
+    pub fn floor(self) -> Vec3<T> {
+        Vec3 {
+            x: self.x.floor(),
+            y: self.y.floor(),
+            z: self.z.floor(),
+        }
+    }
+    
+    /// Rounds all values of this vector up to the nearest integer multiple (Applying `ceil`)
+    pub fn ceil(self) -> Vec3<T> {
+        Vec3 {
+            x: self.x.ceil(),
+            y: self.y.ceil(),
+            z: self.z.ceil(),
         }
     }
 
@@ -462,6 +496,26 @@ impl<T: Float> Vec4<T> {
             y: self.y.round(),
             z: self.z.round(),
             w: self.w.round(),
+        }
+    }
+
+    /// Rounds all values of this vector down to the nearest integer multiple (Applying `floor`)
+    pub fn floor(self) -> Vec4<T> {
+        Vec4 {
+            x: self.x.floor(),
+            y: self.y.floor(),
+            z: self.z.floor(),
+            w: self.w.floor(),
+        }
+    }
+    
+    /// Rounds all values of this vector up to the nearest integer multiple (Applying `ceil`)
+    pub fn ceil(self) -> Vec4<T> {
+        Vec4 {
+            x: self.x.ceil(),
+            y: self.y.ceil(),
+            z: self.z.ceil(),
+            w: self.w.ceil(),
         }
     }
 }
