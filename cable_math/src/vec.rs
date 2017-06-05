@@ -701,6 +701,39 @@ impl<T: fmt::Display + Num + Copy> fmt::Display for Vec4<T> {
     }
 }
 
+// Fake casting stuff
+macro_rules! impl_cast {
+    ($a:ty, $b:ty, $fn_name:ident) => {
+        impl Vec2<$a> {
+            pub fn $fn_name(self) -> Vec2<$b> {
+                Vec2 { x: self.x as $b, y: self.y as $b }
+            }
+        }
+
+        impl Vec3<$a> {
+            pub fn $fn_name(self) -> Vec3<$b> {
+                Vec3 { x: self.x as $b, y: self.y as $b, z: self.z as $b }
+            }
+        }
+
+        impl Vec4<$a> {
+            pub fn $fn_name(self) -> Vec4<$b> {
+                Vec4 { x: self.x as $b, y: self.y as $b, z: self.z as $b, w: self.w as $b }
+            }
+        }
+    };
+}
+
+impl_cast!(u32, f32, as_f32);
+impl_cast!(i32, f32, as_f32);
+impl_cast!(u64, f32, as_f32);
+impl_cast!(i64, f32, as_f32);
+
+impl_cast!(u32, f64, as_f64);
+impl_cast!(i32, f64, as_f64);
+impl_cast!(u64, f64, as_f64);
+impl_cast!(i64, f64, as_f64);
+
 #[cfg(test)]
 mod tests {
     use super::*;
