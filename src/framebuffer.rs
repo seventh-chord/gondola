@@ -17,9 +17,10 @@ pub const MAX_COLOR_ATTACHMENTS: usize = 8;
 /// Utility to specify the format of a framebuffer before building it. If you expect to rebuild a
 /// framebuffer occasionally (e.g. when the game window is resized) it could be beneficial to store
 /// this struct alongside the framebuffer itself.
+#[derive(Debug, Clone, Default)]
 pub struct FramebufferProperties {
     /// Size in pixels
-    pub width: u32,
+    pub width:  u32,
     /// Size in pixels
     pub height: u32,
     /// The amount of multisampling to apply

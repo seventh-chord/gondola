@@ -136,13 +136,13 @@ pub fn run<T: Game + Sized>() {
 
     // Set up game state
     let mut state = GameState::new();
-    state.win_region = {
+    state.screen_region = {
         let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
         let size = size.as_f32();
 
         Region { min: Vec2::zero(), max: size }
     };
-    graphics::viewport(state.win_region);
+    graphics::viewport(state.screen_region);
 
     // Set up game
     let mut game = match T::setup(&mut state) {
@@ -173,15 +173,15 @@ pub fn run<T: Game + Sized>() {
                     let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
                     let size = size.as_f32();
 
-                    let changed = state.win_region.max != size;
+                    let changed = state.screen_region.size() != size;
 
                     if changed && size.x > 0.0 && size.y > 0.0 {
-                        state.win_region = Region {
+                        state.screen_region = Region {
                             min: Vec2::zero(),
                             max: size
                         };
 
-                        graphics::viewport(state.win_region);
+                        graphics::viewport(state.screen_region);
                         game.on_resize(&state);
                     }
                 },
@@ -209,7 +209,7 @@ pub fn run<T: Game + Sized>() {
 
                             // set_cursor_position creates mouse-moved events, we want to ignore those
                             if state.cursor_state == CursorState::HiddenGrabbed {
-                                let center = state.win_region.center().as_i32();
+                                let center = state.screen_region.center().as_i32();
                                 if pos == center {
                                     continue;
                                 }
@@ -257,7 +257,7 @@ pub fn run<T: Game + Sized>() {
         }
 
         if state.cursor_state == CursorState::HiddenGrabbed && state.focused {
-            let center = state.win_region.center().as_i32();
+            let center = state.screen_region.center().as_i32();
             window.set_cursor_position(center.x, center.y).unwrap();
         }
 
@@ -293,7 +293,7 @@ pub fn run<T: Game + Sized>() {
 /// most [`Game`](trait.Game.html) methods.
 pub struct GameState {
     /// The region of the screen. `min` is (0, 0), `max` is (width, height).
-    pub win_region: Region,
+    pub screen_region: Region,
     /// If set to true the game will exit after rendering.
     pub exit: bool,
     /// If true the game window currently has focus. 
@@ -343,7 +343,7 @@ impl GameState {
         let (state_change_request_sender, state_change_request_receiver) = mpsc::channel();
 
         GameState {
-            win_region: Region::default(),
+            screen_region: Region::default(),
             exit: false,
 
             average_framerate: -1.0,
@@ -466,11 +466,37 @@ pub struct Region {
 
 impl Region {
     pub fn center(&self) -> Vec2<f32> { (self.min + self.max) / 2.0 } 
+
     pub fn width(&self) -> f32        { self.max.x - self.min.x }
     pub fn height(&self) -> f32       { self.max.y - self.min.y }
+
     pub fn size(&self) -> Vec2<f32>   { self.max - self.min }
+
+    /// Checks if the given point is inside this region.
     pub fn contains(&self, p: Vec2<f32>) -> bool {
         p.x > self.min.x && p.x < self.max.x &&
         p.y > self.min.y && p.y < self.max.y
+    }
+
+    /// Width divided by height.
+    pub fn aspect(&self) -> f32 {
+        let size = self.size();
+        size.x / size.y
+    }
+
+    /// Swaps `min` and `max` along the y axis
+    pub fn flip_y(self) -> Region {
+        Region {
+            min: Vec2::new(self.min.x, self.max.y),
+            max: Vec2::new(self.max.x, self.min.y),
+        }
+    }
+
+    /// Swaps `min` and `max` along the x axis
+    pub fn flip_x(self) -> Region {
+        Region {
+            min: Vec2::new(self.max.x, self.min.y),
+            max: Vec2::new(self.min.x, self.max.y),
+        }
     }
 }
