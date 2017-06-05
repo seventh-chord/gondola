@@ -315,15 +315,11 @@ impl Font {
     /// text can be written into a single buffer before rendering it. This allows for efficient
     /// rendering of large sets of text.
     ///
-    /// Normally you would want to use either [`DrawCache`] to get a buffer for rendering, or
-    /// [`CachedFont`] for a compined `Font` and `DrawCache`.
-    ///
-    /// [`DrawCache`]: struct.DrawCache.html
-    /// [`CachedFont`]: struct.CachedFont.html
+    /// Returns the number of vertices that where added to the buffer. 
     pub fn cache<T>(
         &mut self, buf: &mut Vec<T>,
         text: &str, text_size: f32, scale: f32, offset: Vec2<f32>, color: Color
-    )
+    ) -> usize
         where T: AsFontVert,
     {
         let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
@@ -343,6 +339,7 @@ impl Font {
         }).unwrap();
 
         // Output vertices
+        let mut vertices = 0;
         for &PlacementInfo { ref glyph, .. } in glyphs.iter() {
             if let Ok(Some((uv, pos))) = self.gpu_cache.rect_for(0, glyph) {
                 let x1 = (pos.min.x as f32 - offset.x)*scale + offset.x;
@@ -357,9 +354,12 @@ impl Font {
                 buf.push(T::gen(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y), color));
                 buf.push(T::gen(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y), color));
                 buf.push(T::gen(Vec2::new(x1, y2), Vec2::new(uv.min.x, uv.max.y), color));
+
+                vertices += 6;
             }
         }
 
+        vertices 
     }
 }
 

@@ -7,7 +7,7 @@ use std::path::Path;
 use std::hash::Hash;
 use std::collections::HashMap;
 
-use cable_math::{Vec2, Mat4};
+use cable_math::{Vec2, Mat3, Mat4};
 
 use Color;
 use graphics; 
@@ -27,6 +27,10 @@ pub struct DrawGroup<F> {
     // This is only used to allow users to check what the clipping region is. This is not actually
     // used to affect any rendering state.
     current_clip_region: Option<Region>,
+
+    /// If set to some transformation matrix, that transform will be applied to all vertices when
+    /// they are added to this draw group. 
+    pub current_transform: Option<Mat3<f32>>,
 
     shader: Shader,
     fonts: HashMap<F, Font>,
@@ -96,6 +100,7 @@ impl<F> DrawGroup<F>
             state_changes: Vec::with_capacity(256),
 
             current_clip_region: None, 
+            current_transform: None,
 
             shader,
             white_texture, 
@@ -239,18 +244,33 @@ impl<F> DrawGroup<F>
         self.current_clip_region
     }
 
+    fn add_vertices(&mut self, vertices: &[Vert]) {
+        if let Some(transform) = self.current_transform {
+            for v in vertices.into_iter() {
+                self.vertices.push(Vert {
+                    pos: transform.apply(v.pos),
+                    .. *v
+                });
+            } 
+        } else {
+            self.vertices.extend_from_slice(vertices);
+        }
+    }
+
     /// Draws a thick line.
     pub fn line(&mut self, a: Vec2<f32>, b: Vec2<f32>, width: f32, color: Color) { 
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
 
         let normal = (b - a).normalize().left() * (width / 2.0);
         let uv = Vec2::zero();
-        self.vertices.push(Vert { pos: a - normal, uv, color });
-        self.vertices.push(Vert { pos: b - normal, uv, color });
-        self.vertices.push(Vert { pos: b + normal, uv, color });
-        self.vertices.push(Vert { pos: a - normal, uv, color });
-        self.vertices.push(Vert { pos: b + normal, uv, color });
-        self.vertices.push(Vert { pos: a + normal, uv, color });
+        self.add_vertices(&[
+            Vert { pos: a - normal, uv, color },
+            Vert { pos: b - normal, uv, color },
+            Vert { pos: b + normal, uv, color },
+            Vert { pos: a - normal, uv, color },
+            Vert { pos: b + normal, uv, color },
+            Vert { pos: a + normal, uv, color },
+        ]);
     }
 
     /// Draws a thick line with different colors at each end.
@@ -264,12 +284,14 @@ impl<F> DrawGroup<F>
 
         let normal = (b - a).normalize().left() * (width / 2.0);
         let uv = Vec2::zero();
-        self.vertices.push(Vert { pos: a - normal, uv, color: color_a });
-        self.vertices.push(Vert { pos: b - normal, uv, color: color_b });
-        self.vertices.push(Vert { pos: b + normal, uv, color: color_b });
-        self.vertices.push(Vert { pos: a - normal, uv, color: color_a });
-        self.vertices.push(Vert { pos: b + normal, uv, color: color_b });
-        self.vertices.push(Vert { pos: a + normal, uv, color: color_a });
+        self.add_vertices(&[
+            Vert { pos: a - normal, uv, color: color_a },
+            Vert { pos: b - normal, uv, color: color_b },
+            Vert { pos: b + normal, uv, color: color_b },
+            Vert { pos: a - normal, uv, color: color_a },
+            Vert { pos: b + normal, uv, color: color_b },
+            Vert { pos: a + normal, uv, color: color_a },
+        ]);
     }
 
     /// Draws a thick line with rounded caps.
@@ -287,31 +309,35 @@ impl<F> DrawGroup<F>
         let b = b - tangent*size;
 
         // Draw main line
-        self.vertices.push(Vert { pos: a - normal*size, uv, color });
-        self.vertices.push(Vert { pos: b - normal*size, uv, color });
-        self.vertices.push(Vert { pos: b + normal*size, uv, color });
-        self.vertices.push(Vert { pos: a - normal*size, uv, color });
-        self.vertices.push(Vert { pos: b + normal*size, uv, color });
-        self.vertices.push(Vert { pos: a + normal*size, uv, color });
+        self.add_vertices(&[
+            Vert { pos: a - normal*size, uv, color },
+            Vert { pos: b - normal*size, uv, color },
+            Vert { pos: b + normal*size, uv, color },
+            Vert { pos: a - normal*size, uv, color },
+            Vert { pos: b + normal*size, uv, color },
+            Vert { pos: a + normal*size, uv, color },
+        ]);
 
         // Draw caps
         for i in 0..(SIN_COS.len() - 1) {
             let ca = Vec2::complex_mul(SIN_COS[i], -normal);
             let cb = Vec2::complex_mul(SIN_COS[i + 1], -normal);
 
-            self.vertices.push(Vert { pos: a, uv, color });
-            self.vertices.push(Vert { pos: a + Vec2::new(-ca.x, ca.y)*size, uv, color });
-            self.vertices.push(Vert { pos: a + Vec2::new(-cb.x, cb.y)*size, uv, color });
-            self.vertices.push(Vert { pos: a, uv, color });
-            self.vertices.push(Vert { pos: a + Vec2::new(-cb.x, -cb.y)*size, uv, color });
-            self.vertices.push(Vert { pos: a + Vec2::new(-ca.x, -ca.y)*size, uv, color });
+            self.add_vertices(&[
+                Vert { pos: a, uv, color },
+                Vert { pos: a + Vec2::new(-ca.x, ca.y)*size, uv, color },
+                Vert { pos: a + Vec2::new(-cb.x, cb.y)*size, uv, color },
+                Vert { pos: a, uv, color },
+                Vert { pos: a + Vec2::new(-cb.x, -cb.y)*size, uv, color },
+                Vert { pos: a + Vec2::new(-ca.x, -ca.y)*size, uv, color },
 
-            self.vertices.push(Vert { pos: b, uv, color });
-            self.vertices.push(Vert { pos: b + Vec2::new(cb.x, cb.y)*size, uv, color });
-            self.vertices.push(Vert { pos: b + Vec2::new(ca.x, ca.y)*size, uv, color });
-            self.vertices.push(Vert { pos: b, uv, color });
-            self.vertices.push(Vert { pos: b + Vec2::new(ca.x, -ca.y)*size, uv, color });
-            self.vertices.push(Vert { pos: b + Vec2::new(cb.x, -cb.y)*size, uv, color });
+                Vert { pos: b, uv, color },
+                Vert { pos: b + Vec2::new(cb.x, cb.y)*size, uv, color },
+                Vert { pos: b + Vec2::new(ca.x, ca.y)*size, uv, color },
+                Vert { pos: b, uv, color },
+                Vert { pos: b + Vec2::new(ca.x, -ca.y)*size, uv, color },
+                Vert { pos: b + Vec2::new(cb.x, -cb.y)*size, uv, color },
+            ]);
         }
     }
 
@@ -354,12 +380,14 @@ impl<F> DrawGroup<F>
 
         let size = size / 2.0;
         let uv = Vec2::zero();
-        self.vertices.push(Vert { pos: point + Vec2::new(-size, -size), uv, color });
-        self.vertices.push(Vert { pos: point + Vec2::new( size, -size), uv, color });
-        self.vertices.push(Vert { pos: point + Vec2::new( size,  size), uv, color });
-        self.vertices.push(Vert { pos: point + Vec2::new(-size, -size), uv, color });
-        self.vertices.push(Vert { pos: point + Vec2::new( size,  size), uv, color });
-        self.vertices.push(Vert { pos: point + Vec2::new(-size,  size), uv, color });
+        self.add_vertices(&[
+            Vert { pos: point + Vec2::new(-size, -size), uv, color },
+            Vert { pos: point + Vec2::new( size, -size), uv, color },
+            Vert { pos: point + Vec2::new( size,  size), uv, color },
+            Vert { pos: point + Vec2::new(-size, -size), uv, color },
+            Vert { pos: point + Vec2::new( size,  size), uv, color },
+            Vert { pos: point + Vec2::new(-size,  size), uv, color },
+        ]);
     }
 
     /// Generates the vertices for a circle with the given radius centered at the given position
@@ -371,21 +399,23 @@ impl<F> DrawGroup<F>
             let a = SIN_COS[i];
             let b = SIN_COS[i + 1];
 
-            self.vertices.push(Vert { pos: pos, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(a.x, a.y)*radius, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(b.x, b.y)*radius, uv, color });
+            self.add_vertices(&[
+                Vert { pos: pos, uv, color },
+                Vert { pos: pos + Vec2::new(a.x, a.y)*radius, uv, color },
+                Vert { pos: pos + Vec2::new(b.x, b.y)*radius, uv, color },
 
-            self.vertices.push(Vert { pos: pos, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(-a.x, a.y)*radius, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(-b.x, b.y)*radius, uv, color });
+                Vert { pos: pos, uv, color },
+                Vert { pos: pos + Vec2::new(-a.x, a.y)*radius, uv, color },
+                Vert { pos: pos + Vec2::new(-b.x, b.y)*radius, uv, color },
 
-            self.vertices.push(Vert { pos: pos, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(a.x, -a.y)*radius, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(b.x, -b.y)*radius, uv, color });
+                Vert { pos: pos, uv, color },
+                Vert { pos: pos + Vec2::new(a.x, -a.y)*radius, uv, color },
+                Vert { pos: pos + Vec2::new(b.x, -b.y)*radius, uv, color },
 
-            self.vertices.push(Vert { pos: pos, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(-a.x, -a.y)*radius, uv, color });
-            self.vertices.push(Vert { pos: pos + Vec2::new(-b.x, -b.y)*radius, uv, color });
+                Vert { pos: pos, uv, color },
+                Vert { pos: pos + Vec2::new(-a.x, -a.y)*radius, uv, color },
+                Vert { pos: pos + Vec2::new(-b.x, -b.y)*radius, uv, color },
+            ]);
         }
     }
 
@@ -408,9 +438,11 @@ impl<F> DrawGroup<F>
         // Line
         self.line(a, b - tangent*arrow_size, width, color);
         // Arrow head
-        self.vertices.push(Vert { pos: b - tangent*arrow_size - normal*(0.3 * arrow_size), uv, color });
-        self.vertices.push(Vert { pos: b - tangent*arrow_size + normal*(0.3 * arrow_size), uv, color });
-        self.vertices.push(Vert { pos: b, uv, color });
+        self.add_vertices(&[
+            Vert { pos: b - tangent*arrow_size - normal*(0.3 * arrow_size), uv, color },
+            Vert { pos: b - tangent*arrow_size + normal*(0.3 * arrow_size), uv, color },
+            Vert { pos: b, uv, color },
+        ]);
     }
 
     /// Generates vertices for a line with a arrowhead at `b`.
@@ -432,9 +464,11 @@ impl<F> DrawGroup<F>
         // Line
         self.stippled_line(a, b - tangent*arrow_size, width, stipple_length, stipple_spacing, color);
         // Arrow head
-        self.vertices.push(Vert { pos: b - tangent*arrow_size - normal*(0.3 * arrow_size), uv, color });
-        self.vertices.push(Vert { pos: b - tangent*arrow_size + normal*(0.3 * arrow_size), uv, color });
-        self.vertices.push(Vert { pos: b, uv, color });
+        self.add_vertices(&[
+            Vert { pos: b - tangent*arrow_size - normal*(0.3 * arrow_size), uv, color },
+            Vert { pos: b - tangent*arrow_size + normal*(0.3 * arrow_size), uv, color },
+            Vert { pos: b, uv, color },
+        ]);
     }
 
     /// Draws a single solid triangle.
@@ -442,9 +476,11 @@ impl<F> DrawGroup<F>
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
         let uv = Vec2::zero();
 
-        self.vertices.push(Vert { pos: points[0], uv, color });
-        self.vertices.push(Vert { pos: points[1], uv, color });
-        self.vertices.push(Vert { pos: points[2], uv, color });
+        self.add_vertices(&[
+            Vert { pos: points[0], uv, color },
+            Vert { pos: points[1], uv, color },
+            Vert { pos: points[2], uv, color },
+        ]);
     } 
 
     /// Draws a line loop with neatly connected line corners. This connects the first and last
@@ -486,12 +522,14 @@ impl<F> DrawGroup<F>
 
         let uv = Vec2::zero();
 
-        self.vertices.push(Vert { pos: b - b_normal, uv, color });
-        self.vertices.push(Vert { pos: c - c_normal, uv, color });
-        self.vertices.push(Vert { pos: c + c_normal, uv, color });
-        self.vertices.push(Vert { pos: b - b_normal, uv, color });
-        self.vertices.push(Vert { pos: c + c_normal, uv, color });
-        self.vertices.push(Vert { pos: b + b_normal, uv, color });
+        self.add_vertices(&[
+            Vert { pos: b - b_normal, uv, color },
+            Vert { pos: c - c_normal, uv, color },
+            Vert { pos: c + c_normal, uv, color },
+            Vert { pos: b - b_normal, uv, color },
+            Vert { pos: c + c_normal, uv, color },
+            Vert { pos: b + b_normal, uv, color },
+        ]);
     }
 
     /// Draws borders for an axis align bounding box.
@@ -513,13 +551,15 @@ impl<F> DrawGroup<F>
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
         let uv = Vec2::zero();
 
-        self.vertices.push(Vert { pos: Vec2::new(min.x, min.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x, min.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x, max.y), uv, color });
+        self.add_vertices(&[
+            Vert { pos: Vec2::new(min.x, min.y), uv, color },
+            Vert { pos: Vec2::new(max.x, min.y), uv, color },
+            Vert { pos: Vec2::new(max.x, max.y), uv, color },
 
-        self.vertices.push(Vert { pos: Vec2::new(min.x, min.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x, max.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(min.x, max.y), uv, color });
+            Vert { pos: Vec2::new(min.x, min.y), uv, color },
+            Vert { pos: Vec2::new(max.x, max.y), uv, color },
+            Vert { pos: Vec2::new(min.x, max.y), uv, color },
+        ]);
     }
 
     /// Draws a solid axis-aligned bounding box with rounded corners.
@@ -532,72 +572,77 @@ impl<F> DrawGroup<F>
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
         let uv = Vec2::zero();
 
-        // Draw inner + top/bottom border
-        self.vertices.push(Vert { pos: Vec2::new(min.x + corner_radius, min.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x - corner_radius, min.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x - corner_radius, max.y), uv, color });
+        self.add_vertices(&[
+            // Draw inner + top/bottom border
+            Vert { pos: Vec2::new(min.x + corner_radius, min.y), uv, color },
+            Vert { pos: Vec2::new(max.x - corner_radius, min.y), uv, color },
+            Vert { pos: Vec2::new(max.x - corner_radius, max.y), uv, color },
 
-        self.vertices.push(Vert { pos: Vec2::new(min.x + corner_radius, min.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x - corner_radius, max.y), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(min.x + corner_radius, max.y), uv, color });
+            Vert { pos: Vec2::new(min.x + corner_radius, min.y), uv, color },
+            Vert { pos: Vec2::new(max.x - corner_radius, max.y), uv, color },
+            Vert { pos: Vec2::new(min.x + corner_radius, max.y), uv, color },
 
-        // Left border
-        self.vertices.push(Vert { pos: Vec2::new(min.x, min.y + corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(min.x + corner_radius, min.y + corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(min.x + corner_radius, max.y - corner_radius), uv, color });
+            // Left border
+            Vert { pos: Vec2::new(min.x, min.y + corner_radius), uv, color },
+            Vert { pos: Vec2::new(min.x + corner_radius, min.y + corner_radius), uv, color },
+            Vert { pos: Vec2::new(min.x + corner_radius, max.y - corner_radius), uv, color },
 
-        self.vertices.push(Vert { pos: Vec2::new(min.x, min.y + corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(min.x + corner_radius, max.y - corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(min.x, max.y - corner_radius), uv, color });
+            Vert { pos: Vec2::new(min.x, min.y + corner_radius), uv, color },
+            Vert { pos: Vec2::new(min.x + corner_radius, max.y - corner_radius), uv, color },
+            Vert { pos: Vec2::new(min.x, max.y - corner_radius), uv, color },
 
-        // Right border
-        self.vertices.push(Vert { pos: Vec2::new(max.x - corner_radius, min.y + corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x, min.y + corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x, max.y - corner_radius), uv, color });
+            // Right border
+            Vert { pos: Vec2::new(max.x - corner_radius, min.y + corner_radius), uv, color },
+            Vert { pos: Vec2::new(max.x, min.y + corner_radius), uv, color },
+            Vert { pos: Vec2::new(max.x, max.y - corner_radius), uv, color },
 
-        self.vertices.push(Vert { pos: Vec2::new(max.x - corner_radius, min.y + corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x, max.y - corner_radius), uv, color });
-        self.vertices.push(Vert { pos: Vec2::new(max.x - corner_radius, max.y - corner_radius), uv, color });
+            Vert { pos: Vec2::new(max.x - corner_radius, min.y + corner_radius), uv, color },
+            Vert { pos: Vec2::new(max.x, max.y - corner_radius), uv, color },
+            Vert { pos: Vec2::new(max.x - corner_radius, max.y - corner_radius), uv, color },
+        ]);
 
         // Draw corners
         for i in 0..(SIN_COS.len() - 1) {
             let a = SIN_COS[i];
             let b = SIN_COS[i + 1];
 
-            let tri = [
+            self.add_vertices(&[
                 // Top left corner
-                Vec2::new(min.x + corner_radius, min.y + corner_radius),
-                Vec2::new(min.x + (1.0 - a.x)*corner_radius, min.y + (1.0 - a.y)*corner_radius),
-                Vec2::new(min.x + (1.0 - b.x)*corner_radius, min.y + (1.0 - b.y)*corner_radius),
+                Vert { pos: Vec2::new(min.x + corner_radius, min.y + corner_radius), color, uv },
+                Vert { pos: Vec2::new(min.x + (1.0 - a.x)*corner_radius, min.y + (1.0 - a.y)*corner_radius), color, uv },
+                Vert { pos: Vec2::new(min.x + (1.0 - b.x)*corner_radius, min.y + (1.0 - b.y)*corner_radius), color, uv },
                 // Top right corner
-                Vec2::new(max.x - corner_radius, min.y + corner_radius),
-                Vec2::new(max.x + (a.x - 1.0)*corner_radius, min.y + (1.0 - a.y)*corner_radius),
-                Vec2::new(max.x + (b.x - 1.0)*corner_radius, min.y + (1.0 - b.y)*corner_radius), 
+                Vert { pos: Vec2::new(max.x - corner_radius, min.y + corner_radius), color, uv },
+                Vert { pos: Vec2::new(max.x + (a.x - 1.0)*corner_radius, min.y + (1.0 - a.y)*corner_radius), color, uv },
+                Vert { pos: Vec2::new(max.x + (b.x - 1.0)*corner_radius, min.y + (1.0 - b.y)*corner_radius), color, uv },
                 // Bottom right corner
-                Vec2::new(max.x - corner_radius, max.y - corner_radius),
-                Vec2::new(max.x + (a.x - 1.0)*corner_radius, max.y + (a.y - 1.0)*corner_radius),
-                Vec2::new(max.x + (b.x - 1.0)*corner_radius, max.y + (b.y - 1.0)*corner_radius), 
+                Vert { pos: Vec2::new(max.x - corner_radius, max.y - corner_radius), color, uv },
+                Vert { pos: Vec2::new(max.x + (a.x - 1.0)*corner_radius, max.y + (a.y - 1.0)*corner_radius), color, uv },
+                Vert { pos: Vec2::new(max.x + (b.x - 1.0)*corner_radius, max.y + (b.y - 1.0)*corner_radius), color, uv },
                 // Bottom left corner
-                Vec2::new(min.x + corner_radius, max.y - corner_radius),
-                Vec2::new(min.x + (1.0 - a.x)*corner_radius, max.y + (a.y - 1.0)*corner_radius),
-                Vec2::new(min.x + (1.0 - b.x)*corner_radius, max.y + (b.y - 1.0)*corner_radius), 
-            ];
-            for &vert in tri.into_iter() {
-                self.vertices.push(Vert { pos: vert, uv, color });
-            }
+                Vert { pos: Vec2::new(min.x + corner_radius, max.y - corner_radius), color, uv },
+                Vert { pos: Vec2::new(min.x + (1.0 - a.x)*corner_radius, max.y + (a.y - 1.0)*corner_radius), color, uv },
+                Vert { pos: Vec2::new(min.x + (1.0 - b.x)*corner_radius, max.y + (b.y - 1.0)*corner_radius), color, uv },
+            ]);
         }
     }
 
     pub fn text(&mut self, text: &str, font: F, size: f32, pos: Vec2<f32>, color: Color) {
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Font(font)));
-        self.fonts.get_mut(&font).unwrap().cache(
+        let count = self.fonts.get_mut(&font).unwrap().cache(
             &mut self.vertices,
             text,
             size, 1.0, 
             pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
             color
         ); 
-    } 
+
+        if let Some(transform) = self.current_transform {
+            for i in self.vertices.len()-count-1 .. self.vertices.len() {
+                self.vertices[i].pos = transform.apply(self.vertices[i].pos);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]

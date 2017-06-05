@@ -92,7 +92,14 @@ pub fn run<T: Game + Sized>() {
     // Create window
     let result = glutin::WindowBuilder::new()
         .with_title(T::name())
-//        .with_vsync() // Is enabled by default on linux with nvidia
+
+        // Is enabled by default on some platforms, and often controlled by e.g.
+        // environment variables
+        // linux + nvidia:  __GL_SYNC_TO_VBLANK=1|0
+        //      1 forces vsync on (default)
+        //      0 disables vsync, but with_vsync still enables it 
+//        .with_vsync() 
+
         .with_srgb(Some(false))
 
         .with_gl(gl_request)
