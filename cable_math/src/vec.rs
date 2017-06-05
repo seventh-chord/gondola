@@ -734,6 +734,35 @@ impl_cast!(i32, f64, as_f64);
 impl_cast!(u64, f64, as_f64);
 impl_cast!(i64, f64, as_f64);
 
+impl_cast!(f32, i32, as_i32);
+impl_cast!(f64, i32, as_i32);
+
+impl_cast!(f32, u32, as_u32);
+impl_cast!(f64, u32, as_u32);
+
+impl_cast!(f32, i64, as_i64);
+impl_cast!(f64, i64, as_i64);
+
+impl_cast!(f32, u64, as_u64);
+impl_cast!(f64, u64, as_u64);
+
+// Tuple to vector conversions
+impl<T> From<(T, T)> for Vec2<T> {
+    fn from((x, y): (T, T)) -> Vec2<T> {
+        Vec2 { x, y }
+    }
+}
+impl<T> From<(T, T, T)> for Vec3<T> {
+    fn from((x, y, z): (T, T, T)) -> Vec3<T> {
+        Vec3 { x, y, z }
+    }
+}
+impl<T> From<(T, T, T, T)> for Vec4<T> {
+    fn from((x, y, z, w): (T, T, T, T)) -> Vec4<T> {
+        Vec4 { x, y, z, w }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
