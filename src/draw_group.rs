@@ -11,6 +11,7 @@ use cable_math::{Vec2, Mat3, Mat4};
 
 use Color;
 use graphics; 
+use Region;
 use shader::{ShaderPrototype, Shader};
 use texture::{Texture, TextureFormat};
 use buffer::{Vertex, PrimitiveMode, BufferUsage, VertexBuffer};
@@ -67,23 +68,6 @@ pub enum StateCmd<F> {
     /// Changes the layer (The z coordinate of all vertices). This can be used to place some
     /// sections above others when rendering. `0.0` is the default layer.
     LayerChange(f32),
-}
-
-/// A draw region in screenspace.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Region {
-    pub min: Vec2<f32>,
-    pub max: Vec2<f32>,
-}
-impl Region {
-    pub fn center(&self) -> Vec2<f32> { (self.min + self.max) / 2.0 } 
-    pub fn width(&self) -> f32        { self.max.x - self.min.x }
-    pub fn height(&self) -> f32       { self.max.y - self.min.y }
-    pub fn size(&self) -> Vec2<f32>   { self.max - self.min }
-    pub fn contains(&self, p: Vec2<f32>) -> bool {
-        p.x > self.min.x && p.x < self.max.x &&
-        p.y > self.min.y && p.y < self.max.y
-    }
 }
 
 impl<F> DrawGroup<F> 
@@ -188,24 +172,21 @@ impl<F> DrawGroup<F>
                 StateCmd::Clip(region) => {
                     flush(at_vertex);
 
-                    graphics::enable_scissor(
-                        region.min.x as u32, region.min.y as u32,
-                        region.width() as u32, region.height() as u32
-                    );
+                    graphics::set_scissor(Some(region));
                 },
 
                 StateCmd::ResetClip => {
                     flush(at_vertex);
 
-                    graphics::disable_scissor();
+                    graphics::set_scissor(None);
                 },
             }
         }
 
         flush(self.vertices.len()); 
 
-        self.white_texture.bind(0);
-        graphics::disable_scissor();
+        Texture::unbind(0);
+        graphics::set_scissor(None);
     }
 
     pub fn push_state_cmd(&mut self, cmd: StateCmd<F>) {

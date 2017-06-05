@@ -31,7 +31,7 @@ pub mod texture;
 #[macro_use]
 pub mod shader;
 pub mod buffer;
-pub mod util;
+pub mod graphics;
 pub mod framebuffer;
 pub mod font;
 pub mod draw_group;
@@ -46,7 +46,6 @@ use cable_math::Vec2;
 
 pub use color::*;
 pub use input::*;
-pub use util::graphics;
 pub use draw_group::DrawGroup;
 
 /// The most generic result type possible. Used in top-level
@@ -137,11 +136,13 @@ pub fn run<T: Game + Sized>() {
 
     // Set up game state
     let mut state = GameState::new();
-    state.win_size = {
-        let (width, height) = window.get_inner_size_pixels().unwrap();
-        Vec2::new(width, height)
+    state.win_region = {
+        let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
+        let size = size.as_f32();
+
+        Region { min: Vec2::zero(), max: size }
     };
-    graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
+    graphics::viewport(state.win_region);
 
     // Set up game
     let mut game = match T::setup(&mut state) {
@@ -169,12 +170,18 @@ pub fn run<T: Game + Sized>() {
             match event {
                 glutin::WindowEvent::Closed => break 'main_loop,
                 glutin::WindowEvent::Resized(..) => {
-                    let (width, height) = window.get_inner_size_pixels().unwrap();
-                    let changed = state.win_size.x != width || state.win_size.y != height;
+                    let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
+                    let size = size.as_f32();
 
-                    if width != 0 && height != 0 && changed {
-                        state.win_size = Vec2::new(width, height);
-                        graphics::viewport(0, 0, state.win_size.x, state.win_size.y);
+                    let changed = state.win_region.max != size;
+
+                    if changed && size.x > 0.0 && size.y > 0.0 {
+                        state.win_region = Region {
+                            min: Vec2::zero(),
+                            max: size
+                        };
+
+                        graphics::viewport(state.win_region);
                         game.on_resize(&state);
                     }
                 },
@@ -200,10 +207,9 @@ pub fn run<T: Game + Sized>() {
                             let mut delta = pos - state.prev_cursor_pos;
                             state.prev_cursor_pos = pos;
 
-                            // set_cursor_position creates mose-moved events, we want to ignore those
+                            // set_cursor_position creates mouse-moved events, we want to ignore those
                             if state.cursor_state == CursorState::HiddenGrabbed {
-                                let center = state.win_size / 2;
-                                let center = Vec2::new(center.x as i32, center.y as i32);
+                                let center = state.win_region.center().as_i32();
                                 if pos == center {
                                     continue;
                                 }
@@ -251,8 +257,7 @@ pub fn run<T: Game + Sized>() {
         }
 
         if state.cursor_state == CursorState::HiddenGrabbed && state.focused {
-            let center = state.win_size / 2;
-            let center = Vec2::new(center.x as i32, center.y as i32);
+            let center = state.win_region.center().as_i32();
             window.set_cursor_position(center.x, center.y).unwrap();
         }
 
@@ -287,8 +292,8 @@ pub fn run<T: Game + Sized>() {
 /// General info about the currently running game. Passed as a parameter to
 /// most [`Game`](trait.Game.html) methods.
 pub struct GameState {
-    /// The size of the window in which this game is running, in pixels.
-    pub win_size: Vec2<u32>,
+    /// The region of the screen. `min` is (0, 0), `max` is (width, height).
+    pub win_region: Region,
     /// If set to true the game will exit after rendering.
     pub exit: bool,
     /// If true the game window currently has focus. 
@@ -338,7 +343,7 @@ impl GameState {
         let (state_change_request_sender, state_change_request_receiver) = mpsc::channel();
 
         GameState {
-            win_size: Vec2::zero(),
+            win_region: Region::default(),
             exit: false,
 
             average_framerate: -1.0,
@@ -450,5 +455,22 @@ impl From<Timing> for Duration {
         let nanos = t.0 % 1_000_000_000;
         let secs = t.0 / 1_000_000_000;
         Duration::new(secs, nanos as u32)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Region {
+    pub min: Vec2<f32>,
+    pub max: Vec2<f32>,
+}
+
+impl Region {
+    pub fn center(&self) -> Vec2<f32> { (self.min + self.max) / 2.0 } 
+    pub fn width(&self) -> f32        { self.max.x - self.min.x }
+    pub fn height(&self) -> f32       { self.max.y - self.min.y }
+    pub fn size(&self) -> Vec2<f32>   { self.max - self.min }
+    pub fn contains(&self, p: Vec2<f32>) -> bool {
+        p.x > self.min.x && p.x < self.max.x &&
+        p.y > self.min.y && p.y < self.max.y
     }
 }
