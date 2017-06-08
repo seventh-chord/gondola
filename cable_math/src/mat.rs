@@ -6,14 +6,9 @@ use std::ops::*;
 /// A matrix which is layed out in column major format in memory
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
-pub struct Mat4<T> {
-    // The order in which the components are defined here is inverse of
-    // the way they are typically would be used, as the matrix should
-    // be stored in collumn major format for opengl interoparability
-    pub a11: T, pub a21: T, pub a31: T, pub a41: T,
-    pub a12: T, pub a22: T, pub a32: T, pub a42: T,
-    pub a13: T, pub a23: T, pub a33: T, pub a43: T,
-    pub a14: T, pub a24: T, pub a34: T, pub a44: T,
+pub struct Mat2<T> {
+    pub a11: T, pub a21: T,
+    pub a12: T, pub a22: T,
 }
 
 /// A matrix which is layed out in column major format in memory
@@ -25,17 +20,38 @@ pub struct Mat3<T> {
     pub a13: T, pub a23: T, pub a33: T,
 }
 
+/// A matrix which is layed out in column major format in memory
+#[derive(Debug, Clone, PartialEq)]
+#[repr(C)]
+pub struct Mat4<T> {
+    // The order in which the components are defined here is inverse of
+    // the way they are typically would be used, as the matrix should
+    // be stored in collumn major format for opengl interoparability
+    pub a11: T, pub a21: T, pub a31: T, pub a41: T,
+    pub a12: T, pub a22: T, pub a32: T, pub a42: T,
+    pub a13: T, pub a23: T, pub a33: T, pub a43: T,
+    pub a14: T, pub a24: T, pub a34: T, pub a44: T,
+}
+
+impl<T: Copy> Copy for Mat2<T> {}
 impl<T: Copy> Copy for Mat3<T> {}
 impl<T: Copy> Copy for Mat4<T> {}
+
+impl<T: Num + Copy> Default for Mat2<T> {
+    fn default() -> Mat2<T> {
+        Mat2::identity()
+    }
+}
+
+impl<T: Num + Copy> Default for Mat3<T> {
+    fn default() -> Mat3<T> {
+        Mat3::identity()
+    }
+}
 
 impl<T: Num + Copy> Default for Mat4<T> {
     fn default() -> Mat4<T> {
         Mat4::identity()
-    }
-}
-impl<T: Num + Copy> Default for Mat3<T> {
-    fn default() -> Mat3<T> {
-        Mat3::identity()
     }
 }
 
@@ -441,7 +457,8 @@ impl<T: Num + Copy> Mat3<T> {
         }
     }
 
-    /// Creates a scaling matrix which scales by the given amount along all axes.
+    /// Creates a scaling matrix which scales by the given amount along all axes. The created
+    /// matrix is intended for scaling 2d vectors.
     pub fn scaling(scale: T) -> Mat3<T> {
         Mat3 {
             a11: scale, a22: scale,
@@ -449,7 +466,8 @@ impl<T: Num + Copy> Mat3<T> {
         }
     }
 
-    /// Creates a scaling matrix which scales by a unique amount along each axis.
+    /// Creates a scaling matrix which scales by a unique amount along each axis. The created
+    /// matrix is intended for scaling 2d vectors.
     pub fn scaling_by_axes(scale: Vec2<T>) -> Mat3<T> {
         Mat3 {
             a11: scale.x, a22: scale.y,
@@ -481,6 +499,120 @@ impl<T: Float + Copy> Mat3<T> {
             a11: cos, a12: -sin,
             a21: sin, a22: cos,
             .. Mat3::identity()
+        }
+    }
+}
+
+impl<T: Num + Copy> Mat2<T> {
+    /// Creates a new matrix with all values set to 0
+    pub fn zero() -> Mat2<T> {
+        Mat2 {
+            a11: T::zero(), a12: T::zero(),
+            a21: T::zero(), a22: T::zero(),
+        }
+    }
+
+    /// Creates a new identity matrix
+    pub fn identity() -> Mat2<T> {
+        Mat2 {
+            a11: T::one(),  a12: T::zero(),
+            a21: T::zero(), a22: T::one(),
+        }
+    }
+
+    /// Creates a new matrix with the given values. The values are specified
+    /// row by row.
+    pub fn with_values(
+        a11: T, a12: T,
+        a21: T, a22: T,
+    ) -> Mat2<T> {
+        Mat2 {
+            a11: a11, a12: a12,
+            a21: a21, a22: a22,
+        }
+    }
+
+    /// Creates a new matrix from a 2x2 array.
+    pub fn from_col_nested(data: [[T; 2]; 2]) -> Mat2<T> {
+        Mat2 {
+            a11: data[0][0], a12: data[0][1],
+            a21: data[1][0], a22: data[1][1],
+        }
+    }
+
+    /// Creates a new matrix from a flat array
+    pub fn from_row_flat(data: [T; 4]) -> Mat2<T> {
+        Mat2 {
+            a11: data[0],  a12: data[1],
+            a21: data[2],  a22: data[3],
+        }
+    }
+
+    /// Transposes this matrix, mirroring all its values along the diagonal.
+    pub fn transpose(self) -> Mat2<T> {
+        Mat2 {
+            a11: self.a11, a12: self.a21,
+            a21: self.a12, a22: self.a22,
+        }
+    }
+
+    /// Calculates the determinant of this matrix.
+    pub fn determinant(&self) -> T {
+        self.a11*self.a22 - self.a12*self.a21
+    }
+    
+    /// Inverses this matrix, such that this matrix multiplied by its inverse will allways be the
+    /// identity matrix.
+    ///
+    /// This operation is not defined for matricies whose determinant is 0. If the determinant of
+    /// this matrix is 0 this function will panic.
+    ///
+    /// Note that due to floating point imprecissions, `A⁻¹A = I` (Where A is any matrix which can
+    /// be inversed, and I is the identity matrix) will not usually be true. However, the
+    /// difference is usually so small that it is negligible.
+    pub fn inverse(self) -> Mat2<T> {
+        let det = self.determinant();
+        if det == T::zero() {
+            panic!("Determinant of matrix is 0. Inverse is not defined");
+        }
+
+        // What a mess :/ :/
+        Mat2 {
+            a11: self.a22,
+            a22: self.a11,
+            a12: T::zero() - self.a12,
+            a21: T::zero() - self.a21,
+        } * (T::one() / det)
+    }
+
+
+    /// Creates a scaling matrix which scales by the given amount along all axes.
+    pub fn scaling(scale: T) -> Mat2<T> {
+        Mat2 {
+            a11: scale, a22: scale,
+            .. Mat2::identity()
+        }
+    }
+
+    /// Creates a scaling matrix which scales by a unique amount along each axis.
+    pub fn scaling_by_axes(scale: Vec2<T>) -> Mat2<T> {
+        Mat2 {
+            a11: scale.x, a22: scale.y,
+            .. Mat2::identity()
+        }
+    }
+}
+
+impl<T: Float + Copy> Mat2<T> {
+    /// Creates a matrix representing a counterclockwise rotation of `angle` radians around the z
+    /// axis. This is intended for 2d rotations.
+    pub fn rotation(angle: T) -> Mat2<T> {
+        let sin = angle.sin();
+        let cos = angle.cos();
+        Mat2 {
+            a11: cos, a12: -sin,
+            a21: sin, a22: cos,
+            .. Mat2::identity()
         }
     }
 }
@@ -540,6 +672,22 @@ impl<T: Num + Copy> Mul for Mat3<T> {
     }
 }
 
+impl<T: Num + Copy> Mul for Mat2<T> {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        let a = self;
+        let b = other;
+
+        Mat2 {
+            a11: a.a11*b.a11 + a.a12*b.a21,
+            a12: a.a11*b.a12 + a.a12*b.a22, 
+            a21: a.a21*b.a11 + a.a22*b.a21,
+            a22: a.a21*b.a12 + a.a22*b.a22,
+        }
+    }
+}
+
 // Scaling
 impl<T: Num + Copy> MulAssign for Mat4<T> {
     fn mul_assign(&mut self, other: Self) {
@@ -589,6 +737,27 @@ impl<T: Num + Copy> MulAssign<T> for Mat3<T> {
     }
 }
 
+impl<T: Num + Copy> MulAssign for Mat2<T> {
+    fn mul_assign(&mut self, other: Self) {
+        *self = *self * other;
+    }
+}
+impl<T: Num + Copy> Mul<T> for Mat2<T> {
+    type Output = Self;
+    fn mul(self, scalar: T) -> Self {
+        Mat2 {
+            a11: self.a11 * scalar, a12: self.a12 * scalar,
+            a21: self.a21 * scalar, a22: self.a22 * scalar,
+        }
+    }
+}
+impl<T: Num + Copy> MulAssign<T> for Mat2<T> {
+    fn mul_assign(&mut self, scalar: T) {
+        self.a11 = self.a11 * scalar; self.a12 = self.a12 * scalar;
+        self.a21 = self.a21 * scalar; self.a22 = self.a22 * scalar;
+    }
+}
+
 // Vector multiplication
 impl<T: Num + Copy> Mul<Vec4<T>> for Mat4<T> {
     type Output = Vec4<T>;
@@ -609,6 +778,16 @@ impl<T: Num + Copy> Mul<Vec3<T>> for Mat3<T> {
             x: self.a11*v.x + self.a12*v.y + self.a13*v.z,
             y: self.a21*v.x + self.a22*v.y + self.a23*v.z,
             z: self.a31*v.x + self.a32*v.y + self.a33*v.z,
+        }
+    }
+}
+
+impl<T: Num + Copy> Mul<Vec2<T>> for Mat2<T> {
+    type Output = Vec2<T>;
+    fn mul(self, v: Vec2<T>) -> Vec2<T> {
+        Vec2 {
+            x: self.a11*v.x + self.a12*v.y,
+            y: self.a21*v.x + self.a22*v.y,
         }
     }
 }
@@ -702,6 +881,46 @@ impl<T: Num + Copy> AsRef<[T]> for Mat3<T> {
         use std::slice;
         unsafe {
             slice::from_raw_parts(&self.a11 as *const T, 9)
+        }
+    }
+}
+
+impl<T: Num + Copy> Add for Mat2<T> {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Mat2 {
+            a11: self.a11 + other.a11, a12: self.a12 + other.a12,
+            a21: self.a21 + other.a21, a22: self.a22 + other.a22,
+        }
+    }
+}
+impl<T: Num + Copy> AddAssign for Mat2<T> {
+    fn add_assign(&mut self, other: Self) {
+        self.a11 = self.a11 + other.a11; self.a12 = self.a12 + other.a12;
+        self.a21 = self.a21 + other.a21; self.a22 = self.a22 + other.a22;
+    }
+}
+impl<T: Num + Copy> Sub for Mat2<T> {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Mat2 {
+            a11: self.a11 - other.a11, a12: self.a12 - other.a12,
+            a21: self.a21 - other.a21, a22: self.a22 - other.a22,
+        }
+    }
+}
+impl<T: Num + Copy> SubAssign for Mat2<T> {
+    fn sub_assign(&mut self, other: Self) {
+        self.a11 = self.a11 - other.a11; self.a12 = self.a12 - other.a12;
+        self.a21 = self.a21 - other.a21; self.a22 = self.a22 - other.a22;
+    }
+}
+
+impl<T: Num + Copy> AsRef<[T]> for Mat2<T> {
+    fn as_ref(&self) -> &[T] {
+        use std::slice;
+        unsafe {
+            slice::from_raw_parts(&self.a11 as *const T, 4)
         }
     }
 }
@@ -1099,6 +1318,197 @@ mod mat3_tests {
 
         let b = mat_b();
         let result = b * (b.inverse() * vec);
+        assert!((vec - result).len() < 0.00001);
+
+        let c = mat_c();
+        let result = c * (c.inverse() * vec);
+        assert!((vec - result).len() < 0.00001);
+    }
+}
+
+#[cfg(test)]
+mod mat2_tests {
+    use super::*;
+
+    // Function for generating random testing matrices
+    fn mat_a() -> Mat2<f32> {
+        Mat2::with_values(
+            1.0, 7.0,
+            6.0, 5.0,
+        )
+    }
+    fn mat_b() -> Mat2<f32> {
+        Mat2::with_values(
+            7.0, 8.0,
+            1.0, 3.0,
+        )
+    }
+    fn mat_c() -> Mat2<f32> {
+        Mat2::with_values(
+            5.0, 7.0,
+            3.0, 1.0,
+        )
+    }
+
+    #[test]
+    fn identity() {
+        let a = mat_a();
+        let b = mat_b();
+        let c = mat_c();
+        let identity = Mat2::identity();
+
+        assert_eq!(a, a * identity);
+        assert_eq!(b, b * identity);
+        assert_eq!(c, c * identity);
+
+        assert_eq!(a, identity * a);
+        assert_eq!(b, identity * b);
+        assert_eq!(c, identity * c);
+
+        assert_ne!(identity * a, identity * b);
+        assert_ne!(identity * b, identity * c);
+        assert_ne!(identity * a, identity * c);
+
+    }
+
+    #[test]
+    fn zero() {
+        let a = mat_a();
+        let b = mat_b();
+        let c = mat_c();
+        let identity = Mat2::identity();
+        let zero = Mat2::zero();
+
+        assert_eq!(identity * zero, zero);
+
+        assert_eq!(a * zero, zero);
+        assert_eq!(b * zero, zero);
+        assert_eq!(c * zero, zero);
+    }
+
+    #[test]
+    fn mul() {
+        let a = mat_a();
+        let b = mat_b();
+        let ab = Mat2::with_values(
+            14.0, 29.0,
+            47.0, 63.0,
+        );
+
+        assert_eq!(ab, a * b);
+
+        let mut c = a;
+        c *= b;
+
+        assert_eq!(ab, c);
+
+        let ba = Mat2::with_values(
+            55.0, 89.0,
+            19.0, 22.0,
+        );
+
+        assert_eq!(ba, b * a); 
+
+        assert_ne!(b * a, a * b);
+    }
+
+    #[test]
+    fn scale() {
+        let a = Mat2::with_values(
+            1, 2,
+            5, 6,
+        );
+        let b = Mat2::with_values(
+            2, 4,
+            10, 12,
+        );
+
+        let mut c = a;
+        c *= 2;
+
+        assert_eq!(b, a*2);
+        assert_eq!(c, a*2);
+        assert_eq!(c, b);
+    }
+
+    #[test]
+    fn add() {
+        let a = mat_a();
+        let b = mat_b();
+        let sum = Mat2::with_values(
+            8.0, 15.0,
+            7.0, 8.0,
+        );
+        assert_eq!(sum, a + b);
+    }
+
+    #[test]
+    fn sub() {
+        let a = mat_a();
+        let b = mat_b();
+        let dif = Mat2::with_values(
+            -6.0, -1.0,
+            5.0, 2.0,
+        );
+        assert_eq!(dif, a - b);
+    }
+
+    #[test]
+    fn transpose() {
+        let a = mat_a();
+        let expected = Mat2::with_values(
+            1.0, 6.0,
+            7.0, 5.0,
+        );
+        assert_eq!(expected, a.transpose());
+    }
+
+    #[test]
+    fn determinant() {
+        assert_eq!(-37.0, mat_a().determinant());
+        assert_eq!(13.0, mat_b().determinant());
+    }
+
+    #[test]
+    fn inverse() {
+        let identity = Mat2::<f32>::identity();
+        let inverse = identity.inverse();
+
+        assert_eq!(identity, inverse);
+
+        let i_det = identity.determinant();
+
+        let a_det = (mat_a()*mat_a().inverse()).determinant();
+        let b_det = (mat_b()*mat_b().inverse()).determinant();
+        let c_det = (mat_c()*mat_c().inverse()).determinant();
+
+        assert!((i_det - a_det).abs() < 0.00001, "|{} - {}|", i_det, a_det);
+        assert!((i_det - b_det).abs() < 0.00001, "|{} - {}|", i_det, b_det);
+        assert!((i_det - c_det).abs() < 0.00001, "|{} - {}|", i_det, c_det);
+    }
+
+    #[test]
+    fn vec_mul() {
+        let identity = Mat2::<f32>::identity();
+        let vec = Vec2::new(7.2, 2.4);
+
+        assert_eq!(vec, identity * vec);
+    }
+
+    #[test]
+    fn inv_vec_mul() {
+        let a = Mat2::with_values(1.0, 1.0, 0.0, 1.0);
+        let b = a.inverse();
+        println!("{:?} {:?}", a, b);
+
+        let vec = Vec2::new(6.3, -1.3);
+
+        let a = mat_a();
+        let result = a * (a.inverse() * vec); 
+        assert!((vec - result).len() < 0.00001);
+
+        let b = mat_b();
+        let result = b.inverse() * (b * vec);
         assert!((vec - result).len() < 0.00001);
 
         let c = mat_c();

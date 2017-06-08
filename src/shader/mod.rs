@@ -354,7 +354,7 @@ impl Shader {
     ///
     /// In `main.rs`:
     ///
-    /// ```rust,no_run
+    /// ```rust,ignore
     /// let shader = load_shader!("shader.glsl", ...); 
     /// shader.bind_uniform_block("matrix_block", 23); // `matrix_block` now gets data from index 23.
     ///

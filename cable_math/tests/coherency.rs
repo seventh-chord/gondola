@@ -3,7 +3,7 @@
 
 extern crate cable_math;
 
-use cable_math::{Vec2, Vec3, Vec4, Mat3, Mat4, Quaternion};
+use cable_math::{Vec2, Vec3, Vec4, Mat2, Mat3, Mat4, Quaternion};
 
 // Random angles between
 const TEST_ANGLES: [f32; 100] = [
@@ -129,6 +129,7 @@ fn rotation_2d() {
     let mut d = initial; 
     let mut e = initial; 
     let mut f = initial; 
+    let mut g = initial; 
 
     for &angle in TEST_ANGLES.iter() {
         // Rotate each vector using a different method
@@ -136,8 +137,9 @@ fn rotation_2d() {
         b = Vec2::complex_mul(Vec2::polar(1.0, angle), b);
         c = (Mat3::rotation(angle) * Vec3::from2(c, 1.0)).xy();
         d = (Mat3::rotation(angle) * Vec3::from2(d, 0.0)).xy();
-        e = Mat3::rotation(angle).transform_dir(e);
-        f = Mat3::rotation(angle).transform_pos(f);
+        e = Mat3::rotation(angle).apply_dir(e);
+        f = Mat3::rotation(angle).apply(f);
+        g = Mat2::rotation(angle) * g;
 
         // Check if all methods result in the same rotation
         test_equal_v2(a, b);
@@ -145,5 +147,6 @@ fn rotation_2d() {
         test_equal_v2(a, d);
         test_equal_v2(a, e);
         test_equal_v2(a, f);
+        test_equal_v2(a, g);
     }
 }

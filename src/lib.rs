@@ -58,7 +58,7 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 /// ```rust,no_run
 /// extern crate gondola;
 ///
-/// use gondola::{Game, GameResult, GameState};
+/// use gondola::{Game, GameResult, GameState, Timing};
 ///
 /// fn main() {
 ///     gondola::run::<Pong>();
@@ -73,7 +73,7 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 ///         Ok(Pong {})
 ///     }
 ///
-///     fn update(&mut self, delta: u32, state: &mut GameState) {
+///     fn update(&mut self, delta: Timing, state: &mut GameState) {
 ///         // All logic goes here.
 ///     }
 ///
