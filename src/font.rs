@@ -280,11 +280,15 @@ impl Font {
         None
     }
 
-    /// Retrieves the total height of a line drawn with this font at the given size. This is the
-    /// sum of the max ascent, the max descent and the line gap.
-    pub fn line_height(&self, text_size: f32) -> f32 {
+    /// Retrieves height metrics for this font at the given size. This includes the max ascent,
+    /// descent and the recommended line gap.
+    pub fn height_metrics(&self, text_size: f32) -> HeightMetrics {
         let v_metrics = self.font.v_metrics(Scale::uniform(text_size));
-        v_metrics.ascent - v_metrics.descent + v_metrics.line_gap
+        HeightMetrics {
+            ascent: v_metrics.ascent,
+            descent: v_metrics.descent,
+            line_gap: v_metrics.line_gap,
+        }
     }
 
     /// Retrieves the max ascent of a line drawn with this font at the given size. Note that this
@@ -532,3 +536,22 @@ impl LineDimensions {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default)]
+pub struct HeightMetrics {
+    /// The distance from the baseline to the top of the highest-reaching glyph. This is
+    /// usually negative, as negative y (lower line numbers) is up on paper.
+    pub ascent: f32,
+    /// The distance from the baseline to the bottom of the lowest-reaching glyph. This is
+    /// usually positive, as positive y (higher line numbers) is down on paper.
+    pub descent: f32,
+    /// The gap there should between the top of one line and the bottom of the next line. This is
+    /// just a guideline.
+    pub line_gap: f32,
+}
+
+impl HeightMetrics {
+    /// The total height of this line. `descent` - `ascent`.
+    pub fn height(&self) -> f32 {
+        self.ascent - self.descent + self.line_gap
+    }
+}
