@@ -25,9 +25,12 @@ pub struct DrawGroup<F> {
     vertices: Vec<Vert>,
     state_changes: Vec<StateChange<F>>,
 
-    // This is only used to allow users to check what the clipping region is. This is not actually
-    // used to affect any rendering state.
-    current_clip_region: Option<Region>,
+    // This contains all pushed clip regions that have not yet been popped. 
+    // This stack is built up while pushing state commands into the draw group.
+    working_clip_stack: Vec<Region>,
+    // This stack is only used when drawing, and will go through the same series of transformations
+    // as `working_clip_stack` while state commands are played back.
+    draw_clip_stack: Vec<Region>,
 
     /// If set to some transformation matrix, that transform will be applied to all vertices when
     /// they are added to this draw group. 
@@ -58,13 +61,17 @@ pub enum StateCmd<F> {
     /// Changes to the given texture. This command is invoked whenever primitives are added to the
     /// draw group with any of the convenience functions (e.g. `line(...)`).
     TextureChange(TextureId<F>),
-    /// Sets the clip region. Objects outside the clip region will not be drawn.
-    Clip(Region),
-    /// Resets the clip region. Objects are now clipped only by the viewport.
-    ResetClip,
+
+    /// Adds a new item to the clip region stack. 
+    PushClip(Region),
+    /// Pops one item of the clip region stack, removing the previously pushed clip region. If more
+    /// `PopClip` commands than `PushClip` commands are added the draw group will panic.
+    PopClip,
+
     /// Clears the current clip region (Or the entire viewport if there is no clip region)
     /// to the given color.
     Clear(Color),
+
     /// Changes the layer (The z coordinate of all vertices). This can be used to place some
     /// sections above others when rendering. `0.0` is the default layer.
     LayerChange(f32),
@@ -83,7 +90,9 @@ impl<F> DrawGroup<F>
             vertices: Vec::with_capacity(2048),
             state_changes: Vec::with_capacity(256),
 
-            current_clip_region: None, 
+            working_clip_stack: Vec::with_capacity(10), 
+            draw_clip_stack:    Vec::with_capacity(10),
+
             current_transform: None,
 
             shader,
@@ -109,11 +118,13 @@ impl<F> DrawGroup<F>
         self.vertices.clear();
         self.state_changes.clear(); 
         self.changed = true;
-        self.current_clip_region = None;
+        self.working_clip_stack.clear();
     }
 
     /// Draws all data in this group. This expects the proper shader (basic.glsl) to be bound.
-    pub fn draw(&mut self, transform: Mat4<f32>) {
+    pub fn draw(&mut self, transform: Mat4<f32>, win_size: Vec2<f32>) {
+        self.draw_clip_stack.clear();
+
         if self.changed {
             self.changed = false;
 
@@ -127,11 +138,13 @@ impl<F> DrawGroup<F>
         self.white_texture.bind(0);
 
         let mut draw_cursor = 0;
+        let ref mut buffer = self.buffer;
+
         // Draws all data between region start and the given position
         let mut flush = |to: usize| {
             if draw_cursor == to { return; }
 
-            self.buffer.draw_range(draw_cursor..to);
+            buffer.draw_range(draw_cursor..to);
             draw_cursor = to;
         };
 
@@ -169,16 +182,26 @@ impl<F> DrawGroup<F>
                     graphics::clear(Some(color), true, false);
                 },
 
-                StateCmd::Clip(region) => {
+                StateCmd::PushClip(region) => {
                     flush(at_vertex);
 
-                    graphics::set_scissor(Some(region));
+                    self.draw_clip_stack.push(region);
+                    graphics::set_scissor(Some(region), win_size);
                 },
 
-                StateCmd::ResetClip => {
+                StateCmd::PopClip => {
                     flush(at_vertex);
 
-                    graphics::set_scissor(None);
+                    // `pop` returns an option, and thus never panics. We check for unbalanced
+                    // push/pops when adding state commands, so at this point we can assume that
+                    // they are actually balanced. 
+                    self.draw_clip_stack.pop();
+
+                    if let Some(&region) = self.draw_clip_stack.last() {
+                        graphics::set_scissor(Some(region), win_size);
+                    } else {
+                        graphics::set_scissor(None, win_size);
+                    }
                 },
             }
         }
@@ -186,7 +209,7 @@ impl<F> DrawGroup<F>
         flush(self.vertices.len()); 
 
         Texture::unbind(0);
-        graphics::set_scissor(None);
+        graphics::set_scissor(None, win_size);
     }
 
     pub fn push_state_cmd(&mut self, cmd: StateCmd<F>) {
@@ -199,11 +222,19 @@ impl<F> DrawGroup<F>
             }
         }
 
-        if let StateCmd::Clip(region) = cmd {
-            self.current_clip_region = Some(region);
-        }
-        if let StateCmd::ResetClip = cmd {
-            self.current_clip_region = None;
+        match cmd {
+            StateCmd::PushClip(region) => {
+                self.working_clip_stack.push(region);
+            }, 
+            StateCmd::PopClip => {
+                if self.working_clip_stack.is_empty() {
+                    panic!("Unbalanced `StateCmd::PushClip` and `StateCmd::PopClip`");
+                }
+
+                self.working_clip_stack.pop();
+            },
+
+            _ => {},
         }
 
         self.changed = true;
@@ -217,12 +248,17 @@ impl<F> DrawGroup<F>
         &self.fonts[&key]
     }
 
-    /// Retrieves the current clipping rectangle. If clipping is currently disabled this returns
-    /// `None`. Clipping is toggled by pushing [`StateCmd`].
+    /// Retrieves the current clipping rectangle. The returned region is the region to which
+    /// vertices will be constrained during drawing. If the clipping stack is empty, this returns 
+    /// `None`. The clipping region is changed by pushing [`StateCmd::PushClip`][0] and 
+    /// [`StateCmd::PopClip`][0].
     ///
-    /// [`StateCmd`]: enum.StateCmd.html
+    /// [0]: enum.StateCmd.html
     pub fn current_clip_region(&self) -> Option<Region> {
-        self.current_clip_region
+        match self.working_clip_stack.last() {
+            Some(region) => Some(*region),
+            None         => None,
+        }
     }
 
     fn add_vertices(&mut self, vertices: &[Vert]) {

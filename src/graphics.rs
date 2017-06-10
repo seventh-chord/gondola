@@ -4,6 +4,8 @@
 use gl;
 use gl::types::*;
 
+use cable_math::Vec2;
+
 use {Color, Region};
 
 /// Sets the OpenGL viewport
@@ -22,17 +24,23 @@ pub fn viewport(region: Region) {
 /// Enables/disables the OpenGL scissor test.  The given region is in screen space, that is, in the
 /// same coordinate system as [`viewport`]. Anything drawn outside this region will be discarded.
 ///
-/// Because `gl::Scissor` takes integers as parameters the given regions coordinates will be cast
+/// `gl::Scissor` takes integers as parameters the given regions coordinates will be cast
 /// before being used. 
 ///
+/// Because OpenGL requires a scissor region to be specified from the bottom left, but everything
+/// else in this library operates from the top left this function needs to know the window size.
+///
 /// [`viewport`]: fn.viewport.html
-pub fn set_scissor(region: Option<Region>) {
+pub fn set_scissor(region: Option<Region>, win_size: Vec2<f32>) {
     unsafe {
         if let Some(region) = region {
             gl::Enable(gl::SCISSOR_TEST);
+
             gl::Scissor(
-                region.min.x as GLint, region.min.y as GLint,
-                region.max.x as GLint, region.max.y as GLint,
+                region.min.x as GLint,
+                (win_size.y - region.min.y - region.height()) as GLint,
+                region.width() as GLint,
+                region.height() as GLint,
             )
         } else {
             gl::Disable(gl::SCISSOR_TEST);

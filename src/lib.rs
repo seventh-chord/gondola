@@ -499,4 +499,19 @@ impl Region {
             max: Vec2::new(self.min.x, self.max.y),
         }
     }
+
+    /// Returns the region in which this region overlaps the given other region. This might produce
+    /// a negative region.
+    pub fn overlap(self, other: Region) -> Region {
+        Region {
+            min: Vec2 {
+                x: f32::max(self.min.x, other.min.x),
+                y: f32::max(self.min.y, other.min.y),
+            },
+            max: Vec2 {
+                x: f32::min(self.max.x, other.max.x),
+                y: f32::min(self.max.y, other.max.y),
+            },
+        }
+    }
 }
