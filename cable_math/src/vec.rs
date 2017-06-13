@@ -1,7 +1,8 @@
 
-use num::*;
 use std::fmt;
 use std::ops::*;
+
+use num::*;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 #[repr(C)]
@@ -97,6 +98,16 @@ impl<T: Num + Copy> Vec2<T> {
         Vec2::new(self.y, T::zero() - self.x)
     }
 
+    /// Projects thsi vector onto the given other vector. The returned vector will lie on a line
+    /// going through the origin and `ray`.
+    pub fn project_onto(self, ray: Vec2<T>) -> Vec2<T> {
+        // A more readable version of the below would be:
+        // ray.normalize() * dot(self, ray.normalize())
+
+        let dot = self.x*ray.x + self.y*ray.y;
+        let len = ray.x*ray.x + ray.y*ray.y;
+        ray * (dot / len)
+    }
 }
 impl<T: Num + Copy> Vec3<T> {
     /// Creates a new vector with all components set to 0
@@ -124,7 +135,6 @@ impl<T: Num + Copy> Vec3<T> {
 impl<T: Num + Copy> Vec4<T> {
     /// Creates a new vector with all components set to 0
     pub fn zero() -> Vec4<T> { Vec4 { x: T::zero(), y: T::zero(), z: T::zero(), w: T::zero() } }
-
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
