@@ -96,7 +96,13 @@ impl InputManager {
                         }
                     },
                     glutin::WindowEvent::KeyboardInput(state, key, name, _modifier_state) => {
-                        if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
+                        if state == ElementState::Pressed { 
+                            if let Some(name) = name {
+                                println!("{:?} = 0x{:x},", name, key); 
+                            } else {
+                                println!("? = 0x{:x},", key); 
+                            }
+                        }
 
                         let ref mut internal_state = self.keyboard_states[key as usize];
                         match state {
@@ -213,6 +219,10 @@ impl KeyState {
 /// on the keyboard, rather than a specific symbol. These can be used as parameters
 /// to [`InputManager::key`](struct.InputManager.html#method.key). The names are
 /// based on the american keyboard layout.
+///
+/// Scancodes are target specific, so the values asigned to each enum name might vary from platform
+/// to platform. On some platforms not all keys are available. Check the source code for more
+/// detailed information on this.
 #[cfg(target_os = "linux")]
 #[repr(u8)]
 pub enum Key {
@@ -233,8 +243,50 @@ pub enum Key {
 
     Insert = 0x76, Delete = 0x77, Home = 0x6e, End = 0x73, PageUp = 0x70, PageDown = 0x75,
 
-    F1 = 0x43, F2 = 0x44, F3 = 0x45, F4 = 0x46, F5 = 0x47, F6 = 0x48, 
+    F1 = 0x43, F2 = 0x44, F3 = 0x45, F4 = 0x46,  F5 = 0x47,  F6 = 0x48, 
     F7 = 0x49, F8 = 0x4a, F9 = 0x4b, F10 = 0x4c, F11 = 0x5f, F12 = 0x60,
+}
+
+/// Codes for most keys. Note that these are scancodes, so they refer to a position on the
+/// keyboard, rather than a specific symbol. These can be used as parameters to
+/// [`InputManager::key`](struct.InputManager.html#method.key). The names are based on the american
+/// keyboard layout.  
+///
+/// Scancodes are target specific, so the values asigned to each enum name might vary from platform
+/// to platform. On some platforms not all keys are available. Check the source code for more
+/// detailed information on this.
+#[cfg(target_os = "windows")]
+#[repr(u8)]
+pub enum Key {
+    Key1 = 0x2, Key2 = 0x3, Key3 = 0x4, Key4 = 0x5, Key5 = 0x6,
+    Key6 = 0x7, Key7 = 0x8, Key8 = 0x9, Key9 = 0xa, Key0 = 0xb,
+
+    Q = 0x10, W = 0x11, E = 0x12, R = 0x13, T = 0x14, Y = 0x15, U = 0x16, I = 0x17, O = 0x18, P = 0x19,
+    A = 0x1e, S = 0x1f, D = 0x20, F = 0x21, G = 0x22, H = 0x23, J = 0x24, K = 0x25, L = 0x26, Z = 0x2c,
+    X = 0x2d, C = 0x2e, V = 0x2f, B = 0x30, N = 0x31, M = 0x32,
+
+    Space = 0x39,
+
+    Escape = 0x1, 
+//    Grave  = 0x31, 
+    Tab = 0xf,
+//    CapsLock  = 0x42, 
+    LShift = 0x2a,
+    LCtrl = 0x1d,
+//    LAlt = 0x40,
+//    RAlt  = 0x6c,
+//    RMeta  = 0x86,
+//    RCtrl = 0x1d, // Same scancode as LCtrl :/
+    RShift = 0x36,
+    Return = 0x1c,
+    Back = 0xe,
+
+    Right = 0x4d, Left = 0x4b, Down = 0x50, Up = 0x48,
+
+    Insert = 0x52, Delete = 0x53, Home = 0x47, End = 0x4f, PageUp = 0x49, PageDown = 0x51,
+
+    F1 = 0x3b, F2 = 0x3c, F3 = 0x3d, F4 = 0x3e,  F5 = 0x3f,  F6 = 0x40,
+    F7 = 0x41, F8 = 0x42, F9 = 0x43, F10 = 0x44, F11 = 0x57, F12 = 0x58,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
