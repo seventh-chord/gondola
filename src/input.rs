@@ -95,7 +95,8 @@ impl InputManager {
                             },
                         }
                     },
-                    glutin::WindowEvent::KeyboardInput(state, key, name, _modifier_state) => {
+                    glutin::WindowEvent::KeyboardInput(state, key, _name, _modifier_state) => {
+                        /*
                         if state == ElementState::Pressed { 
                             if let Some(name) = name {
                                 println!("{:?} = 0x{:x},", name, key); 
@@ -103,6 +104,7 @@ impl InputManager {
                                 println!("? = 0x{:x},", key); 
                             }
                         }
+                        */
 
                         let ref mut internal_state = self.keyboard_states[key as usize];
                         match state {
