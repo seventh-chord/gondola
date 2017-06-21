@@ -95,8 +95,9 @@ impl InputManager {
                             },
                         }
                     },
-                    glutin::WindowEvent::KeyboardInput(state, key, _name, _modifier_state) => {
-    //                    if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
+                    glutin::WindowEvent::KeyboardInput(state, key, name, _modifier_state) => {
+                        if let Some(name) = name { println!("{:?} = 0x{:x}", name, key); }
+
                         let ref mut internal_state = self.keyboard_states[key as usize];
                         match state {
                             ElementState::Pressed => {
@@ -212,12 +213,16 @@ impl KeyState {
 /// on the keyboard, rather than a specific symbol. These can be used as parameters
 /// to [`InputManager::key`](struct.InputManager.html#method.key). The names are
 /// based on the american keyboard layout.
+#[cfg(target_os = "linux")]
 #[repr(u8)]
 pub enum Key {
-    Key1 = 0xa, Key2 = 0xb, Key3 = 0xc, Key4 = 0xd, Key5 = 0xe, Key6 = 0xf, Key7 = 0x10, Key8 = 0x11, Key9 = 0x12, Key0 = 0x13,
+    Key1 = 0xa, Key2 = 0xb, Key3 = 0xc, Key4 = 0xd, Key5 = 0xe, 
+    Key6 = 0xf, Key7 = 0x10, Key8 = 0x11, Key9 = 0x12, Key0 = 0x13,
+
     Q = 0x18, W = 0x19, E = 0x1a, R = 0x1b, T = 0x1c, Y = 0x1d, U = 0x1e, I = 0x1f, P = 0x20,
     A = 0x26, S = 0x27, D = 0x28, F = 0x29, G = 0x2a, H = 0x2b, J = 0x2c, K = 0x2d, L = 0x2e,
     Z = 0x34, X = 0x35, C = 0x36, V = 0x37, B = 0x38, N = 0x39, M = 0x3a,
+
     Space = 0x41,
 
     Escape = 0x9, Grave  = 0x31, Tab = 0x17, CapsLock  = 0x42,

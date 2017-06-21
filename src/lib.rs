@@ -16,13 +16,17 @@
 
 extern crate gl;
 extern crate glutin;
-extern crate png;
-extern crate cable_math;
+extern crate winit;
+extern crate libc;
+
 extern crate rusttype;
+extern crate png;
 #[macro_use]
 extern crate bitflags;
 #[cfg(feature = "serialize")]
 extern crate serde;
+
+extern crate cable_math;
 
 mod color;
 mod input;
@@ -134,8 +138,26 @@ pub fn run<T: Game + Sized>() {
         });
     });
 
+    // Generate platform specific data
+    let platform = {
+        #[cfg(target_os = "windows")]
+        {
+            use winit::os::windows::WindowExt;
+            let hwnd_ptr = window.as_winit_window().get_hwnd();
+
+            Platform {
+                hwnd_ptr: hwnd_ptr,
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            Platform {}
+        }
+    };
+
     // Set up game state
-    let mut state = GameState::new();
+    let mut state = GameState::new(platform);
     state.screen_region = {
         let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
         let size = size.as_f32();
@@ -315,7 +337,19 @@ pub struct GameState {
     // is however tracked by the input manager.
     prev_cursor_pos: Vec2<i32>,
     cursor_state: CursorState,
+
+    platform: Platform,
 }
+
+#[cfg(target_os = "windows")]
+#[derive(Clone)]
+pub struct Platform {
+    pub hwnd_ptr: *mut libc::c_void,
+}
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Clone)]
+pub struct Platform {}
 
 /// Used with [`gondola::run`](fn.run.html)
 pub trait Game: Sized {
@@ -339,7 +373,7 @@ pub trait Game: Sized {
 }
 
 impl GameState {
-    fn new() -> GameState {
+    fn new(platform: Platform) -> GameState {
         let (state_change_request_sender, state_change_request_receiver) = mpsc::channel();
 
         GameState {
@@ -358,6 +392,8 @@ impl GameState {
 
             prev_cursor_pos: Vec2::zero(),
             cursor_state: CursorState::Normal,
+
+            platform,
         }
     }
 
@@ -380,6 +416,12 @@ impl GameState {
         let receiver = self.gen_event_receiver();
         let sender = self.gen_request_sender();
         InputManager::new(receiver, sender)
+    }
+
+    /// Returns a struct, the contents of which vary based on platform. On windows, this struct
+    /// for example contains the native window handle (HWND).
+    pub fn platform_specific_data(&self) -> Platform {
+        self.platform.clone()
     }
 }
 
