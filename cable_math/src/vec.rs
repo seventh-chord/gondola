@@ -98,8 +98,8 @@ impl<T: Num + Copy> Vec2<T> {
         Vec2::new(self.y, T::zero() - self.x)
     }
 
-    /// Projects thsi vector onto the given other vector. The returned vector will lie on a line
-    /// going through the origin and `ray`.
+    /// Projects this vector onto the given other vector. The returned vector will lie on a line
+    /// going through the origin and `ray`. `ray` does not need to be normalized.
     pub fn project_onto(self, ray: Vec2<T>) -> Vec2<T> {
         // A more readable version of the below would be:
         // ray.normalize() * dot(self, ray.normalize())

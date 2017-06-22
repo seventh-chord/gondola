@@ -337,23 +337,30 @@ impl<F> DrawGroup<F>
 
         // Draw caps
         for i in 0..(SIN_COS.len() - 1) {
-            let ca = Vec2::complex_mul(SIN_COS[i], -normal);
-            let cb = Vec2::complex_mul(SIN_COS[i + 1], -normal);
+            let c = (
+                Vec2::complex_mul(SIN_COS[i], -normal),
+                Vec2::complex_mul(SIN_COS[i + 1], -normal)
+            );
+
+            let d = (
+                Vec2::complex_mul(SIN_COS[i], tangent),
+                Vec2::complex_mul(SIN_COS[i + 1], tangent)
+            );
 
             self.add_vertices(&[
                 Vert { pos: a, uv, color },
-                Vert { pos: a + Vec2::new(-ca.x, ca.y)*size, uv, color },
-                Vert { pos: a + Vec2::new(-cb.x, cb.y)*size, uv, color },
+                Vert { pos: a + Vec2::new(-c.0.x, -c.0.y)*size, uv, color },
+                Vert { pos: a + Vec2::new(-c.1.x, -c.1.y)*size, uv, color },
                 Vert { pos: a, uv, color },
-                Vert { pos: a + Vec2::new(-cb.x, -cb.y)*size, uv, color },
-                Vert { pos: a + Vec2::new(-ca.x, -ca.y)*size, uv, color },
+                Vert { pos: a + Vec2::new(-d.0.x, -d.0.y)*size, uv, color },
+                Vert { pos: a + Vec2::new(-d.1.x, -d.1.y)*size, uv, color },
 
                 Vert { pos: b, uv, color },
-                Vert { pos: b + Vec2::new(cb.x, cb.y)*size, uv, color },
-                Vert { pos: b + Vec2::new(ca.x, ca.y)*size, uv, color },
+                Vert { pos: b + Vec2::new(c.0.x, c.0.y)*size, uv, color },
+                Vert { pos: b + Vec2::new(c.1.x, c.1.y)*size, uv, color },
                 Vert { pos: b, uv, color },
-                Vert { pos: b + Vec2::new(ca.x, -ca.y)*size, uv, color },
-                Vert { pos: b + Vec2::new(cb.x, -cb.y)*size, uv, color },
+                Vert { pos: b + Vec2::new(d.0.x, d.0.y)*size, uv, color },
+                Vert { pos: b + Vec2::new(d.1.x, d.1.y)*size, uv, color },
             ]);
         }
     }
