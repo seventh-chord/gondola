@@ -116,7 +116,7 @@ impl Font {
     /// given size. This takes newlines into acount. 
     /// Returns the size of the string, in addition to the ascent of the first line. If the text is
     /// offset downwards by this amount the top of the text will be at the previous baseline.
-    pub fn dimensions(&self, text: &str, text_size: f32) -> (Vec2<f32>, f32) {
+    pub fn dimensions(&self, text: &str, text_size: f32, wrap_width: Option<f32>) -> (Vec2<f32>, f32) {
         let mut prev_glyph: Option<GlyphId> = None; 
         let mut first_line = true;
         let mut first_ascent = 0.0;
@@ -138,7 +138,7 @@ impl Font {
             if c.is_control() {
                 if c == '\n' {
                     first_line = false;
-                    if caret.x > max_x { max_x = caret.x }
+                    max_x = f32::max(max_x, caret.x);
                     caret.x = 0.0;
                     caret.y += vertical_advance;
                     prev_glyph = None; //No kerning after newline
@@ -162,6 +162,16 @@ impl Font {
             let glyph = glyph.scaled(scale);
             caret.x += glyph.h_metrics().advance_width;
 
+            // Wrap if line is to long
+            if let Some(width) = wrap_width {
+                if caret.x > width {
+                    max_x = f32::max(max_x, caret.x);
+                    caret.x = 0.0;
+                    caret.y += vertical_advance;
+                    prev_glyph = None;
+                }
+            }
+
             if first_line {
                 if let Some(bounding) = glyph.exact_bounding_box() {
                     first_ascent = f32::max(first_ascent, -bounding.min.y);
@@ -169,7 +179,11 @@ impl Font {
             }
         }
 
-        if caret.x > max_x { max_x = caret.x } 
+        max_x = f32::max(max_x, caret.x);
+        if let Some(width) = wrap_width {
+            max_x = f32::min(max_x, width);
+        }
+
         (Vec2::new(max_x, caret.y + first_ascent), first_ascent)
     }
 
@@ -321,16 +335,22 @@ impl Font {
     ///
     /// Returns the number of vertices that where added to the buffer. 
     pub fn cache<T>(
-        &mut self, buf: &mut Vec<T>,
-        text: &str, text_size: f32, scale: f32, offset: Vec2<f32>, color: Color
+        &mut self,
+        buf:        &mut Vec<T>,
+        text:       &str,
+        text_size:  f32,
+        scale:      f32,
+        offset:     Vec2<f32>,
+        wrap_width: Option<f32>,
+        color: Color,
     ) -> usize
         where T: AsFontVert,
     {
-        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
-        let glyphs = iter.collect::<Vec<_>>();
+        let mut iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
+        iter.wrap_width = wrap_width;
 
         // Cache stuff on gpu
-        for &PlacementInfo { ref glyph, .. } in glyphs.iter() {
+        for PlacementInfo { ref glyph, .. } in iter.clone() {
             self.gpu_cache.queue_glyph(0, glyph.clone());
         }
         let ref mut tex = self.cache_texture;
@@ -344,7 +364,7 @@ impl Font {
 
         // Output vertices
         let mut vertices = 0;
-        for &PlacementInfo { ref glyph, .. } in glyphs.iter() {
+        for PlacementInfo { ref glyph, .. } in iter {
             if let Ok(Some((uv, pos))) = self.gpu_cache.rect_for(0, glyph) {
                 let x1 = (pos.min.x as f32 - offset.x)*scale + offset.x;
                 let x2 = (pos.max.x as f32 - offset.x)*scale + offset.x;
@@ -436,6 +456,8 @@ struct PlacementIter<'a> {
     caret: Vec2<f32>,
     prev_glyph: Option<GlyphId>,
     vertical_advance: f32,
+
+    wrap_width: Option<f32>,
 }
 struct PlacementInfo<'a> {
     glyph: PositionedGlyph<'a>, 
@@ -444,7 +466,13 @@ struct PlacementInfo<'a> {
 }
 
 impl<'a> PlacementIter<'a> {
-    fn new(text: &'a str, font: &'a rusttype::Font, scale: Scale, offset: Vec2<f32>) -> PlacementIter<'a> {
+    fn new(
+        text: &'a str,
+        font: &'a rusttype::Font,
+        scale: Scale,
+        offset: Vec2<f32>
+    ) -> PlacementIter<'a> 
+    {
         let v_metrics = font.v_metrics(scale);
         let vertical_advance = v_metrics.ascent - v_metrics.descent + v_metrics.line_gap;
 
@@ -459,6 +487,8 @@ impl<'a> PlacementIter<'a> {
             caret: offset,
             prev_glyph: None,
             vertical_advance: vertical_advance,
+
+            wrap_width: None,
         }
     }
 }
@@ -496,16 +526,28 @@ impl<'a> Iterator for PlacementIter<'a> {
                 continue;
             };
 
+            let mut advance = 0.0;
+
             // Apply kerning
             if let Some(prev) = self.prev_glyph.take() {
-                self.caret.x += self.font.pair_kerning(self.scale, prev, glyph.id());
+                advance += self.font.pair_kerning(self.scale, prev, glyph.id());
             }
             self.prev_glyph = Some(glyph.id());
 
-            let glyph = glyph
-                .scaled(self.scale)
-                .positioned(point(self.caret.x, self.caret.y));
-            self.caret.x += glyph.unpositioned().h_metrics().advance_width;
+            let glyph = glyph.scaled(self.scale);
+            advance += glyph.h_metrics().advance_width;
+
+            self.caret.x += advance;
+
+            if let Some(width) = self.wrap_width {
+                if self.caret.x + advance > self.offset.x + width {
+                    self.caret.x = self.offset.x + advance;
+                    self.caret.y += self.vertical_advance;
+                }
+            }
+
+            let glyph = glyph.positioned(point(self.caret.x - advance, self.caret.y));
+
 
             return Some(PlacementInfo {
                 glyph: glyph,

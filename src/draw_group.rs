@@ -644,14 +644,23 @@ impl<F> DrawGroup<F>
         }
     }
 
-    pub fn text(&mut self, text: &str, font: F, size: f32, pos: Vec2<f32>, color: Color) {
+    pub fn text(
+        &mut self,
+        text: &str,
+        font: F,
+        size: f32,
+        pos: Vec2<f32>,
+        wrap_width: Option<f32>,
+        color: Color
+    ) {
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Font(font)));
         let count = self.fonts.get_mut(&font).unwrap().cache(
             &mut self.vertices,
             text,
             size, 1.0, 
             pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
-            color
+            wrap_width,
+            color,
         ); 
 
         if let Some(transform) = self.current_transform {
