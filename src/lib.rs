@@ -157,9 +157,10 @@ pub fn run<T: Game + Sized>() {
     };
 
     // Set up game state
-    let mut state = GameState::new(platform);
+    let mut state = GameState::new(platform, window);
+
     state.screen_region = {
-        let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
+        let size: Vec2<_> = state.window.get_inner_size_pixels().unwrap().into();
         let size = size.as_f32();
 
         Region { min: Vec2::zero(), max: size }
@@ -192,7 +193,7 @@ pub fn run<T: Game + Sized>() {
             match event {
                 glutin::WindowEvent::Closed => break 'main_loop,
                 glutin::WindowEvent::Resized(..) => {
-                    let size: Vec2<_> = window.get_inner_size_pixels().unwrap().into();
+                    let size: Vec2<_> = state.window.get_inner_size_pixels().unwrap().into();
                     let size = size.as_f32();
 
                     let changed = state.screen_region.size() != size;
@@ -217,9 +218,9 @@ pub fn run<T: Game + Sized>() {
                             CursorState::HiddenGrabbed => glutin::CursorState::Hide,
                             CursorState::Grabbed => glutin::CursorState::Grab,
                         }; 
-                        window.set_cursor_state(glutin_cursor_state).unwrap();
+                        state.window.set_cursor_state(glutin_cursor_state).unwrap();
                     } else {
-                        window.set_cursor_state(glutin::CursorState::Normal).unwrap();
+                        state.window.set_cursor_state(glutin::CursorState::Normal).unwrap();
                     }
                 },
                 other => {
@@ -273,20 +274,20 @@ pub fn run<T: Game + Sized>() {
                         CursorState::HiddenGrabbed => glutin::CursorState::Hide,
                         CursorState::Grabbed => glutin::CursorState::Grab,
                     };
-                    window.set_cursor_state(glutin_cursor_state).unwrap();
+                    state.window.set_cursor_state(glutin_cursor_state).unwrap();
                 },
             }
         }
 
         if state.cursor_state == CursorState::HiddenGrabbed && state.focused {
             let center = state.screen_region.center().as_i32();
-            window.set_cursor_position(center.x, center.y).unwrap();
+            state.window.set_cursor_position(center.x, center.y).unwrap();
         }
 
         // Logic and rendering
         game.update(delta, &mut state);
         game.draw(&state);
-        window.swap_buffers().unwrap();
+        state.window.swap_buffers().unwrap();
         graphics::print_errors();
 
         if state.exit {
@@ -339,6 +340,7 @@ pub struct GameState {
     cursor_state: CursorState,
 
     platform: Platform,
+    window: glutin::Window,
 }
 
 #[cfg(target_os = "windows")]
@@ -373,7 +375,7 @@ pub trait Game: Sized {
 }
 
 impl GameState {
-    fn new(platform: Platform) -> GameState {
+    fn new(platform: Platform, window: glutin::Window) -> GameState {
         let (state_change_request_sender, state_change_request_receiver) = mpsc::channel();
 
         GameState {
@@ -394,6 +396,7 @@ impl GameState {
             cursor_state: CursorState::Normal,
 
             platform,
+            window,
         }
     }
 
@@ -422,6 +425,11 @@ impl GameState {
     /// for example contains the native window handle (HWND).
     pub fn platform_specific_data(&self) -> Platform {
         self.platform.clone()
+    }
+
+    /// Chagnes the title of this window
+    pub fn set_title(&self, title: &str) {
+        self.window.set_title(title);
     }
 }
 
