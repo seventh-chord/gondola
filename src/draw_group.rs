@@ -193,9 +193,6 @@ impl<F> DrawGroup<F>
 
                 let start = draw_cursor + offset;
                 let end = to + offset;
-                if layer == 1 {
-                    println!("{}..{}", start, end);
-                }
                 buffer.draw_range(start..end);
 
                 draw_cursor = to;
