@@ -257,14 +257,14 @@ impl<T: Vertex> VertexBuffer<T> {
         self.allocated
     }
 
-    /// Sets the number of vertices that can be stored in this buffer without
-    /// reallocating memory. If the buffer already has capacity for the given
-    /// number of vertices no space will be allocated.
-    pub fn ensure_allocated(&mut self, new_size: usize) {
+    /// Ensures that the capacity of this buffer is `new_capacity`. If necessary, this reallocates
+    /// the internal buffer. If the internal buffer is allready big enough this function does
+    /// nothing.  `new_capacity` is in units of `T`.
+    pub fn ensure_allocated(&mut self, new_capacity: usize) {
         // Only reallocate if necessary
-        if new_size > self.allocated {
+        if new_capacity > self.allocated {
             let mut new_buffer = 0;
-            let bytes = new_size * T::bytes_per_vertex();
+            let bytes = new_capacity * T::bytes_per_vertex();
 
             unsafe {
                 gl::GenBuffers(1, &mut new_buffer);
@@ -286,7 +286,7 @@ impl<T: Vertex> VertexBuffer<T> {
             }
 
             self.vbo = new_buffer;
-            self.allocated = new_size
+            self.allocated = new_capacity
         }
     }
 

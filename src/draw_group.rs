@@ -17,13 +17,16 @@ use texture::{Texture, TextureFormat};
 use buffer::{Vertex, PrimitiveMode, BufferUsage, VertexBuffer};
 use font::{Font, AsFontVert};
 
+// This could be a const generic in the future, but that is not implemented in rust yet
+pub const LAYER_COUNT: usize = 2;
+
 /// Batches drawcalls of textured primitives.
 ///
 /// `F` is some type used to identify fonts. Typically you would want to use some enum with a
 /// unique value for each font you are planning to use.
 pub struct DrawGroup<F> {
-    vertices: Vec<Vert>,
-    state_changes: Vec<StateChange<F>>,
+    current_layer: usize,
+    layers: [Layer<F>; LAYER_COUNT],
 
     // This contains all pushed clip regions that have not yet been popped. 
     // This stack is built up while pushing state commands into the draw group.
@@ -42,6 +45,12 @@ pub struct DrawGroup<F> {
 
     changed: bool,
     buffer: VertexBuffer<Vert>,
+}
+
+#[derive(Debug, Clone)]
+struct Layer<F> {
+    vertices: Vec<Vert>,
+    state_changes: Vec<StateChange<F>>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -71,13 +80,9 @@ pub enum StateCmd<F> {
     /// Clears the current clip region (Or the entire viewport if there is no clip region)
     /// to the given color.
     Clear(Color),
-
-    /// Changes the layer (The z coordinate of all vertices). This can be used to place some
-    /// sections above others when rendering. `0.0` is the default layer.
-    LayerChange(f32),
 }
 
-impl<F> DrawGroup<F> 
+impl<F> DrawGroup<F>
   where F: Eq + Hash + Copy,
 {
     pub fn new() -> Self {
@@ -86,9 +91,28 @@ impl<F> DrawGroup<F>
         let mut white_texture = Texture::new();
         white_texture.load_data(&[0xff, 0xff, 0xff], 1, 1, TextureFormat::RGB_8);
 
+        // Rust hates me, yada yada. It is not possible to use the [Layer { ... }; 2] syntax though
+        let layers = unsafe {
+            let layer: Layer<F> = Layer {
+                vertices: Vec::with_capacity(2048),
+                state_changes: Vec::with_capacity(256),
+            };
+
+            use std::mem;
+            use std::ptr;
+
+            let mut layers: [Layer<F>; LAYER_COUNT] = mem::uninitialized();
+            for i in 1..LAYER_COUNT {
+                ptr::write((&mut layers[i..]).as_mut_ptr(), layer.clone());
+            }
+            ptr::write((&mut layers).as_mut_ptr(), layer);
+
+            layers
+        }; 
+
         DrawGroup {
-            vertices: Vec::with_capacity(2048),
-            state_changes: Vec::with_capacity(256),
+            current_layer: 0,
+            layers,
 
             working_clip_stack: Vec::with_capacity(10), 
             draw_clip_stack:    Vec::with_capacity(10),
@@ -115,8 +139,11 @@ impl<F> DrawGroup<F>
 
     /// Removes all vertices and state commands in this group.
     pub fn reset(&mut self) {
-        self.vertices.clear();
-        self.state_changes.clear(); 
+        for layer in 0..LAYER_COUNT {
+            self.layers[layer].vertices.clear();
+            self.layers[layer].state_changes.clear();
+        }
+
         self.changed = true;
         self.working_clip_stack.clear();
     }
@@ -125,98 +152,117 @@ impl<F> DrawGroup<F>
     pub fn draw(&mut self, transform: Mat4<f32>, win_size: Vec2<f32>) {
         self.draw_clip_stack.clear();
 
+        let total_vert_count: usize = self.layers
+            .iter()
+            .map(|layer| layer.vertices.len())
+            .sum();
+
+        let mut layer_offsets_in_buffer = [0; LAYER_COUNT];
+
+        let mut offset = 0;
+        for layer in 0..LAYER_COUNT {
+            layer_offsets_in_buffer[layer] = offset;
+            offset += self.layers[layer].vertices.len();
+        }
+
         if self.changed {
             self.changed = false;
 
             self.buffer.clear();
-            self.buffer.put(0, &self.vertices);
+            self.buffer.ensure_allocated(total_vert_count);
+            for layer in 0..LAYER_COUNT {
+                self.buffer.put(layer_offsets_in_buffer[layer], &self.layers[layer].vertices);
+            }
         }
 
         self.shader.bind(); 
         self.shader.set_uniform("transform", transform);
-        self.shader.set_uniform("layer", 0.0);
-        self.white_texture.bind(0);
 
-        let mut draw_cursor = 0;
-        let ref mut buffer = self.buffer;
+        for layer in 0..LAYER_COUNT {
+            self.white_texture.bind(0);
+            self.shader.set_uniform("layer", layer as f32 / LAYER_COUNT as f32);
 
-        // Draws all data between region start and the given position
-        let mut flush = |to: usize| {
-            if draw_cursor == to { return; }
+            let mut draw_cursor = 0;
+            let ref mut buffer = self.buffer;
 
-            buffer.draw_range(draw_cursor..to);
-            draw_cursor = to;
-        };
+            // Draws all data between region start and the given position
+            let mut flush = |to: usize| {
+                if draw_cursor == to { return; }
 
-        let mut current_tex = TextureId::Solid;
-        let mut current_layer = 0.0;
+                let offset = layer_offsets_in_buffer[layer];
 
-        // Process state changes. `flush` whenever we actually change state
-        for &StateChange { at_vertex, cmd } in self.state_changes.iter() {
-            match cmd {
-                StateCmd::TextureChange(new_tex) => {
-                    if new_tex != current_tex {
-                        flush(at_vertex);
+                let start = draw_cursor + offset;
+                let end = to + offset;
+                if layer == 1 {
+                    println!("{}..{}", start, end);
+                }
+                buffer.draw_range(start..end);
 
-                        current_tex = new_tex;
-                        match current_tex {
-                            TextureId::Solid     => self.white_texture.bind(0),
-                            TextureId::Font(key) => self.fonts[&key].texture().bind(0),
+                draw_cursor = to;
+            };
+
+            let mut current_tex = TextureId::Solid;
+
+            // Process state changes. `flush` whenever we actually change state
+            for &StateChange { at_vertex, cmd } in self.layers[layer].state_changes.iter() {
+                match cmd {
+                    StateCmd::TextureChange(new_tex) => {
+                        if new_tex != current_tex {
+                            flush(at_vertex);
+
+                            current_tex = new_tex;
+                            match current_tex {
+                                TextureId::Solid     => self.white_texture.bind(0),
+                                TextureId::Font(key) => self.fonts[&key].texture().bind(0),
+                            }
                         }
-                    }
-                },
+                    },
 
-                StateCmd::LayerChange(new_layer) => {
-                    if new_layer != current_layer {
+                    StateCmd::Clear(color) => {
                         flush(at_vertex);
 
-                        current_layer = new_layer;
-                        self.shader.set_uniform("layer", current_layer);
-                    }
-                },
+                        // Keep in mind that clearing is affected by scissoring
+                        graphics::clear(Some(color), true, false);
+                    },
 
-                StateCmd::Clear(color) => {
-                    flush(at_vertex);
+                    StateCmd::PushClip(region) => {
+                        flush(at_vertex);
 
-                    // Keep in mind that clearing is affected by scissoring
-                    graphics::clear(Some(color), true, false);
-                },
-
-                StateCmd::PushClip(region) => {
-                    flush(at_vertex);
-
-                    self.draw_clip_stack.push(region);
-                    graphics::set_scissor(Some(region), win_size);
-                },
-
-                StateCmd::PopClip => {
-                    flush(at_vertex);
-
-                    // `pop` returns an option, and thus never panics. We check for unbalanced
-                    // push/pops when adding state commands, so at this point we can assume that
-                    // they are actually balanced. 
-                    self.draw_clip_stack.pop();
-
-                    if let Some(&region) = self.draw_clip_stack.last() {
+                        self.draw_clip_stack.push(region);
                         graphics::set_scissor(Some(region), win_size);
-                    } else {
-                        graphics::set_scissor(None, win_size);
-                    }
-                },
-            }
-        }
+                    },
 
-        flush(self.vertices.len()); 
+                    StateCmd::PopClip => {
+                        flush(at_vertex);
+
+                        // `pop` returns an option, and thus never panics. We check for unbalanced
+                        // push/pops when adding state commands, so at this point we can assume that
+                        // they are actually balanced. 
+                        self.draw_clip_stack.pop();
+
+                        if let Some(&region) = self.draw_clip_stack.last() {
+                            graphics::set_scissor(Some(region), win_size);
+                        } else {
+                            graphics::set_scissor(None, win_size);
+                        }
+                    },
+                }
+            }
+
+            flush(self.layers[layer].vertices.len()); 
+        }
 
         Texture::unbind(0);
         graphics::set_scissor(None, win_size);
     }
 
     pub fn push_state_cmd(&mut self, cmd: StateCmd<F>) {
+        let ref mut layer = self.layers[self.current_layer];
+
         // Slight optimization. This is not necessary, as the `draw` function also checks for
         // duplicate values in a more sophisticated way. This just keeps the size of `state_changes`
         // a bit smaller.
-        if let Some(&StateChange { cmd: last_cmd, .. }) = self.state_changes.last() {
+        if let Some(&StateChange { cmd: last_cmd, .. }) = layer.state_changes.last() {
             if last_cmd == cmd {
                 return;
             }
@@ -238,10 +284,21 @@ impl<F> DrawGroup<F>
         }
 
         self.changed = true;
-        self.state_changes.push(StateChange {
-            at_vertex: self.vertices.len(),
+
+        layer.state_changes.push(StateChange {
+            at_vertex: layer.vertices.len(),
             cmd: cmd,
         });
+    }
+
+    pub fn set_layer(&mut self, layer: usize) {
+        assert!(
+            layer < LAYER_COUNT,
+            "Can not use layers greater than or equal to LAYER_COUNT ({} >= {})",
+            layer, LAYER_COUNT
+        );
+
+        self.current_layer = layer;
     }
 
     pub fn font(&self, key: F) -> &Font {
@@ -261,16 +318,18 @@ impl<F> DrawGroup<F>
         }
     }
 
-    fn add_vertices(&mut self, vertices: &[Vert]) {
+    fn add_vertices(&mut self, new: &[Vert]) {
+        let ref mut vertices = self.layers[self.current_layer].vertices;
+
         if let Some(transform) = self.current_transform {
-            for v in vertices.into_iter() {
-                self.vertices.push(Vert {
+            for v in new.into_iter() {
+                vertices.push(Vert {
                     pos: transform.apply(v.pos),
                     .. *v
                 });
             } 
         } else {
-            self.vertices.extend_from_slice(vertices);
+            vertices.extend_from_slice(new);
         }
     }
 
@@ -661,8 +720,9 @@ impl<F> DrawGroup<F>
         color: Color
     ) {
         self.push_state_cmd(StateCmd::TextureChange(TextureId::Font(font)));
+
         let count = self.fonts.get_mut(&font).unwrap().cache(
-            &mut self.vertices,
+            &mut self.layers[self.current_layer].vertices,
             text,
             size, 1.0, 
             pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
@@ -670,9 +730,12 @@ impl<F> DrawGroup<F>
             color,
         ); 
 
+        // Transform all the vertices that where just inserted
         if let Some(transform) = self.current_transform {
-            for i in self.vertices.len()-count-1 .. self.vertices.len() {
-                self.vertices[i].pos = transform.apply(self.vertices[i].pos);
+            let ref mut vertices = self.layers[self.current_layer].vertices;
+
+            for i in vertices.len()-count-1 .. vertices.len() {
+                vertices[i].pos = transform.apply(vertices[i].pos);
             }
         }
     }

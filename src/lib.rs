@@ -466,6 +466,14 @@ impl Timing {
     pub fn as_secs(self) -> u64 { self.0 / 1_000_000_000 }
 
     pub fn as_secs_float(self) -> f32 { self.0 as f32 / 1_000_000_000.0 }
+
+    pub fn max(self, other: Timing) -> Timing {
+        ::std::cmp::max(self, other)
+    }
+
+    pub fn min(self, other: Timing) -> Timing {
+        ::std::cmp::min(self, other)
+    }
 }
 
 impl Add for Timing {
