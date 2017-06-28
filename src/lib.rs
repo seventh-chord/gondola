@@ -184,6 +184,8 @@ pub fn run<T: Game + Sized>() {
 
     'main_loop:
     loop {
+        state.close_requested_by_os = false;
+
         let start_time = Instant::now();
 
         // Events
@@ -191,7 +193,12 @@ pub fn run<T: Game + Sized>() {
             let glutin::Event::WindowEvent { event, .. } = event; // Legacy api, woo
 
             match event {
-                glutin::WindowEvent::Closed => break 'main_loop,
+                glutin::WindowEvent::Closed => {
+                    state.close_requested_by_os = true;
+                    if state.close_mode == CloseMode::Immediatly {
+                        break 'main_loop;
+                    }
+                },
                 glutin::WindowEvent::Resized(..) => {
                     let size: Vec2<_> = state.window.get_inner_size_pixels().unwrap().into();
                     let size = size.as_f32();
@@ -326,6 +333,12 @@ pub struct GameState {
     /// half second. Note that this is only an average; it does not reflect rapid fluctuations of 
     /// delta times.
     pub average_framerate: f32,
+
+    pub close_mode: CloseMode,
+    /// True if the OS has requested that the game closes. This is reset every frame, so a close
+    /// requested will only set this to true for one frame.
+    pub close_requested_by_os: bool,
+
     // Used to calculate framerate
     frame_accumulator: u32,
     delta_accumulator: Timing,
@@ -341,6 +354,15 @@ pub struct GameState {
 
     platform: Platform,
     window: glutin::Window,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CloseMode {
+    /// Listen to OS requests to close (e.g.: From the "X" button or Alt+F4)
+    Immediatly,
+    /// When the OS requests the game to close the `close_requested_by_os` field of `GameState` is set to
+    /// true. The game can then set `GameState.exit` to true to actually exit.
+    ForwardRequests,
 }
 
 #[cfg(target_os = "windows")]
@@ -387,6 +409,9 @@ impl GameState {
             delta_accumulator: Timing::zero(),
 
             focused: false, // We get a Focused(true) event once the window opens
+
+            close_mode: CloseMode::Immediatly,
+            close_requested_by_os: false,
 
             event_sinks: Vec::new(),
             state_change_request_receiver: state_change_request_receiver,
