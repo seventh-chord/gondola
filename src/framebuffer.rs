@@ -23,7 +23,8 @@ pub struct FramebufferProperties {
     pub width:  u32,
     /// Size in pixels
     pub height: u32,
-    /// The amount of multisampling to apply
+    /// The amount of multisampling to apply. If this is greater than the value returned by 
+    /// `framebuffer::max_sample_level` building a framebuffer with these properties will panic.
     pub multisample: Option<usize>,
     /// The color formats in which color data is stored internally. The OpenGL spec states that at
     /// least 8 attachments will be supported, and in practice no card supports more than this.
@@ -68,6 +69,19 @@ pub struct ColorAttachmentData {
 
 impl Framebuffer {
     fn new(properties: &FramebufferProperties) -> Result<Framebuffer, FramebufferError> {
+        // Validity checks
+        if let Some(samples) = properties.multisample {
+            let max = max_samples();
+            if samples > max {
+                panic!(
+                    "Tried creating a framebuffer with multisampling level {}, \
+                     but {} is the max level supported",
+                    samples, max
+                );
+            }
+        }
+
+        // Actually build the framebuffer
         let mut framebuffer: GLuint = 0;
         let mut color_attachments: [Option<ColorAttachmentData>; MAX_COLOR_ATTACHMENTS] = Default::default();
         let mut depth_buffer: Option<GLuint> = None;
@@ -135,11 +149,20 @@ impl Framebuffer {
                 gl::GenRenderbuffers(1, &mut depth_buffer_handle);
                 gl::BindRenderbuffer(gl::RENDERBUFFER, depth_buffer_handle);
                 if let Some(level) = properties.multisample {
-                    gl::RenderbufferStorageMultisample(gl::RENDERBUFFER, level as GLsizei, gl::DEPTH_COMPONENT, 
-                                                       properties.width as GLint, properties.height as GLint);
+                    gl::RenderbufferStorageMultisample(
+                        gl::RENDERBUFFER,
+                        level as GLsizei,
+                        gl::DEPTH_COMPONENT, 
+                        properties.width as GLint,
+                        properties.height as GLint
+                    );
                 } else {
-                    gl::RenderbufferStorage(gl::RENDERBUFFER, gl::DEPTH_COMPONENT,
-                                            properties.width as GLint, properties.height as GLint);
+                    gl::RenderbufferStorage(
+                        gl::RENDERBUFFER,
+                        gl::DEPTH_COMPONENT, 
+                        properties.width as GLint,
+                        properties.height as GLint
+                    );
                 }
                 gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depth_buffer_handle);
                 depth_buffer = Some(depth_buffer_handle);
@@ -311,6 +334,15 @@ impl Framebuffer {
 
         data
     }
+}
+
+// The max value that `FramebufferProperties::multisample` may have
+pub fn max_samples() -> usize {
+    let mut result = 0;
+    unsafe {
+        gl::GetIntegerv(gl::MAX_SAMPLES, &mut result);
+    }
+    result as usize
 }
 
 impl ColorAttachmentData {
