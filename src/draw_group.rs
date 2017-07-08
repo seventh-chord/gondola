@@ -20,7 +20,7 @@ use font::{Font, AsFontVert};
 // This could be a const generic in the future, but that is not implemented in rust yet
 pub const LAYER_COUNT: usize = 2;
 
-/// Batches drawcalls of textured primitives.
+/// Batches drawcalls for 2d primitive and text rendering. Things can be rendered with transparency and in various layers. 
 ///
 /// `F` is some type used to identify fonts. Typically you would want to use some enum with a
 /// unique value for each font you are planning to use.
@@ -148,7 +148,8 @@ impl<F> DrawGroup<F>
         self.working_clip_stack.clear();
     }
 
-    /// Draws all data in this group. This expects the proper shader (basic.glsl) to be bound.
+    /// Draws all data in this group. This binds a custom shader! `win_size` is just used to reset
+    /// the scissor region after rendering.
     pub fn draw(&mut self, transform: Mat4<f32>, win_size: Vec2<f32>) {
         self.draw_clip_stack.clear();
 
@@ -346,7 +347,7 @@ impl<F> DrawGroup<F>
         ]);
     }
 
-    /// Draws a thick line with different colors at each end.
+    /// Draws a thick line which starts with one color and transitions to another color.
     pub fn multicolor_line(
         &mut self,
         a: Vec2<f32>, b: Vec2<f32>,
@@ -448,6 +449,57 @@ impl<F> DrawGroup<F>
 
                 self.line(a + dir*(len/2.0 + start), a + dir*(len/2.0 + end), width, color);
                 self.line(a + dir*(len/2.0 - start), a + dir*(len/2.0 - end), width, color);
+
+                start = end + stipple_spacing;
+            }
+        } 
+    }
+
+    /// Generate the vertices for a stippled line which starts with one color and transitions to
+    /// another color.
+    pub fn multicolor_stippled_line(
+        &mut self,
+        a: Vec2<f32>, b: Vec2<f32>, 
+        width: f32, stipple_length: f32, stipple_spacing: f32, 
+        color_a: Color, color_b: Color,
+    ) {
+        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+
+        let len = (b - a).len(); // The length of the line
+        let dir = (b - a) / len; // Unit vector from a to b
+
+        // Just draw a single, slightly extended, segment
+        if stipple_length + stipple_spacing > len {
+            self.multicolor_line(a, b, width, color_a, color_b);
+
+        // Create a bunch of line segments, starting at the middle
+        } else {
+            let mut start = 0.0;
+            while start < len/2.0 {
+                let end = if start == 0.0 {
+                    stipple_length/2.0
+                } else {
+                    (start + stipple_length).min(len/2.0)
+                };
+
+                let t0 = start / len;
+                let t1 = end / len;
+
+                self.multicolor_line(
+                    a + dir*(len/2.0 + start), 
+                    a + dir*(len/2.0 + end), 
+                    width, 
+                    Color::lerp(color_a, color_b, 0.5 + t0),
+                    Color::lerp(color_a, color_b, 0.5 + t1),
+                );
+
+                self.multicolor_line(
+                    a + dir*(len/2.0 - start),
+                    a + dir*(len/2.0 - end),
+                    width, 
+                    Color::lerp(color_a, color_b, 0.5 - t0),
+                    Color::lerp(color_a, color_b, 0.5 - t1),
+                );
 
                 start = end + stipple_spacing;
             }

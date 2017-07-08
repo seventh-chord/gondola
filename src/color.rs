@@ -43,7 +43,7 @@ impl Color {
     }
 
     /// Creates a new color, converting the given values to rgb. The returned color will be
-    /// completly opaque. `saturation` and `lightness` given values are clammped to be between 
+    /// completly opaque. `saturation` and `lightness` given values are clamped to be between 
     /// 0 and 1, both inclusive.
     pub fn hsl(hue: f32, saturation: f32, lightness: f32) -> Color {
         let saturation = clamp(saturation, 0.0, 1.0);
@@ -155,6 +155,17 @@ impl Color {
             g: clamp(self.g*factor, 0.0, 1.0),
             b: clamp(self.b*factor, 0.0, 1.0),
             a: self.a
+        }
+    }
+
+    /// Linearly interpolates between this color and the given other color. `t` should be between
+    /// 0 and 1. Values outside of this range will lead to extrapolation.
+    pub fn lerp(self, other: Color, t: f32) -> Color {
+        Color {
+            r: self.r*(1.0 - t) + other.r*t,
+            g: self.g*(1.0 - t) + other.g*t,
+            b: self.b*(1.0 - t) + other.b*t,
+            a: self.a*(1.0 - t) + other.a*t,
         }
     }
 }
