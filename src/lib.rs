@@ -86,7 +86,9 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 ///     }
 /// }
 /// ```
-pub fn run<T: Game + Sized>() {
+pub fn run<T, Q>(seed: Q) 
+    where T: Game<SeedData = Q> + Sized,
+{
     let event_loop = glutin::EventsLoop::new();
 
     // We can use conditional compilation to set this for other platforms
@@ -168,7 +170,7 @@ pub fn run<T: Game + Sized>() {
     graphics::viewport(state.screen_region);
 
     // Set up game
-    let mut game = match T::setup(&mut state) {
+    let mut game = match T::setup(seed, &mut state) {
         Err(err) => {
             println!("Failed to launch game:\n{}", err);
             panic!();
@@ -377,8 +379,10 @@ pub struct Platform {}
 
 /// Used with [`gondola::run`](fn.run.html)
 pub trait Game: Sized {
+    type SeedData;
+
     /// Called before the main loop. Resources and initial state should be set up here.
-    fn setup(state: &mut GameState) -> GameResult<Self>;
+    fn setup(seed: Self::SeedData, state: &mut GameState) -> GameResult<Self>;
     /// Called once every frame, before drawing.
     fn update(&mut self, delta: Timing, state: &mut GameState);
     /// Called once every frame, after updating.
@@ -475,7 +479,7 @@ pub enum StateRequest {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Timing(u64); 
+pub struct Timing(pub u64); 
 
 impl Timing {
     pub fn zero() -> Timing { Timing(0) }
