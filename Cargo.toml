@@ -12,13 +12,13 @@ serialize = ["serde"]
 gondola_derive = { path = "gondola_derive" }
 cable_math = { path = "cable_math" }
 
-glutin = "0.8"
-winit = "0.6" # Needed to access some specific window stuff
+glutin = "0.9"
+winit = "0.7" # Needed to access some specific window stuff
 gl = "*"
 libc = "*"
 
 rusttype = "0.2"
-bitflags = "0.8"
+bitflags = "0.9"
 # Only needed if we want custom serialization derives for color types
 serde = { version = "1.0", optional = true }
-png = { version = "0.7", features = [] }
+png = { version = "0.9", features = [] }

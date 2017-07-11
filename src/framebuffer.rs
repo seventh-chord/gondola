@@ -379,10 +379,10 @@ impl Drop for ColorAttachmentData {
 }
 
 bitflags! {
-    pub flags BlitBuffers: u8 {
-        const BLIT_COLOR =   0b00000001,
-        const BLIT_DEPTH =   0b00000010,
-        const BLIT_STENCIL = 0b00000100,
+    pub struct BlitBuffers: u8 {
+        const BLIT_COLOR =   0b00000001;
+        const BLIT_DEPTH =   0b00000010;
+        const BLIT_STENCIL = 0b00000100;
     }
 }
 

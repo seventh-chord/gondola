@@ -1,10 +1,10 @@
 
 //! Provides utilities for tracking the state of various input devices
 
-use {StateRequest, Event};
+use StateRequest;
 use cable_math::Vec2;
 use std::sync::mpsc;
-use glutin::{self, MouseButton, ElementState, MouseScrollDelta};
+use glutin::{self, MouseButton, ElementState, MouseScrollDelta, WindowEvent};
 
 const MOUSE_KEYS: usize = 5;
 const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
@@ -26,7 +26,7 @@ pub struct InputManager {
     type_buffer: String,
 
     prev_event_count: usize, 
-    event_source: mpsc::Receiver<Event>,
+    event_source: mpsc::Receiver<WindowEvent>,
     event_sink: mpsc::Sender<StateRequest>,
 }
 
@@ -34,7 +34,7 @@ impl InputManager {
     /// Dont call this directly. Use [`GameState::gen_input_manager`] instead.
     ///
     /// [`GameState::gen_input_manager`]: struct.GameState.html#method.gen_input_manager
-    pub fn new(event_source: mpsc::Receiver<Event>, event_sink: mpsc::Sender<StateRequest>) -> InputManager {
+    pub fn new(event_source: mpsc::Receiver<WindowEvent>, event_sink: mpsc::Sender<StateRequest>) -> InputManager {
         InputManager {
             mouse_pos: Vec2::zero(),
             mouse_delta: Vec2::zero(),
@@ -68,69 +68,60 @@ impl InputManager {
         for event in self.event_source.try_iter() {
             self.prev_event_count += 1;
 
-            if let Event::GlutinEvent(glutin_event) = event {
-                // Handle raw glutin events 
-                match glutin_event {
-                    glutin::WindowEvent::MouseInput(state, button) => {
-                        let index = match button {
-                            MouseButton::Left => 0,
-                            MouseButton::Right => 1,
-                            MouseButton::Middle => 2,
-                            MouseButton::Other(index) => index,
-                        } as usize;
-                        if index < self.mouse_states.len() {
-                            self.mouse_states[index] = match state {
-                                ElementState::Pressed => KeyState::Pressed,
-                                ElementState::Released => KeyState::Released,
-                            };
-                        }
-                    },
-                    glutin::WindowEvent::MouseWheel(delta, _) => {
-                        match delta {
-                            MouseScrollDelta::LineDelta(x, y) => {
-                                self.mouse_scroll += Vec2::new(x, y);
-                            },
-                            MouseScrollDelta::PixelDelta(x, y) => {
-                                self.mouse_delta += Vec2::new(x, y);
-                            },
-                        }
-                    },
-                    glutin::WindowEvent::KeyboardInput(state, key, _name, _modifier_state) => {
-                        /*
-                        if state == ElementState::Pressed { 
-                            if let Some(name) = name {
-                                println!("{:?} = 0x{:x},", name, key); 
-                            } else {
-                                println!("? = 0x{:x},", key); 
-                            }
-                        }
-                        */
+            // Handle raw glutin events 
+            match event {
+                WindowEvent::MouseInput { state, button, .. } => {
+                    let index = match button {
+                        MouseButton::Left => 0,
+                        MouseButton::Right => 1,
+                        MouseButton::Middle => 2,
+                        MouseButton::Other(index) => index as usize,
+                    };
 
-                        let ref mut internal_state = self.keyboard_states[key as usize];
-                        match state {
-                            ElementState::Pressed => {
-                                *internal_state = if internal_state.down() {
-                                    KeyState::PressedRepeat
-                                } else {
-                                    KeyState::Pressed
-                                }
-                            },
-                            ElementState::Released => *internal_state = KeyState::Released,
+                    if index < self.mouse_states.len() {
+                        self.mouse_states[index] = match state {
+                            ElementState::Pressed => KeyState::Pressed,
+                            ElementState::Released => KeyState::Released,
                         };
-                    },
-                    glutin::WindowEvent::ReceivedCharacter(c) => self.type_buffer.push(c),
-                    _ => {},
-                }
-            } else {
-                // Handle custom event workarounds
-                match event {
-                    Event::MouseMoved { delta, pos } => {
-                        self.mouse_pos = Vec2::new(pos.x as f32, pos.y as f32);
-                        self.mouse_delta += Vec2::new(delta.x as f32, delta.y as f32);
-                    },
+                    }
+                },
 
-                    Event::GlutinEvent(_) => unreachable!(),
-                }
+                WindowEvent::MouseMoved { position, .. } => {
+                    let new_mouse_pos = Vec2::from(position).as_f32();
+                    self.mouse_delta += new_mouse_pos - self.mouse_pos;
+                    self.mouse_pos = new_mouse_pos;
+                },
+
+                WindowEvent::MouseWheel { delta, .. } => {
+                    match delta {
+                        MouseScrollDelta::LineDelta(x, y) => {
+                            self.mouse_scroll += Vec2::new(x, y);
+                        },
+                        MouseScrollDelta::PixelDelta(x, y) => {
+                            self.mouse_delta += Vec2::new(x, y);
+                        },
+                    }
+                },
+
+                WindowEvent::KeyboardInput { input, .. } => {
+                    let glutin::KeyboardInput { scancode, state, .. } = input;
+
+                    let ref mut internal_state = self.keyboard_states[scancode as usize];
+                    match state {
+                        ElementState::Pressed => {
+                            *internal_state = if internal_state.down() {
+                                KeyState::PressedRepeat
+                            } else {
+                                KeyState::Pressed
+                            }
+                        },
+                        ElementState::Released => *internal_state = KeyState::Released,
+                    };
+                },
+
+                WindowEvent::ReceivedCharacter(c) => self.type_buffer.push(c),
+
+                _ => {},
             }
         } 
     }

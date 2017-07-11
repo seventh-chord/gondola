@@ -46,6 +46,7 @@ use std::sync::mpsc;
 use std::ops::{Add, Sub, AddAssign, SubAssign};
 use std::thread;
 
+use glutin::{GlContext, WindowEvent};
 use cable_math::Vec2;
 
 pub use color::*;
@@ -89,15 +90,17 @@ pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 pub fn run<T, Q>(seed: Q) 
     where T: Game<SeedData = Q> + Sized,
 {
-    let event_loop = glutin::EventsLoop::new();
 
     // We can use conditional compilation to set this for other platforms
     let gl_request = glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3));
 
-    // Create window
-    let result = glutin::WindowBuilder::new()
-        .with_title(T::name())
+    let mut event_loop = glutin::EventsLoop::new();
 
+    // Create window
+    let window_builder = glutin::WindowBuilder::new()
+        .with_title(T::name());
+
+    let context_builder = glutin::ContextBuilder::new()
         // Is enabled by default on some platforms, and often controlled by e.g.
         // environment variables
         // linux + nvidia:  __GL_SYNC_TO_VBLANK=1|0
@@ -105,18 +108,13 @@ pub fn run<T, Q>(seed: Q)
         //      0 disables vsync, but with_vsync still enables it 
 //        .with_vsync() 
 
-        .with_srgb(Some(false))
-
         .with_gl(gl_request)
-        .with_gl_profile(glutin::GlProfile::Core)
+        .with_gl_profile(glutin::GlProfile::Core);
 
-        .build(&event_loop);
-
-    let window = match result {
-        Ok(window) => window,
+    let window = match glutin::GlWindow::new(window_builder, context_builder, &event_loop) {
+        Ok(w) => w,
         Err(err) => {
-            println!("Failed to open window:\n{}", err);
-            panic!();
+            panic!("Failed to open window:\n{}", err);
         },
     };
 
@@ -124,18 +122,19 @@ pub fn run<T, Q>(seed: Q)
         window.make_current().unwrap();
         gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
     }
-    window.set_title(T::name());
 
     // Use a separate thread to read events, and send them back to the main thread
-    let (main_event_sender, main_event_receiver) = mpsc::channel::<glutin::Event>();
+    let (main_event_sender, main_event_receiver) = mpsc::channel();
     thread::spawn(move|| {
         event_loop.run_forever(|event| {
             let send_result = main_event_sender.send(event);
 
             // If we receive a error the receiving end is gone, meaning that the main thread 
-            // has stopped
+            // has stoppeContinue
             if send_result.is_err() {
-                event_loop.interrupt();
+                glutin::ControlFlow::Break
+            } else {
+                glutin::ControlFlow::Continue
             }
         });
     });
@@ -192,16 +191,21 @@ pub fn run<T, Q>(seed: Q)
 
         // Events
         for event in main_event_receiver.try_iter() {
-            let glutin::Event::WindowEvent { event, .. } = event; // Legacy api, woo
+            let window_event = match event {
+                glutin::Event::WindowEvent { event, .. } => event,
+                
+                // Skip raw device events
+                _ => continue,
+            };
 
-            match event {
-                glutin::WindowEvent::Closed => {
+            match window_event {
+                WindowEvent::Closed => {
                     state.close_requested_by_os = true;
                     if state.close_mode == CloseMode::Immediatly {
                         break 'main_loop;
                     }
                 },
-                glutin::WindowEvent::Resized(..) => {
+                WindowEvent::Resized(..) => {
                     let size: Vec2<_> = state.window.get_inner_size_pixels().unwrap().into();
                     let size = size.as_f32();
 
@@ -217,7 +221,7 @@ pub fn run<T, Q>(seed: Q)
                         game.on_resize(&state);
                     }
                 },
-                glutin::WindowEvent::Focused(focused) => {
+                WindowEvent::Focused(focused) => {
                     state.focused = focused;
 
                     if focused {
@@ -232,40 +236,11 @@ pub fn run<T, Q>(seed: Q)
                         state.window.set_cursor_state(glutin::CursorState::Normal).unwrap();
                     }
                 },
+
                 other => {
-                    let custom_event = match other {
-                        glutin::WindowEvent::MouseMoved(x, y) => {
-                            let pos = Vec2::new(x as i32, y as i32);
-                            let mut delta = pos - state.prev_cursor_pos;
-                            state.prev_cursor_pos = pos;
-
-                            // set_cursor_position creates mouse-moved events, we want to ignore those
-                            if state.cursor_state == CursorState::HiddenGrabbed {
-                                let center = state.screen_region.center().as_i32();
-                                if pos == center {
-                                    continue;
-                                }
-
-                                // The focused state is almost exclusively used to control the
-                                // camera. When we don't have focus we don't want the camera to
-                                // move even if the cursor is moving around above the screen.
-                                // Because of this we just disable mouse deltas in that case.
-                                if !state.focused {
-                                    delta = Vec2::zero();
-                                }
-                            }
-
-                            Event::MouseMoved { delta, pos }
-                        },
-
-                        // We usually dont want to create a custom event, so unless we have custom
-                        // logic for a specific event type we just pass on the glutin event.
-                        e => Event::GlutinEvent(e),
-                    };
-                    
                     // Send events to receivers, and remove those which are unable to receive.
                     state.event_sinks.retain(|sink| {
-                        sink.send(custom_event.clone()).is_ok()
+                        sink.send(other.clone()).is_ok()
                     });
                 },
             }
@@ -345,17 +320,14 @@ pub struct GameState {
     frame_accumulator: u32,
     delta_accumulator: Timing,
 
-    event_sinks: Vec<mpsc::Sender<Event>>,
+    event_sinks: Vec<mpsc::Sender<WindowEvent>>,
     state_change_request_receiver: mpsc::Receiver<StateRequest>,
     state_change_request_sender: mpsc::Sender<StateRequest>,
 
-    // To work around some input issue we need to track some input state here. Most input state
-    // is however tracked by the input manager.
-    prev_cursor_pos: Vec2<i32>,
     cursor_state: CursorState,
 
     platform: Platform,
-    window: glutin::Window,
+    window: glutin::GlWindow,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -401,7 +373,7 @@ pub trait Game: Sized {
 }
 
 impl GameState {
-    fn new(platform: Platform, window: glutin::Window) -> GameState {
+    fn new(platform: Platform, window: glutin::GlWindow) -> GameState {
         let (state_change_request_sender, state_change_request_receiver) = mpsc::channel();
 
         GameState {
@@ -421,7 +393,6 @@ impl GameState {
             state_change_request_receiver: state_change_request_receiver,
             state_change_request_sender: state_change_request_sender,
 
-            prev_cursor_pos: Vec2::zero(),
             cursor_state: CursorState::Normal,
 
             platform,
@@ -432,7 +403,7 @@ impl GameState {
     /// Generates a new receiver for glutin events. All events not consumed by the
     /// game itself will be received by this receiver. Note that all receiver receive
     /// all events, there is no notion of event consumption.
-    pub fn gen_event_receiver(&mut self) -> mpsc::Receiver<Event> {
+    pub fn gen_event_receiver(&mut self) -> mpsc::Receiver<WindowEvent> {
         let (sender, receiver) = mpsc::channel();
         self.event_sinks.push(sender);
         receiver
@@ -460,17 +431,6 @@ impl GameState {
     pub fn set_title(&self, title: &str) {
         self.window.set_title(title);
     }
-}
-
-/// Because glutin does not handle some things in a very elegant fashion we have to work around
-/// some of its events with custom events.
-#[derive(Debug, Clone)]
-pub enum Event {
-    GlutinEvent(glutin::WindowEvent),
-    MouseMoved {
-        delta: Vec2<i32>,
-        pos: Vec2<i32>,
-    },
 }
 
 #[derive(Debug, Clone)]
