@@ -20,13 +20,18 @@ use font::{Font, AsFontVert};
 // This could be a const generic in the future, but that is not implemented in rust yet
 pub const LAYER_COUNT: usize = 2;
 
-/// Batches drawcalls for 2d primitive and text rendering. Things can be rendered with transparency and in various layers. 
+/// Batches drawcalls for 2d primitive and text rendering. Things can be rendered with transparency
+/// and in various layers. 
 ///
-/// `F` is some type used to identify fonts. Typically you would want to use some enum with a
+/// `FontKey` is some type used to identify fonts. Typically you would want to use some enum with a
 /// unique value for each font you are planning to use.
-pub struct DrawGroup<F> {
+///
+/// `TexKey` is some type used to identify fonts. Depending on how many unique textures you plan to
+/// have it might be more reasonable to use something like a string type here. Internally, a hash
+/// map is used to map from `TexKey`s to actual textures.
+pub struct DrawGroup<FontKey, TexKey> {
     current_layer: usize,
-    layers: [Layer<F>; LAYER_COUNT],
+    layers: [Layer<FontKey, TexKey>; LAYER_COUNT],
 
     // This contains all pushed clip regions that have not yet been popped. 
     // This stack is built up while pushing state commands into the draw group.
@@ -40,7 +45,8 @@ pub struct DrawGroup<F> {
     pub current_transform: Option<Mat3<f32>>,
 
     shader: Shader,
-    fonts: HashMap<F, Font>,
+    fonts: HashMap<FontKey, Font>,
+    textures: HashMap<TexKey, Texture>,
     white_texture: Texture,
 
     changed: bool,
@@ -48,15 +54,15 @@ pub struct DrawGroup<F> {
 }
 
 #[derive(Debug, Clone)]
-struct Layer<F> {
+struct Layer<FontKey, TexKey> {
     vertices: Vec<Vert>,
-    state_changes: Vec<StateChange<F>>,
+    state_changes: Vec<StateChange<FontKey, TexKey>>,
 }
 
 #[derive(Debug, Copy, Clone)]
-struct StateChange<F> {
+struct StateChange<FontKey, TexKey> {
     at_vertex: usize,
-    cmd: StateCmd<F>,
+    cmd: StateCmd<FontKey, TexKey>,
 }
 
 /// Different commands which change drawing state. Commands can be added to a draw group with
@@ -66,10 +72,10 @@ struct StateChange<F> {
 ///
 /// [`DrawGroup::push_state_cmd`]: struct.DrawGroup.html#method.push_state_cmd
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StateCmd<F> {
+pub enum StateCmd<FontKey, TexKey> {
     /// Changes to the given texture. This command is invoked whenever primitives are added to the
     /// draw group with any of the convenience functions (e.g. `line(...)`).
-    TextureChange(TextureId<F>),
+    TextureChange(SamplerId<FontKey, TexKey>),
 
     /// Adds a new item to the clip region stack. 
     PushClip(Region),
@@ -82,8 +88,16 @@ pub enum StateCmd<F> {
     Clear(Color),
 }
 
-impl<F> DrawGroup<F>
-  where F: Eq + Hash + Copy,
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum SamplerId<FontKey, TexKey> {
+    Solid, 
+    Texture(TexKey),
+    Font(FontKey),
+}
+
+impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
+  where FontKey: Eq + Hash + Copy,
+        TexKey: Eq + Hash + Copy,
 {
     pub fn new() -> Self {
         let shader = build_shader();
@@ -93,7 +107,7 @@ impl<F> DrawGroup<F>
 
         // Rust hates me, yada yada. It is not possible to use the [Layer { ... }; 2] syntax though
         let layers = unsafe {
-            let layer: Layer<F> = Layer {
+            let layer: Layer<FontKey, TexKey> = Layer {
                 vertices: Vec::with_capacity(2048),
                 state_changes: Vec::with_capacity(256),
             };
@@ -101,7 +115,7 @@ impl<F> DrawGroup<F>
             use std::mem;
             use std::ptr;
 
-            let mut layers: [Layer<F>; LAYER_COUNT] = mem::uninitialized();
+            let mut layers: [Layer<FontKey, TexKey>; LAYER_COUNT] = mem::uninitialized();
             for i in 1..LAYER_COUNT {
                 ptr::write((&mut layers[i..]).as_mut_ptr(), layer.clone());
             }
@@ -122,17 +136,29 @@ impl<F> DrawGroup<F>
             shader,
             white_texture, 
             fonts: HashMap::new(),
+            textures: HashMap::new(),
 
             changed: false,
             buffer: VertexBuffer::with_capacity(PrimitiveMode::Triangles, BufferUsage::DynamicDraw, 2048),
         }
     }
 
-    pub fn load_font<P: AsRef<Path>>(&mut self, key: F, path: P) -> io::Result<()> {
+    /// Loads a `.ttf` font from the given path and associates it with the given key.
+    pub fn load_font<P: AsRef<Path>>(&mut self, key: FontKey, path: P) -> io::Result<()> {
         let path = path.as_ref();
         let font = Font::from_file(path)?;
 
         self.fonts.insert(key, font);
+
+        Ok(())
+    }
+
+    /// Loads a image file from the given path and associates it with the given key.
+    pub fn load_texture<P: AsRef<Path>>(&mut self, key: TexKey, path: P) -> io::Result<()> {
+        let path = path.as_ref();
+        let texture = Texture::from_file(path)?;
+
+        self.textures.insert(key, texture);
 
         Ok(())
     }
@@ -199,7 +225,7 @@ impl<F> DrawGroup<F>
                 draw_cursor = to;
             };
 
-            let mut current_tex = TextureId::Solid;
+            let mut current_tex = SamplerId::Solid;
 
             // Process state changes. `flush` whenever we actually change state
             for &StateChange { at_vertex, cmd } in self.layers[layer].state_changes.iter() {
@@ -210,8 +236,9 @@ impl<F> DrawGroup<F>
 
                             current_tex = new_tex;
                             match current_tex {
-                                TextureId::Solid     => self.white_texture.bind(0),
-                                TextureId::Font(key) => self.fonts[&key].texture().bind(0),
+                                SamplerId::Solid     => self.white_texture.bind(0),
+                                SamplerId::Font(key) => self.fonts[&key].texture().bind(0),
+                                SamplerId::Texture(key)  => self.textures[&key].bind(0),
                             }
                         }
                     },
@@ -254,7 +281,7 @@ impl<F> DrawGroup<F>
         graphics::set_scissor(None, win_size);
     }
 
-    pub fn push_state_cmd(&mut self, cmd: StateCmd<F>) {
+    pub fn push_state_cmd(&mut self, cmd: StateCmd<FontKey, TexKey>) {
         let ref mut layer = self.layers[self.current_layer];
 
         // Slight optimization. This is not necessary, as the `draw` function also checks for
@@ -299,7 +326,7 @@ impl<F> DrawGroup<F>
         self.current_layer = layer;
     }
 
-    pub fn font(&self, key: F) -> &Font {
+    pub fn font(&self, key: FontKey) -> &Font {
         &self.fonts[&key]
     }
 
@@ -333,7 +360,7 @@ impl<F> DrawGroup<F>
 
     /// Draws a thick line.
     pub fn line(&mut self, a: Vec2<f32>, b: Vec2<f32>, width: f32, color: Color) { 
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let normal = (b - a).normalize().left() * (width / 2.0);
         let uv = Vec2::zero();
@@ -354,7 +381,7 @@ impl<F> DrawGroup<F>
         width: f32, 
         color_a: Color, color_b: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let normal = (b - a).normalize().left() * (width / 2.0);
         let uv = Vec2::zero();
@@ -370,7 +397,7 @@ impl<F> DrawGroup<F>
 
     /// Draws a thick line with rounded caps.
     pub fn round_capped_line(&mut self, a: Vec2<f32>, b: Vec2<f32>, width: f32, color: Color) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid)); 
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid)); 
         let uv = Vec2::zero();
 
         let size = width/2.0;
@@ -429,7 +456,7 @@ impl<F> DrawGroup<F>
         width: f32, stipple_length: f32, stipple_spacing: f32, 
         color: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let len = (b - a).len(); // The length of the line
         let dir = (b - a) / len; // Unit vector from a to b
@@ -463,7 +490,7 @@ impl<F> DrawGroup<F>
         width: f32, stipple_length: f32, stipple_spacing: f32, 
         color_a: Color, color_b: Color,
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let len = (b - a).len(); // The length of the line
         let dir = (b - a) / len; // Unit vector from a to b
@@ -508,7 +535,7 @@ impl<F> DrawGroup<F>
 
     /// Generates the vertices for a square with the given side length centered at the given point.
     pub fn point(&mut self, point: Vec2<f32>, size: f32, color: Color) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let size = size / 2.0;
         let uv = Vec2::zero();
@@ -524,7 +551,7 @@ impl<F> DrawGroup<F>
 
     /// Generates the vertices for a circle with the given radius centered at the given position
     pub fn circle(&mut self, pos: Vec2<f32>, radius: f32, color: Color) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid)); 
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid)); 
         let uv = Vec2::zero();
 
         for i in 0..(SIN_COS.len() - 1) {
@@ -559,7 +586,7 @@ impl<F> DrawGroup<F>
         arrow_size: f32,
         color: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let width = width / 2.0;
         let arrow_size = arrow_size / 2.0;
@@ -585,7 +612,7 @@ impl<F> DrawGroup<F>
         arrow_size: f32,
         color: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let width = width / 2.0;
         let arrow_size = arrow_size / 2.0;
@@ -605,7 +632,7 @@ impl<F> DrawGroup<F>
 
     /// Draws a single solid triangle.
     pub fn triangle(&mut self, points: [Vec2<f32>; 3], color: Color) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
         let uv = Vec2::zero();
 
         self.add_vertices(&[
@@ -618,7 +645,7 @@ impl<F> DrawGroup<F>
     /// Draws a line loop with neatly connected line corners. This connects the first and last
     /// point in the loop.
     pub fn closed_line_loop(&mut self, points: &[Vec2<f32>], width: f32, color: Color) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         for i in 0..points.len() {
             let a = points[i]; 
@@ -638,7 +665,7 @@ impl<F> DrawGroup<F>
         width: f32,
         color: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let start_normal = (b - a).left().normalize();
         let center_normal = (c - b).left().normalize();
@@ -680,7 +707,7 @@ impl<F> DrawGroup<F>
 
     /// Draws a solid axis-aligned bounding box.
     pub fn aabb(&mut self, min: Vec2<f32>, max: Vec2<f32>, color: Color) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
         let uv = Vec2::zero();
 
         self.add_vertices(&[
@@ -701,7 +728,7 @@ impl<F> DrawGroup<F>
             return;
         }
 
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Solid));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
         let uv = Vec2::zero();
 
         self.add_vertices(&[
@@ -759,16 +786,32 @@ impl<F> DrawGroup<F>
         }
     }
 
+    /// Draws a textured axis-aligned bounding box.
+    pub fn textured_aabb(&mut self, texture: TexKey, min: Vec2<f32>, max: Vec2<f32>) {
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Texture(texture)));
+        let color = Color::rgb(1.0, 1.0, 1.0);
+
+        self.add_vertices(&[
+            Vert { pos: Vec2::new(min.x, min.y), color, uv: Vec2::new(0.0, 0.0) },
+            Vert { pos: Vec2::new(max.x, min.y), color, uv: Vec2::new(1.0, 0.0) },
+            Vert { pos: Vec2::new(max.x, max.y), color, uv: Vec2::new(1.0, 1.0) },
+
+            Vert { pos: Vec2::new(min.x, min.y), color, uv: Vec2::new(0.0, 0.0) },
+            Vert { pos: Vec2::new(max.x, max.y), color, uv: Vec2::new(1.0, 1.0) },
+            Vert { pos: Vec2::new(min.x, max.y), color, uv: Vec2::new(0.0, 1.0) },
+        ]);
+    }
+
     pub fn text(
         &mut self,
         text: &str,
-        font: F,
+        font: FontKey,
         size: f32,
         pos: Vec2<f32>,
         wrap_width: Option<f32>,
         color: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(TextureId::Font(font)));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Font(font)));
 
         let count = self.fonts.get_mut(&font).unwrap().cache(
             &mut self.layers[self.current_layer].vertices,
@@ -788,12 +831,6 @@ impl<F> DrawGroup<F>
             }
         }
     }
-}
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum TextureId<F> {
-    Solid, 
-    Font(F),
 }
 
 /// For angles from 0 to π/2

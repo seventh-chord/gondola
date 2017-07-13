@@ -405,3 +405,9 @@ impl fmt::Display for TextureError {
         Ok(())
     }
 }
+
+impl From<TextureError> for io::Error {
+    fn from(err: TextureError) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, err)
+    }
+}
