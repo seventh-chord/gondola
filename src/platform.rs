@@ -1,12 +1,17 @@
 
+use cable_math::Vec2;
+
+use Region;
 use input::{KeyState, InputManager};
 
 pub trait Window: Drop {
     fn poll_events(&mut self, input: &mut InputManager);
     fn swap_buffers(&mut self);
 
-    fn close_requested(&mut self) -> bool;
-    fn resized(&mut self) -> bool;
+    fn close_requested(&self) -> bool;
+    fn resized(&self) -> bool;
+
+    fn screen_region(&self) -> Region;
 }
 
 #[cfg(target_os = "linux")]
@@ -21,16 +26,15 @@ mod linux {
     use std::ptr;
     use std::mem;
     use std::str;
-    use std::ffi::CString;
+    use std::ffi::{CStr, CString};
 
     use gl;
 
     mod ffi {
         pub(super) use super::x11_dl::xlib::*;
         pub(super) use super::x11_dl::glx::*;
+        pub(super) use super::x11_dl::glx::arb::*;
     }
-
-    use cable_math::Vec2;
 
     pub struct X11Window {
         xlib: ffi::Xlib,
@@ -47,7 +51,7 @@ mod linux {
         close_requested: bool,
         resized: bool,
 
-        size: Vec2<f32>,
+        region: Region,
     }
 
     pub fn new_window(name: &str) -> X11Window {
@@ -66,6 +70,9 @@ mod linux {
             },
         };
 
+        unsafe { (xlib.XInitThreads)() };
+        unsafe { (xlib.XSetErrorHandler)(Some(x_error_callback)) };
+
         // Create display
         let display = unsafe { 
             let display = (xlib.XOpenDisplay)(ptr::null());
@@ -79,28 +86,46 @@ mod linux {
 
         // Set up OpenGL
         let mut attributes = [
-            ffi::GLX_RGBA, 
-            ffi::GLX_DEPTH_SIZE, 24, 
-            ffi::GLX_DOUBLEBUFFER, 
+            ffi::GLX_X_RENDERABLE,  1,
+            ffi::GLX_DRAWABLE_TYPE, ffi::GLX_WINDOW_BIT,
+            ffi::GLX_RENDER_TYPE,   ffi::GLX_RGBA_BIT,
+            ffi::GLX_X_VISUAL_TYPE, ffi::GLX_TRUE_COLOR,
+            ffi::GLX_RED_SIZE,      8,
+            ffi::GLX_GREEN_SIZE,    8,
+            ffi::GLX_BLUE_SIZE,     8,
+            ffi::GLX_ALPHA_SIZE,    8,
+            ffi::GLX_DEPTH_SIZE,    24,
+            ffi::GLX_STENCIL_SIZE,  8,
+            ffi::GLX_DOUBLEBUFFER,  1,
+
+//            ffi::GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+//            ffi::GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+//            ffi::GLX_CONTEXT_CORE_PROFILE_BIT_ARB,  1,
+
             0,
         ];
 
-        let visual = unsafe { (glx.glXChooseVisual)(display, 0, attributes.as_mut_ptr()) };
+        let default_screen = unsafe { (xlib.XDefaultScreen)(display) };
 
+        let mut count = 0;
+        let fb_configs = unsafe { (glx.glXChooseFBConfig)(
+            display,
+            default_screen,
+            attributes.as_mut_ptr(),
+            &mut count,
+        ) };
+        if fb_configs.is_null() {
+            panic!("No FB configs");
+        }
+
+        let fb_config = unsafe { *fb_configs }; // Just use the first one, whatever
+
+        unsafe { (xlib.XFree)(fb_configs as *mut _) };
+
+        let visual = unsafe { (glx.glXGetVisualFromFBConfig)(display, fb_config) };
         if visual.is_null() {
             panic!("No appropriate visual found");
         }
-
-        let mut gl_name_buf = Vec::with_capacity(500);
-        gl::load_with(|name| {
-            gl_name_buf.clear();
-            gl_name_buf.extend_from_slice(name.as_bytes());
-            gl_name_buf.push(0);
-
-            unsafe {
-                (glx.glXGetProcAddress)(gl_name_buf.as_ptr()).unwrap() as *const _
-            }
-        });
 
         // Create window
         let root = unsafe { (xlib.XDefaultRootWindow)(display) };
@@ -120,11 +145,15 @@ mod linux {
             .. unsafe { mem::zeroed() }
         };
 
-        let size = Vec2::new(600.0, 600.0);
+        let region = Region {
+            min: Vec2::new(0.0, 0.0),
+            max: Vec2::new(600.0, 600.0),
+        };
 
         let window = unsafe { (xlib.XCreateWindow)(
             display, root,
-            0, 0, 600, 600, // x, y, width, height
+            region.min.x as i32, region.min.y as i32,
+            region.width() as u32, region.height() as u32,
             0, // Border
 
             (*visual).depth, // Depth
@@ -139,6 +168,33 @@ mod linux {
 
         let name = CString::new(name).unwrap();
         unsafe { (xlib.XStoreName)(display, window, name.into_raw()); }
+
+        // Finish setting up OpenGL
+        let context = unsafe {
+            let context = (glx.glXCreateContext)(
+                display, visual, ptr::null_mut(), 1
+            );
+
+            (glx.glXMakeCurrent)(display, window, context);
+            context
+        };
+
+        let mut gl_name_buf = Vec::with_capacity(500);
+        gl::load_with(|name| {
+            gl_name_buf.clear();
+            gl_name_buf.extend_from_slice(name.as_bytes());
+            gl_name_buf.push(0);
+
+            unsafe {
+                (glx.glXGetProcAddress)(gl_name_buf.as_ptr()).unwrap() as *const _
+            }
+        });
+        
+        unsafe {
+            let mut raw = gl::GetString(gl::VERSION);
+            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+            println!("{}", version);
+        }
 
         // Create IM and IC (Input method and context)
         let im = unsafe {
@@ -183,7 +239,7 @@ mod linux {
             im,
             ic,
             wm_delete_window,
-            size,
+            region,
 
             close_requested: false,
             resized: true,
@@ -308,10 +364,13 @@ mod linux {
                     ffi::ConfigureNotify => {
                         let event: ffi::XConfigureEvent = event.into();
 
-                        let new_size = Vec2::new(event.width, event.height).as_f32();
+                        let new_region = Region {
+                            min: Vec2::new(event.x, event.y).as_f32(),
+                            max: Vec2::new(event.x + event.width, event.y + event.height).as_f32(),
+                        };
 
-                        if new_size != self.size {
-                            self.size = new_size;
+                        if new_region != self.region {
+                            self.region = new_region;
                             self.resized = true;
                         }
                     },
@@ -340,12 +399,16 @@ mod linux {
             // TODO
         }
 
-        fn close_requested(&mut self) -> bool {
+        fn close_requested(&self) -> bool {
             self.close_requested
         }
 
-        fn resized(&mut self) -> bool {
+        fn resized(&self) -> bool {
             self.resized
+        }
+
+        fn screen_region(&self) -> Region {
+            self.region
         }
     }
 
@@ -361,5 +424,14 @@ mod linux {
                 (xlib.XCloseDisplay)(self.display);
             }
         }
+    }
+
+    unsafe extern "C" fn x_error_callback(
+        display: *mut ffi::Display,
+        event: *mut ffi::XErrorEvent
+    ) -> i32
+    {
+        println!("X error: {}", (*event).error_code);
+        0
     }
 }
