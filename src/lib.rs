@@ -30,6 +30,10 @@ extern crate cable_math;
 
 mod color;
 mod input;
+pub use color::*;
+pub use input::*;
+
+pub mod platform;
 
 pub mod texture;
 #[macro_use]
@@ -49,8 +53,6 @@ use std::thread;
 use glutin::{GlContext, WindowEvent};
 use cable_math::Vec2;
 
-pub use color::*;
-pub use input::*;
 pub use draw_group::DrawGroup;
 
 /// The most generic result type possible. Used in top-level
