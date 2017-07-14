@@ -1,10 +1,7 @@
 
 //! Provides utilities for tracking the state of various input devices
 
-use StateRequest;
 use cable_math::Vec2;
-use std::sync::mpsc;
-use glutin::{self, MouseButton, ElementState, MouseScrollDelta, WindowEvent};
 
 const MOUSE_KEYS: usize = 5;
 const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
@@ -18,41 +15,37 @@ const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
 /// [`GameState::gen_input_manager`]: ../struct.GameState.html#method.gen_input_manager
 /// [`InputManager::refresh`]:        struct.InputManager.html#method.refresh
 pub struct InputManager {
-    mouse_pos: Vec2<f32>,
-    mouse_delta: Vec2<f32>,
-    mouse_scroll: Vec2<f32>,
-    mouse_states: [KeyState; MOUSE_KEYS],
-    keyboard_states: [KeyState; KEYBOARD_KEYS],
-    type_buffer: String,
+    pub(crate) mouse_pos: Vec2<f32>,
+    pub(crate) mouse_delta: Vec2<f32>,
+    pub(crate) mouse_scroll: f32,
+    pub(crate) mouse_states: [KeyState; MOUSE_KEYS],
+    pub(crate) keyboard_states: [KeyState; KEYBOARD_KEYS],
+    pub(crate) type_buffer: String,
 
-    prev_event_count: usize, 
-    event_source: mpsc::Receiver<WindowEvent>,
-    event_sink: mpsc::Sender<StateRequest>,
+    pub(crate) changed: bool, 
 }
 
 impl InputManager {
     /// Dont call this directly. Use [`GameState::gen_input_manager`] instead.
     ///
     /// [`GameState::gen_input_manager`]: struct.GameState.html#method.gen_input_manager
-    pub fn new(event_source: mpsc::Receiver<WindowEvent>, event_sink: mpsc::Sender<StateRequest>) -> InputManager {
+    pub fn new() -> InputManager {
         InputManager {
             mouse_pos: Vec2::zero(),
             mouse_delta: Vec2::zero(),
-            mouse_scroll: Vec2::zero(),
+            mouse_scroll: 0.0,
             mouse_states: [KeyState::Up; MOUSE_KEYS],
             keyboard_states: [KeyState::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
 
-            prev_event_count: 0,
-            event_source: event_source,
-            event_sink: event_sink,
+            changed: false,
         }
     }
 
-    /// Pulls new data from this input managers source. This should be called once per frame.
-    pub fn refresh(&mut self) {
+    // Called by `Window::poll_events` in the platform layer
+    pub(crate) fn refresh(&mut self) {
         self.mouse_delta = Vec2::zero(); 
-        self.mouse_scroll = Vec2::zero();
+        self.mouse_scroll = 0.0;
         self.type_buffer.clear();
 
         for state in self.mouse_states.iter_mut() {
@@ -62,68 +55,9 @@ impl InputManager {
         for state in self.keyboard_states.iter_mut() {
             if *state == KeyState::Released { *state = KeyState::Up; }
             if *state == KeyState::Pressed  { *state = KeyState::Down; }
-        } 
+        }
 
-        self.prev_event_count = 0; 
-        for event in self.event_source.try_iter() {
-            self.prev_event_count += 1;
-
-            // Handle raw glutin events 
-            match event {
-                WindowEvent::MouseInput { state, button, .. } => {
-                    let index = match button {
-                        MouseButton::Left => 0,
-                        MouseButton::Right => 1,
-                        MouseButton::Middle => 2,
-                        MouseButton::Other(index) => index as usize,
-                    };
-
-                    if index < self.mouse_states.len() {
-                        self.mouse_states[index] = match state {
-                            ElementState::Pressed => KeyState::Pressed,
-                            ElementState::Released => KeyState::Released,
-                        };
-                    }
-                },
-
-                WindowEvent::MouseMoved { position, .. } => {
-                    let new_mouse_pos = Vec2::from(position).as_f32();
-                    self.mouse_delta += new_mouse_pos - self.mouse_pos;
-                    self.mouse_pos = new_mouse_pos;
-                },
-
-                WindowEvent::MouseWheel { delta, .. } => {
-                    match delta {
-                        MouseScrollDelta::LineDelta(x, y) => {
-                            self.mouse_scroll += Vec2::new(x, y);
-                        },
-                        MouseScrollDelta::PixelDelta(x, y) => {
-                            self.mouse_delta += Vec2::new(x, y);
-                        },
-                    }
-                },
-
-                WindowEvent::KeyboardInput { input, .. } => {
-                    let glutin::KeyboardInput { scancode, state, .. } = input;
-
-                    let ref mut internal_state = self.keyboard_states[scancode as usize];
-                    match state {
-                        ElementState::Pressed => {
-                            *internal_state = if internal_state.down() {
-                                KeyState::PressedRepeat
-                            } else {
-                                KeyState::Pressed
-                            }
-                        },
-                        ElementState::Released => *internal_state = KeyState::Released,
-                    };
-                },
-
-                WindowEvent::ReceivedCharacter(c) => self.type_buffer.push(c),
-
-                _ => {},
-            }
-        } 
+        self.changed = false; 
     }
     
     // Getters
@@ -132,7 +66,7 @@ impl InputManager {
     /// The distance the mouse cursor moved in the last frame
     pub fn mouse_delta(&self) -> Vec2<f32> { self.mouse_delta }
     /// The number of units scrolled in the last frame
-    pub fn mouse_scroll(&self) -> f32 { self.mouse_scroll.y }
+    pub fn mouse_scroll(&self) -> f32 { self.mouse_scroll }
     /// The state of the given mouse key. Panics if `key` is greater than 4. The left
     /// mouse key is 0, the right key is 1 and the middle key is 2.
     pub fn mouse_key(&self, key: u8) -> KeyState {
@@ -152,18 +86,9 @@ impl InputManager {
         &self.type_buffer
     }
 
-    /// The total number of events that occured between the last two calls to [`refresh`].
-    ///
-    /// [`refresh`]: struct.InputManager.html#fn.refresh
-    pub fn prev_event_count(&self) -> usize {
-        self.prev_event_count
-    }
-
-    /// See [`CursorState`] for more info.
-    ///
-    /// [`CursorState`]: enum.CursorState.html
-    pub fn set_cursor_state(&mut self, state: CursorState) {
-        self.event_sink.send(StateRequest::ChangeCursorState(state)).unwrap();
+    /// True if new events have been added in the last poll.
+    pub fn changed(&self) -> bool {
+        self.changed
     }
 }
 

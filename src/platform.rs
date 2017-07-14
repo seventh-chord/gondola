@@ -1,10 +1,22 @@
 
+use input::{KeyState, InputManager};
+
+pub trait Window: Drop {
+    fn poll_events(&mut self, input: &mut InputManager);
+    fn swap_buffers(&mut self);
+
+    fn close_requested(&mut self) -> bool;
+    fn resized(&mut self) -> bool;
+}
+
 #[cfg(target_os = "linux")]
 pub use self::linux::*;
 
 #[cfg(target_os = "linux")]
 mod linux {
     extern crate x11_dl;
+
+    use super::*;
 
     use std::ptr;
     use std::mem;
@@ -20,9 +32,25 @@ mod linux {
 
     use cable_math::Vec2;
 
-    use input;
+    pub struct X11Window {
+        xlib: ffi::Xlib,
+        glx: ffi::Glx,
 
-    pub fn test(name: &str) {
+        display: *mut ffi::Display,
+        window: u64,
+
+        im: ffi::XIM,
+        ic: ffi::XIC,
+
+        wm_delete_window: ffi::Atom,
+
+        close_requested: bool,
+        resized: bool,
+
+        size: Vec2<f32>,
+    }
+
+    pub fn new_window(name: &str) -> X11Window {
         // Load xlib and glx
         let xlib = match ffi::Xlib::open() {
             Ok(x) => x,
@@ -92,7 +120,7 @@ mod linux {
             .. unsafe { mem::zeroed() }
         };
 
-        let mut size = Vec2::new(600.0, 600.0);
+        let size = Vec2::new(600.0, 600.0);
 
         let window = unsafe { (xlib.XCreateWindow)(
             display, root,
@@ -106,6 +134,8 @@ mod linux {
             ffi::CWColormap | ffi::CWEventMask,
             &mut win_attributes,
         ) };
+
+        unsafe { (xlib.XFree)(visual as *mut _); }
 
         let name = CString::new(name).unwrap();
         unsafe { (xlib.XStoreName)(display, window, name.into_raw()); }
@@ -146,15 +176,33 @@ mod linux {
             atom
         };
 
-        // TODO TEMP
-        let mut typed = "".to_owned();
+        X11Window {
+            xlib, glx,
+            display,
+            window,
+            im,
+            ic,
+            wm_delete_window,
+            size,
 
-        'main_loop:
-        loop {
+            close_requested: false,
+            resized: true,
+        }
+    }
+
+    impl Window for X11Window {
+        fn poll_events(&mut self, input: &mut InputManager) {
+            input.refresh();
+
+            self.resized = false;
+            self.close_requested = false;
+
+            let ref xlib = self.xlib;
+
             // Handle events
-            unsafe { while (xlib.XPending)(display) > 0 {
+            unsafe { while (xlib.XPending)(self.display) > 0 {
                 let mut event = mem::zeroed::<ffi::XEvent>();
-                (xlib.XNextEvent)(display, &mut event);
+                (xlib.XNextEvent)(self.display, &mut event);
                 let ty = event.get_type();
 
                 match ty {
@@ -164,16 +212,22 @@ mod linux {
                     },
 
                     ffi::KeyPress | ffi::KeyRelease => {
-                        // Normal key input
+                        input.changed = true;
                         let mut event: ffi::XKeyEvent = event.into();
 
-                        /*let prev_state = ;
-                        let state = if ty == ffi::KeyPress {
-                            input::KeyState::Pressed
+                        // Normal key input
+                        let scancode = event.keycode;
+
+                        let ref mut state = input.keyboard_states[scancode as usize];
+                        *state = if ty == ffi::KeyPress {
+                            if state.down() {
+                                KeyState::PressedRepeat
+                            } else {
+                                KeyState::Pressed
+                            }
                         } else {
-                            input::KeyState::Released
+                            KeyState::Released
                         };
-                        */
 
                         // Typing
                         if ty == ffi::KeyPress {
@@ -181,7 +235,7 @@ mod linux {
                             let mut status: ffi::Status = 0;
 
                             let count = (xlib.Xutf8LookupString)(
-                                ic, &mut event,
+                                self.ic, &mut event,
                                 mem::transmute(buffer.as_mut_ptr()),
                                 buffer.len() as _,
                                 ptr::null_mut(), &mut status,
@@ -189,40 +243,62 @@ mod linux {
 
                             if status != ffi::XBufferOverflow {
                                 let text = str::from_utf8(&buffer[..count as usize]).unwrap_or("");
-                                typed.push_str(text);
+                                input.type_buffer.push_str(text);
                             } else {
                                 // Try again with a dynamic buffer
                                 let mut buffer = vec![0u8; count as usize];
                                 let count = (xlib.Xutf8LookupString)(
-                                    ic, &mut event,
+                                    self.ic, &mut event,
                                     mem::transmute(buffer.as_mut_ptr()),
                                     buffer.len() as _,
                                     ptr::null_mut(), &mut status
                                 );
 
                                 let text = str::from_utf8(&buffer[..count as usize]).unwrap_or("");
-                                typed.push_str(text);
+                                input.type_buffer.push_str(text);
                             }
                         }
                     },
 
                     // Mouse buttons
-                    ffi::ButtonPress => {
+                    ffi::ButtonPress | ffi::ButtonRelease => {
+                        input.changed = true;
+
                         let event: ffi::XButtonEvent = event.into();
 
-                        println!("press {} {}", event.button, event.state);
-                    },
-                    ffi::ButtonRelease => {
-                        let event: ffi::XButtonEvent = event.into();
+                        let state = if ty == ffi::ButtonPress {
+                            KeyState::Pressed
+                        } else {
+                            KeyState::Released
+                        };
 
-                        println!("release {} {}", event.button, event.state);
+                        match event.button {
+                            // X11 uses different button indices
+                            1 => input.mouse_states[0] = state,
+                            2 => input.mouse_states[2] = state,
+                            3 => input.mouse_states[1] = state,
+                            
+                            // Scrolling
+                            4 | 5 if state == KeyState::Pressed => {
+                                let scroll = if event.button == 4 { 1.0 } else { -1.0 };
+                                input.mouse_scroll += scroll;
+                            },
+
+                            _ => {},
+                        };
                     },
 
                     // Mouse movement
                     ffi::MotionNotify => {
+                        input.changed = true;
+
                         let event: ffi::XMotionEvent = event.into();
 
                         let new_pos = Vec2::new(event.x, event.y).as_f32();
+                        if new_pos != input.mouse_pos {
+                            input.mouse_delta += new_pos - input.mouse_pos;
+                            input.mouse_pos = new_pos;
+                        }
                     },
 
                     ffi::MappingNotify => {
@@ -234,10 +310,9 @@ mod linux {
 
                         let new_size = Vec2::new(event.width, event.height).as_f32();
 
-                        if new_size != size {
-                            size = new_size;
-
-                            println!("Resized");
+                        if new_size != self.size {
+                            self.size = new_size;
+                            self.resized = true;
                         }
                     },
                     ffi::ReparentNotify => {},
@@ -246,9 +321,8 @@ mod linux {
                     ffi::ClientMessage => {
                         let event: ffi::XClientMessageEvent = event.into();
 
-                        if event.data.get_long(0) == wm_delete_window as i64 {
-                            println!("We darn well got a delete message!");
-                            break 'main_loop;
+                        if event.data.get_long(0) == self.wm_delete_window as i64 {
+                            self.close_requested = true;
                         }
                     },
 
@@ -257,19 +331,35 @@ mod linux {
                     },
                 }
             } }
-            // End of event handling
-
-//            println!("No more events");
-//            ::std::thread::sleep(::std::time::Duration::from_millis(500));
         }
 
-        // Cleanup
-        unsafe {
-            (xlib.XDestroyIC)(ic);
-            (xlib.XCloseIM)(im);
+        fn swap_buffers(&mut self) {
+            let ref xlib = self.xlib;
+            let ref glx = self.glx;
 
-            (xlib.XDestroyWindow)(display, window);
-            (xlib.XCloseDisplay)(display);
+            // TODO
+        }
+
+        fn close_requested(&mut self) -> bool {
+            self.close_requested
+        }
+
+        fn resized(&mut self) -> bool {
+            self.resized
+        }
+    }
+
+    impl Drop for X11Window {
+        fn drop(&mut self) {
+            let ref xlib = self.xlib;
+
+            unsafe {
+                (xlib.XDestroyIC)(self.ic);
+                (xlib.XCloseIM)(self.im);
+
+                (xlib.XDestroyWindow)(self.display, self.window);
+                (xlib.XCloseDisplay)(self.display);
+            }
         }
     }
 }

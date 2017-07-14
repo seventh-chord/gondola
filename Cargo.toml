@@ -12,10 +12,7 @@ serialize = ["serde"]
 gondola_derive = { path = "gondola_derive" }
 cable_math = { path = "cable_math" }
 
-glutin = "0.9"
-winit = "0.7" # Needed to access some specific window stuff
 gl = "*"
-libc = "*"
 
 rusttype = "0.2"
 bitflags = "0.9"

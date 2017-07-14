@@ -3,21 +3,8 @@
 //! utilities to make using OpenGL 3.3 safer. It uses rust's type system to encode some information
 //! which helps prevent common errors. This library is primarily intended to be used for games,
 //! but you can also use it to create other graphics applications.
-//!
-//! Some points to get started:
-//!
-//!  - Use [`gondola::run`] to launch your game.
-//!  - Use a [`VertexBuffer`] to do basic drawing.
-//!  - Use [`GameState::gen_input_manager`] to get access to keyboard/mouse state.
-//!
-//! [`GameState::gen_input_manager`]: struct.GameState.html#method.gen_input_manager
-//! [`VertexBuffer`]:                 buffer/struct.VertexBuffer.html
-//! [`gondola::run`]:                 fn.run.html
 
 extern crate gl;
-extern crate glutin;
-extern crate winit;
-extern crate libc;
 
 extern crate rusttype;
 extern crate png;
@@ -30,8 +17,6 @@ extern crate cable_math;
 
 mod color;
 mod input;
-pub use color::*;
-pub use input::*;
 
 pub mod platform;
 
@@ -45,16 +30,18 @@ pub mod font;
 pub mod draw_group;
 //pub mod ui; // Temporarily disabled. Broken due to changes in font code. Should be rewritten to use draw_group
 
-use std::time::{Instant, Duration};
-use std::sync::mpsc;
-use std::ops::{Add, Sub, AddAssign, SubAssign};
-use std::thread;
+pub use color::*;
+pub use input::*;
+pub use platform::*;
 
-use glutin::{GlContext, WindowEvent};
+use std::time::{Instant, Duration};
+use std::ops::{Add, Sub, AddAssign, SubAssign};
+
 use cable_math::Vec2;
 
 pub use draw_group::DrawGroup;
 
+/*
 /// The most generic result type possible. Used in top-level
 pub type GameResult<T> = Result<T, Box<std::error::Error>>;
 
@@ -438,6 +425,37 @@ impl GameState {
 #[derive(Debug, Clone)]
 pub enum StateRequest {
     ChangeCursorState(CursorState),
+}
+*/
+
+/// Utility to track time in a program
+#[derive(Clone)]
+pub struct Timer {
+    start: Instant,
+    last: Instant,
+}
+
+impl Timer {
+    pub fn new() -> Timer {
+        let now = Instant::now();
+
+        Timer {
+            start: now,
+            last: now,
+        }
+    }
+
+    /// Returns `(time_since_start, time_since_last_tick)`
+    pub fn tick(&mut self) -> (Timing, Timing) {
+        let now = Instant::now();
+
+        let age = (now - self.start).into();
+        let delta = (now - self.last).into();
+
+        self.last = now;
+
+        (age, delta)
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
