@@ -37,12 +37,8 @@ fn main() {
 
         // Resize logic
         if window.resized() {
-            let new_size = screen_region.size().as_u32();
-
-            if new_size != framebuffer_props.size {
-                framebuffer_props.size = new_size;
-                framebuffer = framebuffer_props.build().unwrap();
-            }
+            framebuffer_props.size = screen_region.size().as_u32();
+            framebuffer = framebuffer_props.build().unwrap();
         }
 
         // Update logic

@@ -32,6 +32,7 @@ pub trait Window: Drop {
 
     fn close_requested(&self) -> bool;
     fn resized(&self) -> bool;
+    fn moved(&self) -> bool;
 
     fn screen_region(&self) -> Region;
 
@@ -76,6 +77,7 @@ mod linux {
 
         close_requested: bool,
         resized: bool,
+        moved: bool,
 
         region: Region,
     }
@@ -316,6 +318,7 @@ mod linux {
 
             close_requested: false,
             resized: true,
+            moved: true,
         }
     }
 
@@ -327,6 +330,7 @@ mod linux {
         fn poll_events(&mut self, input: &mut InputManager) {
             input.refresh();
 
+            self.moved = false;
             self.resized = false;
             self.close_requested = false;
 
@@ -449,12 +453,16 @@ mod linux {
                             max: pos + size,
                         };
 
-                        if new_region != self.region {
-                            self.region = new_region;
-                            self.resized = true;
-
-                            graphics::viewport(self.region.unpositioned());
+                        if new_region.min != self.region.min {
+                            self.moved = true;
                         }
+
+                        if new_region.size() != self.region.size() {
+                            self.resized = true;
+                        }
+
+                        self.region = new_region;
+                        graphics::viewport(self.region.unpositioned());
                     },
                     ffi::ReparentNotify => {},
                     ffi::MapNotify => {},
@@ -482,17 +490,10 @@ mod linux {
             }
         }
 
-        fn close_requested(&self) -> bool {
-            self.close_requested
-        }
-
-        fn resized(&self) -> bool {
-            self.resized
-        }
-
-        fn screen_region(&self) -> Region {
-            self.region
-        }
+        fn close_requested(&self) -> bool { self.close_requested }
+        fn resized(&self) -> bool { self.resized }
+        fn moved(&self) -> bool { self.resized }
+        fn screen_region(&self) -> Region { self.region }
 
         fn change_title(&mut self, title: &str) {
             let title = CString::new(title).unwrap();
