@@ -5,6 +5,25 @@ use Region;
 use input::{KeyState, InputManager};
 use graphics;
 
+#[derive(Debug, Copy, Clone)]
+pub struct GlRequest {
+    version: (u32, u32),
+    core: bool,
+    debug: bool,
+    forward_compatible: bool,
+}
+
+impl Default for GlRequest {
+    fn default() -> GlRequest {
+        GlRequest {
+            version: (3, 3),
+            core: true,
+            debug: cfg!(debug_assertions),
+            forward_compatible: false,
+        }
+    }
+}
+
 pub trait Window: Drop {
     fn poll_events(&mut self, input: &mut InputManager);
     fn swap_buffers(&mut self);
@@ -27,7 +46,7 @@ mod linux {
     use std::ptr;
     use std::mem;
     use std::str;
-    use std::ffi::{CStr, CString};
+    use std::ffi::CString;
 
     use gl;
 
@@ -35,6 +54,8 @@ mod linux {
         pub(super) use super::x11_dl::xlib::*;
         pub(super) use super::x11_dl::glx::*;
         pub(super) use super::x11_dl::glx::arb::*;
+
+        pub const GLX_RGBA_TYPE: i32 = 0x8014; // From /usr/include/GL/glx.h
     }
 
     pub struct X11Window {
@@ -55,7 +76,7 @@ mod linux {
         region: Region,
     }
 
-    pub fn new_window(name: &str) -> X11Window {
+    pub fn new_window(name: &str, gl_request: GlRequest) -> X11Window {
         // Load xlib and glx
         let xlib = match ffi::Xlib::open() {
             Ok(x) => x,
@@ -99,10 +120,6 @@ mod linux {
             ffi::GLX_STENCIL_SIZE,  8,
             ffi::GLX_DOUBLEBUFFER,  1,
 
-//            ffi::GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-//            ffi::GLX_CONTEXT_MINOR_VERSION_ARB, 3,
-//            ffi::GLX_CONTEXT_CORE_PROFILE_BIT_ARB,  1,
-
             0,
         ];
 
@@ -120,7 +137,6 @@ mod linux {
         }
 
         let fb_config = unsafe { *fb_configs }; // Just use the first one, whatever
-
         unsafe { (xlib.XFree)(fb_configs as *mut _) };
 
         let visual = unsafe { (glx.glXGetVisualFromFBConfig)(display, fb_config) };
@@ -171,10 +187,60 @@ mod linux {
         unsafe { (xlib.XStoreName)(display, window, name.into_raw()); }
 
         // Finish setting up OpenGL
-        let context = unsafe {
-            let context = (glx.glXCreateContext)(
-                display, visual, ptr::null_mut(), 1
-            );
+        let _context = unsafe {
+            #[allow(non_camel_case_types)]
+            type glXCreateContextAttribsARB = extern "system" fn(
+                *mut ffi::Display,
+                ffi::GLXFBConfig,
+                ffi::GLXContext,
+                i32,
+                *const i32
+            ) -> ffi::GLXContext;
+
+            let create_fn = (glx.glXGetProcAddress)(b"glXCreateContextAttribsARB\0".as_ptr());
+
+            let context = if let Some(create_fn) = create_fn {
+                let profile_mask = if gl_request.core {
+                    ffi::GLX_CONTEXT_CORE_PROFILE_BIT_ARB
+                } else {
+                    ffi::GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
+                };
+
+                let mut flags = 0;
+                if gl_request.debug {
+                    flags |= ffi::GLX_CONTEXT_DEBUG_BIT_ARB;
+                }
+                if gl_request.forward_compatible {
+                    flags |= ffi::GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+                }
+
+                let context_attributes = [
+                    ffi::GLX_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
+                    ffi::GLX_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
+                    ffi::GLX_CONTEXT_FLAGS_ARB, flags,
+                    ffi::GLX_CONTEXT_PROFILE_MASK_ARB, profile_mask,
+                    0,
+                ];
+
+                let create_fn = mem::transmute::<_, glXCreateContextAttribsARB>(create_fn);
+
+                create_fn(
+                    display, fb_config, 
+                    ptr::null_mut(), 1,
+                    context_attributes.as_ptr(),
+                )
+            } else {
+                println!("Could not use glXCreateContextAttribsARB!");
+                (glx.glXCreateNewContext)(
+                    display, fb_config,
+                    ffi::GLX_RGBA_TYPE,
+                    ptr::null_mut(), 1
+                )
+            };
+
+            if context.is_null() {
+                panic!("Could not create GLX context for the given request: {:?}", gl_request);
+            }
 
             (glx.glXMakeCurrent)(display, window, context);
             context
@@ -192,11 +258,11 @@ mod linux {
         });
         
         unsafe {
-            let mut raw = gl::GetString(gl::VERSION);
+            let raw = gl::GetString(gl::VERSION);
             if raw.is_null() {
                 panic!("glGetString(GL_VERSION) returned null!");
             }
-            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+//            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
 //            println!("{}", version);
         }
 
@@ -439,7 +505,7 @@ mod linux {
     }
 
     unsafe extern "C" fn x_error_callback(
-        display: *mut ffi::Display,
+        _display: *mut ffi::Display,
         event: *mut ffi::XErrorEvent
     ) -> i32
     {

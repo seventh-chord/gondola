@@ -14,7 +14,9 @@ type DrawGroup = draw_group::DrawGroup<(), ()>;
 fn main() {
     let mut timer = Timer::new();
     let mut input = InputManager::new();
-    let mut window = gondola::new_window("This is hopefully still a window");
+
+    let gl_request = Default::default();
+    let mut window = gondola::new_window("This is hopefully still a window", gl_request);
 
     let mut draw_group = DrawGroup::new();
 
@@ -72,6 +74,7 @@ fn main() {
         framebuffer.blit(Default::default());
 
         window.swap_buffers();
+        graphics::print_errors();
 
         if window.close_requested() {
             return;
