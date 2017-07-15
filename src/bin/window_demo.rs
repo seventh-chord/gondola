@@ -27,6 +27,8 @@ fn main() {
     graphics::set_blending(Some(graphics::BlendSettings::default()));
     graphics::set_depth_testing(false);
 
+    window.show();
+
     loop {
         let (time, delta) = timer.tick();
 

@@ -25,6 +25,8 @@ impl Default for GlRequest {
 }
 
 pub trait Window: Drop {
+    fn show(&mut self);
+
     fn poll_events(&mut self, input: &mut InputManager);
     fn swap_buffers(&mut self);
 
@@ -296,9 +298,6 @@ mod linux {
 
         graphics::viewport(region.unpositioned());
 
-        // Show window
-        unsafe { (xlib.XMapWindow)(display, window); }
-
         // Listen for close events
         let wm_delete_window = unsafe {
             let mut atom = (xlib.XInternAtom)(display, b"WM_DELETE_WINDOW\0".as_ptr() as *const _, 0);
@@ -321,6 +320,10 @@ mod linux {
     }
 
     impl Window for X11Window {
+        fn show(&mut self) {
+            unsafe { (self.xlib.XMapWindow)(self.display, self.window); }
+        }
+
         fn poll_events(&mut self, input: &mut InputManager) {
             input.refresh();
 

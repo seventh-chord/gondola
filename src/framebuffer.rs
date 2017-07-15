@@ -19,7 +19,7 @@ pub const MAX_COLOR_ATTACHMENTS: usize = 8;
 /// Utility to specify the format of a framebuffer before building it. If you expect to rebuild a
 /// framebuffer occasionally (e.g. when the game window is resized) it could be beneficial to store
 /// this struct alongside the framebuffer itself.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FramebufferProperties {
     /// Size in pixels
     pub size:  Vec2<u32>,
@@ -31,6 +31,17 @@ pub struct FramebufferProperties {
     pub color_formats: [Option<TextureFormat>; MAX_COLOR_ATTACHMENTS],
     /// If `true` a depthbuffer will be added to framebuffers
     pub depth_buffer: bool,
+}
+
+impl Default for FramebufferProperties {
+    fn default() -> FramebufferProperties {
+        FramebufferProperties {
+            size: Vec2::zero(),
+            multisample: None,
+            color_formats: [Some(TextureFormat::RGB_8), None, None, None, None, None, None, None],
+            depth_buffer: false,
+        }
+    }
 }
 
 impl FramebufferProperties {
