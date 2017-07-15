@@ -3,6 +3,7 @@ use cable_math::Vec2;
 
 use Region;
 use input::{KeyState, InputManager};
+use graphics;
 
 pub trait Window: Drop {
     fn poll_events(&mut self, input: &mut InputManager);
@@ -192,8 +193,11 @@ mod linux {
         
         unsafe {
             let mut raw = gl::GetString(gl::VERSION);
+            if raw.is_null() {
+                panic!("glGetString(GL_VERSION) returned null!");
+            }
             let version = CStr::from_ptr(raw as *const _).to_string_lossy();
-            println!("{}", version);
+//            println!("{}", version);
         }
 
         // Create IM and IC (Input method and context)
@@ -221,6 +225,8 @@ mod linux {
             }
             ic
         };
+
+        graphics::viewport(region.unpositioned());
 
         // Show window
         unsafe { (xlib.XMapWindow)(display, window); }
@@ -364,14 +370,19 @@ mod linux {
                     ffi::ConfigureNotify => {
                         let event: ffi::XConfigureEvent = event.into();
 
+                        let pos = Vec2::new(event.x, event.y).as_f32();
+                        let size = Vec2::new(event.width, event.height).as_f32();
+
                         let new_region = Region {
-                            min: Vec2::new(event.x, event.y).as_f32(),
-                            max: Vec2::new(event.x + event.width, event.y + event.height).as_f32(),
+                            min: pos,
+                            max: pos + size,
                         };
 
                         if new_region != self.region {
                             self.region = new_region;
                             self.resized = true;
+
+                            graphics::viewport(self.region.unpositioned());
                         }
                     },
                     ffi::ReparentNotify => {},
@@ -393,10 +404,11 @@ mod linux {
         }
 
         fn swap_buffers(&mut self) {
-            let ref xlib = self.xlib;
             let ref glx = self.glx;
 
-            // TODO
+            unsafe {
+                (glx.glXSwapBuffers)(self.display, self.window);
+            }
         }
 
         fn close_requested(&self) -> bool {

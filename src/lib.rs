@@ -581,4 +581,12 @@ impl Region {
             },
         }
     }
+
+    /// Moves `min` to `(0, 0)` but preserves width and height. 
+    pub fn unpositioned(self) -> Region {
+        Region {
+            min: Vec2::zero(),
+            max: self.max - self.min,
+        }
+    }
 }

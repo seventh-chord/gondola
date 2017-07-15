@@ -8,7 +8,7 @@ use gondola::texture::TextureFormat;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
 use gondola::framebuffer::{self, FramebufferProperties};
-use cable_math::{Mat4};
+use cable_math::{Vec2, Mat4};
 
 type DrawGroup = draw_group::DrawGroup<(), ()>;
 
@@ -32,16 +32,21 @@ fn main() {
     graphics::set_depth_testing(false);
 
     loop {
-        let (_time, delta) = timer.tick();
+        let (time, delta) = timer.tick();
 
         window.poll_events(&mut input);
         let screen_region = window.screen_region();
 
         // Resize logic
         if window.resized() {
-            framebuffer_props.width = screen_region.width() as u32;
-            framebuffer_props.height = screen_region.height() as u32;
-            framebuffer = framebuffer_props.build().unwrap();
+            let width = screen_region.width() as u32;
+            let height = screen_region.height() as u32;
+
+            if width != framebuffer_props.width || height != framebuffer_props.height {
+                framebuffer_props.width = width;
+                framebuffer_props.height = height;
+                framebuffer = framebuffer_props.build().unwrap();
+            }
         }
 
         // Update logic
@@ -51,6 +56,9 @@ fn main() {
         draw_group.push_state_cmd(StateCmd::Clear(bg_color));
 
         draw_group.aabb((10.0, 10.0).into(), (100.0, 100.0).into(), Color::hex_int(0xff0000));
+
+        let pos = Vec2::new(200.0, 200.0) + Vec2::polar(100.0, time.as_secs_float());
+        draw_group.circle(pos, 10.0, Color::hex_int(0x00ff00));
 
         if input.key(Key::A).pressed_repeat() {
             println!("Ahh");
@@ -62,8 +70,8 @@ fn main() {
 
         // Rendering logic
         let ortho = Mat4::ortho(
-            screen_region.min.x, screen_region.max.x,
-            screen_region.min.y, screen_region.max.y,
+            0.0, screen_region.width(),
+            0.0, screen_region.height(),
             -1.0, 1.0
         );
 
