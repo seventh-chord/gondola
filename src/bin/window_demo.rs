@@ -4,10 +4,9 @@ extern crate cable_math;
 
 use gondola::{Window, Timer, InputManager, Key};
 use gondola::Color;
-use gondola::texture::TextureFormat;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
-use gondola::framebuffer::{self, FramebufferProperties};
+use gondola::framebuffer::FramebufferProperties;
 use cable_math::{Vec2, Mat4};
 
 type DrawGroup = draw_group::DrawGroup<(), ()>;
@@ -19,13 +18,8 @@ fn main() {
 
     let mut draw_group = DrawGroup::new();
 
-    let mut framebuffer_props = FramebufferProperties {
-        width: window.screen_region().width() as u32,
-        height: window.screen_region().height() as u32,
-        .. Default::default()
-    };
-    framebuffer_props.color_formats[0] = Some(TextureFormat::RGBA_8);
-
+    let screen_size = window.screen_region().size().as_u32();
+    let mut framebuffer_props = FramebufferProperties::new(screen_size);
     let mut framebuffer = framebuffer_props.build().unwrap();
 
     graphics::set_blending(Some(graphics::BlendSettings::default()));
@@ -39,12 +33,10 @@ fn main() {
 
         // Resize logic
         if window.resized() {
-            let width = screen_region.width() as u32;
-            let height = screen_region.height() as u32;
+            let new_size = screen_region.size().as_u32();
 
-            if width != framebuffer_props.width || height != framebuffer_props.height {
-                framebuffer_props.width = width;
-                framebuffer_props.height = height;
+            if new_size != framebuffer_props.size {
+                framebuffer_props.size = new_size;
                 framebuffer = framebuffer_props.build().unwrap();
             }
         }
@@ -77,7 +69,7 @@ fn main() {
 
         framebuffer.bind();
         draw_group.draw(ortho, screen_region.size());
-        framebuffer.blit(framebuffer::BLIT_COLOR);
+        framebuffer.blit(Default::default());
 
         window.swap_buffers();
 

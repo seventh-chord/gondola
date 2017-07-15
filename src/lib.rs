@@ -8,8 +8,6 @@ extern crate gl;
 
 extern crate rusttype;
 extern crate png;
-#[macro_use]
-extern crate bitflags;
 #[cfg(feature = "serialize")]
 extern crate serde;
 

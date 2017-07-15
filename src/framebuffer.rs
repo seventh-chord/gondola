@@ -10,6 +10,8 @@ use color::Color;
 use texture::TextureFormat;
 use buffer::{VertexData, GlPrimitive};
 
+use cable_math::Vec2;
+
 /// Set to 8, which 97% of all cards support, acording to the [wildfiregames report][1]
 /// [1]: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_COLOR_ATTACHMENTS_EXT
 pub const MAX_COLOR_ATTACHMENTS: usize = 8;
@@ -20,9 +22,7 @@ pub const MAX_COLOR_ATTACHMENTS: usize = 8;
 #[derive(Debug, Clone, Default)]
 pub struct FramebufferProperties {
     /// Size in pixels
-    pub width:  u32,
-    /// Size in pixels
-    pub height: u32,
+    pub size:  Vec2<u32>,
     /// The amount of multisampling to apply. If this is greater than the value returned by 
     /// `framebuffer::max_sample_level` building a framebuffer with these properties will panic.
     pub multisample: Option<usize>,
@@ -34,10 +34,9 @@ pub struct FramebufferProperties {
 }
 
 impl FramebufferProperties {
-    pub fn new(width: u32, height: u32) -> FramebufferProperties {
+    pub fn new(size: Vec2<u32>) -> FramebufferProperties {
         FramebufferProperties {
-            width: width,
-            height: height,
+            size,
             multisample: None,
             color_formats: [Some(TextureFormat::RGB_8), None, None, None, None, None, None, None],
             depth_buffer: false,
@@ -56,8 +55,7 @@ pub struct Framebuffer {
     framebuffer: GLuint,
     color_attachments: [Option<ColorAttachmentData>; MAX_COLOR_ATTACHMENTS],
     depth_buffer: Option<GLuint>,
-    pub width: u32,
-    pub height: u32
+    pub size: Vec2<u32>,
 }
 
 // This struct must NOT be Clone or Copy
@@ -110,7 +108,7 @@ impl Framebuffer {
                             texture_target,
                             level as GLsizei,
                             format as GLuint,
-                            properties.width as GLint, properties.height as GLint, //Size
+                            properties.size.x as GLint, properties.size.y as GLint,
                             true as GLboolean, // Fixed sample locations
                         );
                     } else {
@@ -118,7 +116,7 @@ impl Framebuffer {
                             texture_target,
                             0, // Level
                             format as GLint,
-                            properties.width as GLint, properties.height as GLint, 0, //Size and border
+                            properties.size.x as GLint, properties.size.y as GLint, 0, //Size and border
                             format.unsized_format(), format.gl_primitive_enum(), 
                             ::std::ptr::null()
                         ); // Data for texture
@@ -153,15 +151,15 @@ impl Framebuffer {
                         gl::RENDERBUFFER,
                         level as GLsizei,
                         gl::DEPTH_COMPONENT, 
-                        properties.width as GLint,
-                        properties.height as GLint
+                        properties.size.x as GLint,
+                        properties.size.y as GLint
                     );
                 } else {
                     gl::RenderbufferStorage(
                         gl::RENDERBUFFER,
                         gl::DEPTH_COMPONENT, 
-                        properties.width as GLint,
-                        properties.height as GLint
+                        properties.size.x as GLint,
+                        properties.size.y as GLint
                     );
                 }
                 gl::FramebufferRenderbuffer(gl::FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::RENDERBUFFER, depth_buffer_handle);
@@ -190,8 +188,7 @@ impl Framebuffer {
                     framebuffer: framebuffer,
                     color_attachments: color_attachments,
                     depth_buffer: depth_buffer,
-                    width: properties.width,
-                    height: properties.height,
+                    size: properties.size,
                 }
             );
         }
@@ -215,37 +212,37 @@ impl Framebuffer {
 
     /// Moves the contents of this framebuffer to the given framebuffer, resolving multisampling
     /// if present. Note that this also unbinds this framebuffer
-    pub fn blit_to_framebuffer(&self, other: &Framebuffer, buffers: BlitBuffers) {
-        self.blit_indexed(other.framebuffer, other.width, other.height, buffers);
+    pub fn blit_to_framebuffer(&self, other: &Framebuffer, buffers: Blit) {
+        self.blit_indexed(other.framebuffer, other.size, buffers);
     }
 
     /// Moves the contents of this framebuffer to the backbuffer, resolving multisampling
     /// if present. Note that this also unbinds this framebuffer. This will only partially
     /// cover the backbuffer if this framebuffer is smaller than the backbuffer. To upscale
     /// a framebuffer while blitting, use [`blit_with_size`](struct.Framebuffer.html#method.blit_with_size).
-    pub fn blit(&self, buffers: BlitBuffers) {
-        self.blit_indexed(0, self.width, self.height, buffers);
+    pub fn blit(&self, buffers: Blit) {
+        self.blit_indexed(0, self.size, buffers);
     }
 
     /// Moves the contents of this framebuffer to the backbuffer, resolving multisampling
     /// if present. Note that this also unbinds this framebuffer. This allows setting
     /// the size to which this framebuffer should be scaled while blitting. This should
     /// be used if the framebuffer is larger or smaller than the backbuffer.
-    pub fn blit_with_size(&self, width: u32, height: u32, buffers: BlitBuffers) {
-        self.blit_indexed(0, width, height, buffers);
+    pub fn blit_with_size(&self, size: Vec2<u32>, buffers: Blit) {
+        self.blit_indexed(0, size, buffers);
     }
 
-    fn blit_indexed(&self, target: GLuint, dst_width: u32, dst_height: u32, buffers: BlitBuffers) {
+    fn blit_indexed(&self, target: GLuint, dst_size: Vec2<u32>, buffers: Blit) {
         let mut gl_flag = 0;
-        if buffers.contains(BLIT_COLOR)   { gl_flag |= gl::COLOR_BUFFER_BIT }
-        if buffers.contains(BLIT_DEPTH)   { gl_flag |= gl::DEPTH_BUFFER_BIT }
-        if buffers.contains(BLIT_STENCIL) { gl_flag |= gl::STENCIL_BUFFER_BIT }
+        if buffers.color   { gl_flag |= gl::COLOR_BUFFER_BIT }
+        if buffers.depth   { gl_flag |= gl::DEPTH_BUFFER_BIT }
+        if buffers.stencil { gl_flag |= gl::STENCIL_BUFFER_BIT }
 
         unsafe {
             gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, target);
             gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer);
-            gl::BlitFramebuffer(0, 0, self.width as i32, self.height as i32,
-                                0, 0, dst_width as i32, dst_height as i32,
+            gl::BlitFramebuffer(0, 0, self.size.x as i32, self.size.y as i32,
+                                0, 0, dst_size.x as i32, dst_size.y as i32,
                                 gl_flag, gl::NEAREST);
         }
         self.unbind();
@@ -295,10 +292,10 @@ impl Framebuffer {
     ///  * If the index does not point to a valid color attachment.
     ///  * If T has a different number of primitives than the given color attachment.
     ///  * If T has a different primitive type than the given color attachment.
-    pub fn get_pixel_data<T>(&self, index: usize, x: u32, y: u32, width: u32, height: u32) -> Vec<T> 
+    pub fn get_pixel_data<T>(&self, index: usize, pos: Vec2<u32>, size: Vec2<u32>) -> Vec<T> 
         where T: VertexData,
     {
-        let mut data = Vec::<T>::with_capacity((width * height) as usize);
+        let mut data = Vec::<T>::with_capacity((size.x * size.y) as usize);
 
         if index > MAX_COLOR_ATTACHMENTS && self.color_attachments[index].is_none() {
             panic!("Invalid call to get_pixel_data. {} is not a valid color attachment.", index);
@@ -309,26 +306,39 @@ impl Framebuffer {
         };
 
         if T::primitives() != format.components() {
-            panic!("Invalid call to get_pixel_data. T has a different number of primitives than {:?}.", format);
+            panic!(
+                "Invalid call to get_pixel_data. T has a different number of primitives than {:?}.", 
+                format,
+            );
         }
 
         if T::Primitive::gl_enum() != format.gl_primitive_enum() {
-            panic!("Invalid call to get_pixel_data. T has a different primitive type than color attachment {}. ({} vs {})",
-                   index, T::Primitive::gl_name(), format.gl_primitive_enum_name());
+            panic!(
+                "Invalid call to get_pixel_data. T has a different primitive type than color \
+                attachment {}. ({} vs {})",
+                index, T::Primitive::gl_name(), format.gl_primitive_enum_name(),
+            );
         }
 
-        if x + width > self.width || y + height > self.height {
-            panic!("Invalid call to get_pixel_data, The rectangle (x: {}, y: {}, width: {}, height: {}) is outside of the \
-                   region of the framebuffer (width: {}, height: {}).",
-                   x, y, width, height, self.width, self.height);
+        if pos.x + size.x > self.size.x || pos.y + size.y > self.size.y {
+            panic!(
+                "Invalid call to get_pixel_data, The rectangle (pos: {}, size: {}) is outside of \
+                the region of the framebuffer (framebuffer size: {}).",
+                pos, size, self.size,
+            );
         }
 
         unsafe {
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer);
             gl::ReadBuffer(gl::COLOR_ATTACHMENT0 + index as u32);
-            gl::ReadPixels(x as GLint, y as GLint, width as GLsizei, height as GLsizei,
-                           format.unsized_format(), format.gl_primitive_enum(), data.as_ptr() as *mut _);
-            data.set_len((width * height) as usize);
+            gl::ReadPixels(
+                pos.x as GLint, pos.y as GLint, 
+                size.x as GLsizei, size.y as GLsizei,
+                format.unsized_format(),
+                format.gl_primitive_enum(),
+                data.as_ptr() as *mut _
+            );
+            data.set_len((size.x * size.y) as usize);
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         }
 
@@ -378,11 +388,20 @@ impl Drop for ColorAttachmentData {
     }
 }
 
-bitflags! {
-    pub struct BlitBuffers: u8 {
-        const BLIT_COLOR =   0b00000001;
-        const BLIT_DEPTH =   0b00000010;
-        const BLIT_STENCIL = 0b00000100;
+#[derive(Debug, Copy, Clone)]
+pub struct Blit {
+    pub color: bool,
+    pub depth: bool,
+    pub stencil: bool,
+}
+
+impl Default for Blit {
+    fn default() -> Blit {
+        Blit {
+            color: true,
+            depth: false,
+            stencil: false,
+        }
     }
 }
 
