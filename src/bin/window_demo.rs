@@ -62,6 +62,14 @@ fn main() {
             println!("{}", delta.as_secs_float()*1000.0);
         }
 
+        if input.key(Key::Key1).pressed() {
+            window.change_title("Yo dawg");
+        }
+
+        if input.key(Key::Key2).pressed() {
+            window.change_title("Ding dong diddelido");
+        }
+
         // Rendering logic
         let ortho = Mat4::ortho(
             0.0, screen_region.width(),

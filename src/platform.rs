@@ -32,6 +32,8 @@ pub trait Window: Drop {
     fn resized(&self) -> bool;
 
     fn screen_region(&self) -> Region;
+
+    fn change_title(&mut self, title: &str);
 }
 
 #[cfg(target_os = "linux")]
@@ -76,7 +78,7 @@ mod linux {
         region: Region,
     }
 
-    pub fn new_window(name: &str, gl_request: GlRequest) -> X11Window {
+    pub fn new_window(title: &str, gl_request: GlRequest) -> X11Window {
         // Load xlib and glx
         let xlib = match ffi::Xlib::open() {
             Ok(x) => x,
@@ -183,8 +185,8 @@ mod linux {
 
         unsafe { (xlib.XFree)(visual as *mut _); }
 
-        let name = CString::new(name).unwrap();
-        unsafe { (xlib.XStoreName)(display, window, name.into_raw()); }
+        let title = CString::new(title).unwrap();
+        unsafe { (xlib.XStoreName)(display, window, title.into_raw()); }
 
         // Finish setting up OpenGL
         let _context = unsafe {
@@ -487,6 +489,11 @@ mod linux {
 
         fn screen_region(&self) -> Region {
             self.region
+        }
+
+        fn change_title(&mut self, title: &str) {
+            let title = CString::new(title).unwrap();
+            unsafe { (self.xlib.XStoreName)(self.display, self.window, title.into_raw()); }
         }
     }
 
