@@ -55,6 +55,8 @@ mod linux {
 
     use gl;
 
+    // We access all ffi stuff through `ffi::whatever` instead of through each apis specific
+    // bindings. This allows us to easily add custom stuff that is missing in bindings.
     mod ffi {
         pub(super) use super::x11_dl::xlib::*;
         pub(super) use super::x11_dl::glx::*;
@@ -317,8 +319,8 @@ mod linux {
             region,
 
             close_requested: false,
-            resized: true,
-            moved: true,
+            resized: false,
+            moved: false,
         }
     }
 
@@ -522,5 +524,430 @@ mod linux {
     {
         println!("X error: {}", (*event).error_code);
         0
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub use self::windows::*;
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use super::*;
+
+    extern crate winapi;
+    extern crate user32;
+    extern crate kernel32;
+    extern crate gdi32;
+    extern crate opengl32;
+
+    use std::ptr;
+    use std::mem;
+    use std::sync::mpsc;
+    use std::cell::RefCell;
+    use std::thread;
+    use std::ffi::CStr;
+
+    use gl;
+
+    // We access all ffi stuff through `ffi::whatever` instead of through each apis specific
+    // bindings. This allows us to easily add custom stuff that is missing in bindings.
+    mod ffi {
+        pub(super) use super::winapi::*;
+        pub(super) use super::user32::*;
+        pub(super) use super::kernel32::*;
+        pub(super) use super::gdi32::*;
+        pub(super) use super::opengl32::*;
+
+        // Stuff not defined in winapi
+        pub(super) const ERROR_INVALID_VERSION_ARB: u32 = 0x2095;
+        pub(super) const ERROR_INVALID_PROFILE_ARB: u32 = 0x2096;
+
+        pub(super) const WGL_CONTEXT_MAJOR_VERSION_ARB: i32 = 0x2091;
+        pub(super) const WGL_CONTEXT_MINOR_VERSION_ARB: i32 = 0x2092;
+        pub(super) const WGL_CONTEXT_FLAGS_ARB: i32 = 0x2094;
+        pub(super) const WGL_CONTEXT_PROFILE_MASK_ARB: i32 = 0x9126;
+
+        pub(super) const WGL_CONTEXT_DEBUG_BIT_ARB: i32 = 0x0001;
+        pub(super) const WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB: i32 = 0x0002;
+
+        pub(super) const WGL_CONTEXT_CORE_PROFILE_BIT_ARB: i32 = 0x00000001;
+        pub(super) const WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB: i32 = 0x00000002;
+    }
+
+    pub struct WindowsWindow {
+        raw_event_receiver: mpsc::Receiver<RawEvent>,
+        device_context: ffi::HDC,
+        gl_context: ffi::HGLRC,
+        window: ffi::HWND,
+
+        screen_region: Region,
+        close_requested: bool,
+        resized: bool,
+        moved: bool,
+    }
+
+    fn encode_wide(s: &str) -> Vec<u16> {
+        let mut data = Vec::with_capacity(s.len() + 1);
+        for wchar in s.encode_utf16() {
+            data.push(wchar);
+        }
+        data.push(0);
+        data
+    }
+
+    fn last_win_error() -> u32 { unsafe { ffi::GetLastError() } }
+
+    pub fn new_window(title: &str, gl_request: GlRequest) -> WindowsWindow {
+        let instance = unsafe { ffi::GetModuleHandleW(ptr::null()) };
+
+        let class_name = encode_wide("My windows class is great");
+        let window_name = encode_wide(title);
+
+        let window_class = ffi::WNDCLASSW {
+            style:          ffi::CS_OWNDC,
+            lpfnWndProc:    Some(window_proc),
+            hInstance:      instance,
+            lpszClassName:  class_name.as_ptr(),
+
+            //            hIcon:          HICON, // Less so
+
+            .. unsafe { mem::zeroed() }
+        };
+
+        let window_class_atom = unsafe { ffi::RegisterClassW(&window_class) };
+        if window_class_atom == 0 {
+            panic!("Failed to register window class");
+        }
+
+        let (raw_event_sender, raw_event_receiver) = mpsc::channel();
+
+        // Listen for messages not passed through the event loop
+        let local_sender = raw_event_sender.clone();
+        MSG_SENDER.with(|sender| {
+            let mut sender = sender.borrow_mut();
+            if sender.is_some() {
+                panic!("Multiple windows on a single thread are not supported on windows atm");
+            }
+
+            *sender = Some(local_sender);
+        });
+
+        // Launch a message loop in a separate thread
+        thread::spawn(move || {
+            MSG_SENDER.with(|sender| *sender.borrow_mut() = Some(raw_event_sender));
+
+            let mut msg = unsafe { mem::uninitialized::<ffi::MSG>() };
+            unsafe { user32::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, 0) };
+
+            loop {
+                let result = unsafe { ffi::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) };
+
+                match result {
+                    -1 => panic!("GetMessage returned -1"),
+                    0 => break,
+
+                    _ => unsafe {
+                        ffi::TranslateMessage(&mut msg);
+                        ffi::DispatchMessageW(&mut msg);
+                    },
+                }
+            }
+
+            println!("DEBUG event loop stopped");
+        });
+
+        // Actually create window
+        // TODO this is really shoddy
+        let pos = Vec2::new(20.0, 20.0);
+        let size = Vec2::new(640.0, 480.0);
+        let region = Region {
+            min: pos,
+            max: pos + size,
+        };
+
+        let window = unsafe { ffi::CreateWindowExW(
+                // Extended style
+                0, 
+
+                class_name.as_ptr(),
+                window_name.as_ptr(),
+
+                ffi::WS_OVERLAPPEDWINDOW | ffi::WS_VISIBLE,
+
+                region.min.x as i32, region.min.y as i32,
+                region.width() as i32, region.height() as i32,
+
+                ptr::null_mut(), // Parent
+                ptr::null_mut(), // Menu
+                instance,
+                ptr::null_mut(), // lParam
+                ) };
+        if window.is_null() {
+            panic!("Failed to create window");
+        } 
+
+        let device_context = unsafe { ffi::GetDC(window) };
+
+        // Choose a pixel format
+        let mut pixel_format_descriptor = ffi::PIXELFORMATDESCRIPTOR {
+            nSize: mem::size_of::<ffi::PIXELFORMATDESCRIPTOR>() as u16,
+            nVersion: 1,
+            dwFlags: ffi::PFD_DRAW_TO_WINDOW | ffi::PFD_SUPPORT_OPENGL | ffi::PFD_DOUBLEBUFFER,
+            iPixelType: ffi::PFD_TYPE_RGBA,
+            cColorBits: 24,
+            cAlphaBits: 8,
+            iLayerType: ffi::PFD_MAIN_PLANE,
+
+            .. unsafe { mem::zeroed() }
+        };
+
+        unsafe {
+            let i = ffi::ChoosePixelFormat(device_context, &mut pixel_format_descriptor);
+            let result = ffi::SetPixelFormat(device_context, i, &mut pixel_format_descriptor);
+
+            if result == ffi::FALSE {
+                panic!("Failed to set pixel format");
+            }
+        };
+
+        // We have to load opengl32 to get the proc address for old gl functions (e.g GetString)
+        let lib_name = encode_wide("opengl32.dll");
+        let gl32_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
+        if gl32_lib.is_null() {
+            panic!("Could not load opengl32.dll: {}", last_win_error());
+        }
+
+        // Set up opengl context
+        let legacy_gl_context = unsafe {
+            let c = ffi::wglCreateContext(device_context);
+            ffi::wglMakeCurrent(device_context, c);
+            c
+        };
+
+        let mut gl_name_buf = Vec::with_capacity(500);
+        let mut get_proc_address = |name: &str| { 
+            gl_name_buf.clear();
+            gl_name_buf.extend_from_slice(name.as_bytes());
+            gl_name_buf.push(0);
+
+            unsafe {
+                let address = ffi::wglGetProcAddress(gl_name_buf.as_ptr() as *const _);
+                if address.is_null() {
+                    // This is needed for some pre gl 3 functions
+                    kernel32::GetProcAddress(gl32_lib, gl_name_buf.as_ptr() as *const _)
+                } else {
+                    address
+                }
+            }
+        };
+
+        #[allow(non_camel_case_types)]
+        type wglCreateContextAttribsARBType = extern "system" fn(
+            ffi::HDC,
+            ffi::HGLRC,
+            *const i32,
+        ) -> ffi::HGLRC;
+
+        // TODO maybe query extensions?
+
+        #[allow(non_snake_case)]
+        let wglCreateContextAttribsARB = unsafe {
+            let p = get_proc_address("wglCreateContextAttribsARB");
+            mem::transmute::<_, wglCreateContextAttribsARBType>(p)
+        };
+        // TODO check if this returned null
+
+        let mut flags = 0;
+        if gl_request.debug {
+            flags |= ffi::WGL_CONTEXT_DEBUG_BIT_ARB;
+        }
+        if gl_request.forward_compatible {
+            flags |= ffi::WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+        }
+
+        let profile_mask = if gl_request.core {
+            ffi::WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+        } else {
+            ffi::WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
+        };
+
+        let context_attributes = [
+            ffi::WGL_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
+            ffi::WGL_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
+            ffi::WGL_CONTEXT_FLAGS_ARB, flags,
+            ffi::WGL_CONTEXT_PROFILE_MASK_ARB, profile_mask,
+            0,
+        ];
+
+        let gl_context = wglCreateContextAttribsARB(
+                device_context,
+                ptr::null_mut(),
+                context_attributes.as_ptr()
+        );
+
+        if gl_context.is_null() {
+            let last_error = last_win_error();
+            match last_error {
+                ffi::ERROR_INVALID_VERSION_ARB => panic!(
+                    "Could not create GL context. Invalid version: ({}.{} {})",
+                    gl_request.version.0, gl_request.version.1,
+                    if gl_request.core { "core" } else { "compat" },
+                ),
+                ffi::ERROR_INVALID_PROFILE_ARB => panic!(
+                    "Could not create GL context. Invalid profile: ({}.{} {})",
+                    gl_request.version.0, gl_request.version.1,
+                    if gl_request.core { "core" } else { "compat" },
+                ),
+                _ => panic!(
+                    "Could not create GL context. Unkown error: {}",
+                    last_error,
+                ),
+            };
+        }
+
+        // Replace the legacy context with the new and improved context
+        unsafe {
+            ffi::wglDeleteContext(legacy_gl_context);
+            ffi::wglMakeCurrent(device_context, gl_context);
+        }
+
+        gl::load_with(|name| {
+            let address = get_proc_address(name);
+            if address.is_null() {
+                println!("Dude what {}", name);
+            }
+            address
+        });
+        
+        unsafe {
+            let raw = gl::GetString(gl::VERSION);
+            if raw.is_null() {
+                panic!("glGetString(GL_VERSION) returned null!");
+            }
+            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+            println!("{}", version);
+        }
+
+        graphics::viewport(region.unpositioned());
+
+        WindowsWindow {
+            raw_event_receiver,
+            device_context,
+            gl_context,
+            window,
+
+            screen_region: region,
+            close_requested: false,
+            resized: false,
+            moved: false,
+        }
+    } 
+
+    #[derive(Debug, Copy, Clone)]
+    enum RawEvent {
+        Resized(Vec2<f32>),
+        Moved(Vec2<f32>),
+        CloseRequest,
+    }
+
+    thread_local! {
+        static MSG_SENDER: RefCell<Option<mpsc::Sender<RawEvent>>> = RefCell::new(None);
+    }
+
+    unsafe extern "system" 
+    fn window_proc(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
+        let event = match msg {
+            ffi::WM_SIZE => {
+                let width = ffi::LOWORD(l as ffi::DWORD) as u32;
+                let height = ffi::HIWORD(l as ffi::DWORD) as u32;
+                RawEvent::Resized(Vec2::new(width, height).as_f32())
+            },
+
+            ffi::WM_MOVE => {
+                let x = ffi::LOWORD(l as ffi::DWORD) as u32;
+                let y = ffi::HIWORD(l as ffi::DWORD) as u32;
+                RawEvent::Moved(Vec2::new(x, y).as_f32())
+            },
+
+            ffi::WM_CLOSE => {
+                RawEvent::CloseRequest
+            },
+
+            _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
+        };
+
+        MSG_SENDER.with(|sender| {
+            if let Some(ref sender) = *sender.borrow() {
+                sender.send(event).unwrap();
+            } else {
+                panic!("`window_proc` called from unkown thread");
+            }
+        });
+
+        return 0;
+    }
+
+    impl Window for WindowsWindow {
+        fn show(&mut self) {
+            // TODO
+        }
+
+        fn poll_events(&mut self, input: &mut InputManager) {
+            input.refresh();
+
+            self.moved = false;
+            self.resized = false;
+            self.close_requested = false;
+
+            for raw_event in self.raw_event_receiver.try_iter() {
+                use self::RawEvent::*;
+                match raw_event {
+                    Resized(new_size) => {
+                        self.screen_region.max = self.screen_region.min + new_size;
+                        self.resized = true;
+
+                        graphics::viewport(self.screen_region.unpositioned());
+                    },
+
+                    Moved(new_pos) => {
+                        let size = self.screen_region.size();
+
+                        self.screen_region = Region {
+                            min: new_pos,
+                            max: new_pos + size,
+                        };
+
+                        self.moved = true;
+                    },
+
+                    CloseRequest => {
+                        self.close_requested = true;
+                    },
+                }
+            }
+        }
+
+        fn swap_buffers(&mut self) {
+            unsafe { ffi::SwapBuffers(self.device_context) };
+        }
+
+        fn close_requested(&self) -> bool { self.close_requested }
+        fn resized(&self) -> bool         { self.resized }
+        fn moved(&self) -> bool           { self.moved }
+
+        fn screen_region(&self) -> Region { self.screen_region }
+
+        fn change_title(&mut self, title: &str) {
+            // TODO
+        }
+    }
+
+    impl Drop for WindowsWindow {
+        fn drop(&mut self) {
+            unsafe { 
+                ffi::wglDeleteContext(self.gl_context);
+                ffi::DestroyWindow(self.window);
+            }
+        }
     }
 }

@@ -4,12 +4,12 @@
 //! which helps prevent common errors. This library is primarily intended to be used for games,
 //! but you can also use it to create other graphics applications.
 
-extern crate gl;
-
-extern crate rusttype;
-extern crate png;
 #[cfg(feature = "serialize")]
 extern crate serde;
+
+extern crate gl;
+extern crate png;
+extern crate rusttype;
 
 extern crate cable_math;
 
