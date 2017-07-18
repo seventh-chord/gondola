@@ -544,8 +544,6 @@ mod windows {
     use std::mem;
     use std::sync::mpsc;
     use std::cell::RefCell;
-    use std::thread;
-    use std::ffi::CStr;
 
     use gl;
 
@@ -605,7 +603,7 @@ mod windows {
 
         let window_class = ffi::WNDCLASSW {
             style:          ffi::CS_OWNDC,
-            lpfnWndProc:    Some(window_proc),
+            lpfnWndProc:    Some(event_callback),
             hInstance:      instance,
             lpszClassName:  class_name.as_ptr(),
 
@@ -621,39 +619,13 @@ mod windows {
 
         let (raw_event_sender, raw_event_receiver) = mpsc::channel();
 
-        // Listen for messages not passed through the event loop
-        let local_sender = raw_event_sender.clone();
         MSG_SENDER.with(|sender| {
             let mut sender = sender.borrow_mut();
             if sender.is_some() {
                 panic!("Multiple windows on a single thread are not supported on windows atm");
             }
 
-            *sender = Some(local_sender);
-        });
-
-        // Launch a message loop in a separate thread
-        thread::spawn(move || {
-            MSG_SENDER.with(|sender| *sender.borrow_mut() = Some(raw_event_sender));
-
-            let mut msg = unsafe { mem::uninitialized::<ffi::MSG>() };
-            unsafe { user32::PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, 0) };
-
-            loop {
-                let result = unsafe { ffi::GetMessageW(&mut msg, ptr::null_mut(), 0, 0) };
-
-                match result {
-                    -1 => panic!("GetMessage returned -1"),
-                    0 => break,
-
-                    _ => unsafe {
-                        ffi::TranslateMessage(&mut msg);
-                        ffi::DispatchMessageW(&mut msg);
-                    },
-                }
-            }
-
-            println!("DEBUG event loop stopped");
+            *sender = Some(raw_event_sender);
         });
 
         // Actually create window
@@ -666,22 +638,22 @@ mod windows {
         };
 
         let window = unsafe { ffi::CreateWindowExW(
-                // Extended style
-                0, 
+            // Extended style
+            0, 
 
-                class_name.as_ptr(),
-                window_name.as_ptr(),
+            class_name.as_ptr(),
+            window_name.as_ptr(),
 
-                ffi::WS_OVERLAPPEDWINDOW | ffi::WS_VISIBLE,
+            ffi::WS_OVERLAPPEDWINDOW,
 
-                region.min.x as i32, region.min.y as i32,
-                region.width() as i32, region.height() as i32,
+            region.min.x as i32, region.min.y as i32,
+            region.width() as i32, region.height() as i32,
 
-                ptr::null_mut(), // Parent
-                ptr::null_mut(), // Menu
-                instance,
-                ptr::null_mut(), // lParam
-                ) };
+            ptr::null_mut(), // Parent
+            ptr::null_mut(), // Menu
+            instance,
+            ptr::null_mut(), // lParam
+        ) };
         if window.is_null() {
             panic!("Failed to create window");
         } 
@@ -811,21 +783,15 @@ mod windows {
             ffi::wglMakeCurrent(device_context, gl_context);
         }
 
-        gl::load_with(|name| {
-            let address = get_proc_address(name);
-            if address.is_null() {
-                println!("Dude what {}", name);
-            }
-            address
-        });
+        gl::load_with(get_proc_address);
         
         unsafe {
             let raw = gl::GetString(gl::VERSION);
             if raw.is_null() {
                 panic!("glGetString(GL_VERSION) returned null!");
             }
-            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
-            println!("{}", version);
+//            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+//            println!("{}", version);
         }
 
         graphics::viewport(region.unpositioned());
@@ -848,14 +814,16 @@ mod windows {
         Resized(Vec2<f32>),
         Moved(Vec2<f32>),
         CloseRequest,
+        Key(bool, usize),
     }
 
     thread_local! {
         static MSG_SENDER: RefCell<Option<mpsc::Sender<RawEvent>>> = RefCell::new(None);
     }
 
+    // This is WNDPROC
     unsafe extern "system" 
-    fn window_proc(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
+    fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
         let event = match msg {
             ffi::WM_SIZE => {
                 let width = ffi::LOWORD(l as ffi::DWORD) as u32;
@@ -873,6 +841,13 @@ mod windows {
                 RawEvent::CloseRequest
             },
 
+            // Keyboard input
+            ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
+                let down = msg == ffi::WM_KEYDOWN;
+                let scancode = ((l as usize) >> 16) & 0xff;
+                RawEvent::Key(down, scancode)
+            },
+
             _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
         };
 
@@ -880,7 +855,7 @@ mod windows {
             if let Some(ref sender) = *sender.borrow() {
                 sender.send(event).unwrap();
             } else {
-                panic!("`window_proc` called from unkown thread");
+                panic!("`event_callback` called from unkown thread");
             }
         });
 
@@ -889,10 +864,31 @@ mod windows {
 
     impl Window for WindowsWindow {
         fn show(&mut self) {
-            // TODO
+            unsafe { ffi::ShowWindow(self.window, ffi::SW_SHOW) };
         }
 
         fn poll_events(&mut self, input: &mut InputManager) {
+            // Receive events from windows, dispatch them to `event_callback` and let them get sent
+            // back through `raw_event_receiver`.
+            let mut msg = unsafe { mem::uninitialized::<ffi::MSG>() };
+            loop {
+                let result = unsafe { ffi::PeekMessageW(
+                    &mut msg, self.window, 
+                    0, 0,
+                    ffi::PM_REMOVE,
+                ) };
+
+                match result {
+                    -1 => panic!("PeekMessage returned -1"), // TODO check if this can happen
+                    0 => break,
+
+                    _ => unsafe {
+                        ffi::TranslateMessage(&mut msg);
+                        ffi::DispatchMessageW(&mut msg);
+                    },
+                }
+            }
+
             input.refresh();
 
             self.moved = false;
@@ -923,6 +919,21 @@ mod windows {
                     CloseRequest => {
                         self.close_requested = true;
                     },
+
+                    Key(down, code) => {
+                        let ref mut state = input.keyboard_states[code];
+                        *state = if down {
+                            if state.down() {
+                                KeyState::PressedRepeat
+                            } else {
+                                KeyState::Pressed
+                            }
+                        } else {
+                            KeyState::Released
+                        };
+
+                        let e = unsafe { *((&code) as *const _ as *const ::input::Key) };
+                    },
                 }
             }
         }
@@ -938,7 +949,8 @@ mod windows {
         fn screen_region(&self) -> Region { self.screen_region }
 
         fn change_title(&mut self, title: &str) {
-            // TODO
+            let title = encode_wide(title);
+            unsafe { ffi::SetWindowTextW(self.window, title.as_ptr()) };
         }
     }
 
