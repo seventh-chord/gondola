@@ -629,15 +629,7 @@ mod windows {
             *sender = Some(raw_event_sender);
         });
 
-        // Actually create window
-        // TODO this is really shoddy
-        let pos = Vec2::new(20.0, 20.0);
-        let size = Vec2::new(640.0, 480.0);
-        let region = Region {
-            min: pos,
-            max: pos + size,
-        };
-
+        // Actually create window 
         let window = unsafe { ffi::CreateWindowExW(
             // Extended style
             0, 
@@ -647,8 +639,8 @@ mod windows {
 
             ffi::WS_OVERLAPPEDWINDOW,
 
-            region.min.x as i32, region.min.y as i32,
-            region.width() as i32, region.height() as i32,
+            ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+            ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
 
             ptr::null_mut(), // Parent
             ptr::null_mut(), // Menu
@@ -658,6 +650,18 @@ mod windows {
         if window.is_null() {
             panic!("Failed to create window");
         } 
+
+        let region = unsafe {
+            let mut rect = mem::zeroed::<ffi::RECT>();
+            if ffi::GetWindowRect(window, &mut rect) == 0 {
+                panic!("GetWindowRect failed: {}", last_win_error());
+            }
+
+            Region {
+                min: Vec2::new(rect.left, rect.top).as_f32(),
+                max: Vec2::new(rect.right, rect.bottom).as_f32(),
+            }
+        };
 
         let device_context = unsafe { ffi::GetDC(window) };
 
@@ -905,14 +909,13 @@ mod windows {
                     ffi::PM_REMOVE,
                 ) };
 
-                match result {
-                    -1 => panic!("PeekMessage returned -1"), // TODO check if this can happen
-                    0 => break,
-
-                    _ => unsafe {
+                if result > 0 {
+                    unsafe {
                         ffi::TranslateMessage(&mut msg);
                         ffi::DispatchMessageW(&mut msg);
-                    },
+                    }
+                } else {
+                    break;
                 }
             }
 
