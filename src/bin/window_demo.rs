@@ -33,6 +33,7 @@ fn main() {
         let (time, delta) = timer.tick();
 
         window.poll_events(&mut input);
+
         let screen_region = window.screen_region();
 
         // Resize logic

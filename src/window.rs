@@ -542,6 +542,7 @@ mod windows {
 
     use std::ptr;
     use std::mem;
+    use std::char;
     use std::sync::mpsc;
     use std::cell::RefCell;
 
@@ -815,6 +816,10 @@ mod windows {
         Moved(Vec2<f32>),
         CloseRequest,
         Key(bool, usize),
+        Char(u16),
+        Scroll(f32),
+        MouseMove(Vec2<f32>),
+        MouseButton(bool, usize),
     }
 
     thread_local! {
@@ -841,12 +846,34 @@ mod windows {
                 RawEvent::CloseRequest
             },
 
-            // Keyboard input
             ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
                 let down = msg == ffi::WM_KEYDOWN;
                 let scancode = ((l as usize) >> 16) & 0xff;
                 RawEvent::Key(down, scancode)
             },
+
+            ffi::WM_CHAR => {
+                RawEvent::Char(w as u16)
+            },
+
+            ffi::WM_MOUSEWHEEL => {
+                let delta = ffi::GET_WHEEL_DELTA_WPARAM(w) as f32 / ffi::WHEEL_DELTA as f32;
+                RawEvent::Scroll(delta)
+            },
+
+            ffi::WM_MOUSEMOVE => {
+                let x = ffi::GET_X_LPARAM(l);
+                let y = ffi::GET_X_LPARAM(l);
+                let pos = Vec2::new(x, y).as_f32();
+                RawEvent::MouseMove(pos)
+            },
+
+            ffi::WM_LBUTTONDOWN => RawEvent::MouseButton(true, 0),
+            ffi::WM_LBUTTONUP   => RawEvent::MouseButton(false, 0),
+            ffi::WM_MBUTTONDOWN => RawEvent::MouseButton(true, 2),
+            ffi::WM_MBUTTONUP   => RawEvent::MouseButton(false, 2),
+            ffi::WM_RBUTTONDOWN => RawEvent::MouseButton(true, 1),
+            ffi::WM_RBUTTONUP   => RawEvent::MouseButton(false, 1),
 
             _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
         };
@@ -931,8 +958,30 @@ mod windows {
                         } else {
                             KeyState::Released
                         };
+                    },
 
-                        let e = unsafe { *((&code) as *const _ as *const ::input::Key) };
+                    Char(wchar) => {
+                        for result in char::decode_utf16([wchar].iter().cloned()) {
+                            match result {
+                                Ok(c) => input.type_buffer.push(c),
+                                Err(_) => println!("WM_CHAR with invalid code: {}", wchar),
+                            }
+                        }
+                    },
+
+                    Scroll(delta) => {
+                        input.mouse_scroll += delta;
+                    },
+
+                    MouseMove(new_pos) => {
+                        let delta = new_pos - input.mouse_pos;
+                        input.mouse_delta += delta;
+                        input.mouse_pos = new_pos;
+                    },
+
+                    MouseButton(down, code) => {
+                        let state = if down { KeyState::Pressed } else { KeyState::Released };
+                        input.mouse_states[code] = state;
                     },
                 }
             }
