@@ -669,7 +669,7 @@ mod windows {
 
             ffi::WM_MOUSEMOVE => {
                 let x = ffi::GET_X_LPARAM(l);
-                let y = ffi::GET_X_LPARAM(l);
+                let y = ffi::GET_Y_LPARAM(l);
                 let pos = Vec2::new(x, y).as_f32();
                 RawEvent::MouseMove(pos)
             },
@@ -1032,6 +1032,8 @@ mod windows {
                     },
 
                     Key(down, code) => {
+                        input.changed = true;
+
                         let ref mut state = input.keyboard_states[code];
                         *state = if down {
                             if state.down() {
@@ -1045,6 +1047,8 @@ mod windows {
                     },
 
                     Char(wchar) => {
+                        input.changed = true;
+
                         for result in char::decode_utf16([wchar].iter().cloned()) {
                             match result {
                                 Ok(c) => input.type_buffer.push(c),
@@ -1054,16 +1058,21 @@ mod windows {
                     },
 
                     Scroll(delta) => {
+                        input.changed = true;
                         input.mouse_scroll += delta;
                     },
 
                     MouseMove(new_pos) => {
+                        input.changed = true;
+
                         let delta = new_pos - input.mouse_pos;
                         input.mouse_delta += delta;
                         input.mouse_pos = new_pos;
                     },
 
                     MouseButton(down, code) => {
+                        input.changed = true;
+
                         let state = if down { KeyState::Pressed } else { KeyState::Released };
                         input.mouse_states[code] = state;
                     },
