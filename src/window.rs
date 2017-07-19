@@ -545,12 +545,15 @@ mod windows {
     use std::char;
     use std::sync::mpsc;
     use std::cell::RefCell;
+    use std::ffi::CStr;
 
     use gl;
 
     // We access all ffi stuff through `ffi::whatever` instead of through each apis specific
     // bindings. This allows us to easily add custom stuff that is missing in bindings.
     mod ffi {
+        #![allow(non_camel_case_types)]
+
         pub(super) use super::winapi::*;
         pub(super) use super::user32::*;
         pub(super) use super::kernel32::*;
@@ -571,6 +574,9 @@ mod windows {
 
         pub(super) const WGL_CONTEXT_CORE_PROFILE_BIT_ARB: i32 = 0x00000001;
         pub(super) const WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB: i32 = 0x00000002;
+
+        pub(super) type wglCreateContextAttribsARBType = extern "system" fn(HDC, HGLRC, *const i32) -> HGLRC;
+        pub(super) type wglGetExtensionsStringARBType = extern "system" fn(HDC) -> *const i8;
     }
 
     pub struct WindowsWindow {
@@ -709,84 +715,132 @@ mod windows {
 
             unsafe {
                 let address = ffi::wglGetProcAddress(gl_name_buf.as_ptr() as *const _);
-                if address.is_null() {
+
+                // Acording to the khronos guide, -1, 0, 1, 2 and 3 indicate an error
+                let invalid =
+                    address == ((-1isize) as *const _) || address == (0 as *const _) ||
+                    address == (1 as *const _) || address == (2 as *const _) || address == (3 as *const _);
+
+                if invalid {
                     // This is needed for some pre gl 3 functions
                     kernel32::GetProcAddress(gl32_lib, gl_name_buf.as_ptr() as *const _)
                 } else {
                     address
                 }
             }
-        };
+        }; 
 
-        #[allow(non_camel_case_types)]
-        type wglCreateContextAttribsARBType = extern "system" fn(
-            ffi::HDC,
-            ffi::HGLRC,
-            *const i32,
-        ) -> ffi::HGLRC;
+        let gl_context = if gl_request.version.0 < 3 {
+            legacy_gl_context
 
-        // TODO maybe query extensions?
-
-        #[allow(non_snake_case)]
-        let wglCreateContextAttribsARB = unsafe {
-            let p = get_proc_address("wglCreateContextAttribsARB");
-            mem::transmute::<_, wglCreateContextAttribsARBType>(p)
-        };
-        // TODO check if this returned null
-
-        let mut flags = 0;
-        if gl_request.debug {
-            flags |= ffi::WGL_CONTEXT_DEBUG_BIT_ARB;
-        }
-        if gl_request.forward_compatible {
-            flags |= ffi::WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
-        }
-
-        let profile_mask = if gl_request.core {
-            ffi::WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+        // Set up modern OpenGL
         } else {
-            ffi::WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
-        };
+            #[allow(non_snake_case)]
+            let wglGetExtensionsStringARB = unsafe {
+                let p = get_proc_address("wglGetExtensionsStringARB");
+                if p.is_null() {
+                    panic!(
+                        "WGL_ARB_extensions_string is not supported. Can not create a OpenGL 3\
+                        context"
+                    );
+                }
+                mem::transmute::<_, ffi::wglGetExtensionsStringARBType>(p)
+            };
 
-        let context_attributes = [
-            ffi::WGL_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
-            ffi::WGL_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
-            ffi::WGL_CONTEXT_FLAGS_ARB, flags,
-            ffi::WGL_CONTEXT_PROFILE_MASK_ARB, profile_mask,
-            0,
-        ];
+            let extensions = unsafe {
+                // This gives us a space separated list of supported extenensions
+                let raw = wglGetExtensionsStringARB(device_context);
+                let string = CStr::from_ptr(raw).to_string_lossy();
+                string.split_whitespace().map(str::to_owned).collect::<Vec<_>>()
+            };
 
-        let gl_context = wglCreateContextAttribsARB(
+            let has_extension = |name: &str| {
+                for extension in extensions.iter() {
+                    if extension == name {
+                        return true;
+                    }
+                }
+                false
+            };
+
+            let required_extensions = [
+                "WGL_ARB_create_context",
+                "WGL_ARB_create_context_profile",
+            ];
+            for name in required_extensions.iter() {
+                if !has_extension(name) {
+                    panic!("{} is not supported. Can not createa a OpenGL 3 context", name);
+                }
+            }
+
+            #[allow(non_snake_case)]
+            let wglCreateContextAttribsARB = unsafe {
+                let p = get_proc_address("wglCreateContextAttribsARB");
+                if p.is_null() {
+                    panic!(
+                        "wglCreateContextAttribsARB is not present, although the required \
+                        extensions are supported. Your drivers/the spec suck"
+                    );
+                }
+                mem::transmute::<_, ffi::wglCreateContextAttribsARBType>(p)
+            };
+
+            let mut flags = 0;
+            if gl_request.debug {
+                flags |= ffi::WGL_CONTEXT_DEBUG_BIT_ARB;
+            }
+            if gl_request.forward_compatible {
+                flags |= ffi::WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+            }
+
+            let profile_mask = if gl_request.core {
+                ffi::WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+            } else {
+                ffi::WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
+            };
+
+            let context_attributes = [
+                ffi::WGL_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
+                ffi::WGL_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
+                ffi::WGL_CONTEXT_FLAGS_ARB, flags,
+                ffi::WGL_CONTEXT_PROFILE_MASK_ARB, profile_mask,
+                0,
+            ];
+
+            let gl_context = wglCreateContextAttribsARB(
                 device_context,
                 ptr::null_mut(),
                 context_attributes.as_ptr()
-        );
+            );
 
-        if gl_context.is_null() {
-            let last_error = last_win_error();
-            match last_error {
-                ffi::ERROR_INVALID_VERSION_ARB => panic!(
-                    "Could not create GL context. Invalid version: ({}.{} {})",
-                    gl_request.version.0, gl_request.version.1,
-                    if gl_request.core { "core" } else { "compat" },
-                ),
-                ffi::ERROR_INVALID_PROFILE_ARB => panic!(
-                    "Could not create GL context. Invalid profile: ({}.{} {})",
-                    gl_request.version.0, gl_request.version.1,
-                    if gl_request.core { "core" } else { "compat" },
-                ),
-                _ => panic!(
-                    "Could not create GL context. Unkown error: {}",
-                    last_error,
-                ),
-            };
-        }
+            if gl_context.is_null() {
+                let last_error = last_win_error();
+                match last_error {
+                    ffi::ERROR_INVALID_VERSION_ARB => panic!(
+                        "Could not create GL context. Invalid version: ({}.{} {})",
+                        gl_request.version.0, gl_request.version.1,
+                        if gl_request.core { "core" } else { "compat" },
+                    ),
+                    ffi::ERROR_INVALID_PROFILE_ARB => panic!(
+                        "Could not create GL context. Invalid profile: ({}.{} {})",
+                        gl_request.version.0, gl_request.version.1,
+                        if gl_request.core { "core" } else { "compat" },
+                    ),
+                    _ => panic!(
+                        "Could not create GL context. Unkown error: {}",
+                        last_error,
+                    ),
+                };
+            }
 
-        // Replace the legacy context with the new and improved context
-        unsafe {
-            ffi::wglDeleteContext(legacy_gl_context);
-            ffi::wglMakeCurrent(device_context, gl_context);
-        }
+            // Replace the legacy context with the new and improved context
+            unsafe {
+                ffi::wglDeleteContext(legacy_gl_context);
+                ffi::wglMakeCurrent(device_context, gl_context);
+            }
+
+            gl_context
+        };
 
         gl::load_with(get_proc_address);
         
