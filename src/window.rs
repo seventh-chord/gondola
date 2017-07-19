@@ -24,6 +24,19 @@ impl Default for GlRequest {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(usize)]
+pub enum CursorType {
+    Normal,
+    Clickable,
+}
+
+const CURSOR_TYPE_COUNT: usize = 2;
+const ALL_CURSOR_TYPES: [CursorType; CURSOR_TYPE_COUNT] = [
+    CursorType::Normal,
+    CursorType::Clickable,
+];
+
 pub trait WindowCommon: Drop {
     fn new(title: &str, gl_request: GlRequest) -> Self;
     fn show(&mut self);
@@ -41,6 +54,8 @@ pub trait WindowCommon: Drop {
     /// printed when calling this function if changing vsync is not supported. By default, vsync is
     /// disabled.
     fn set_vsync(&mut self, vsync: bool);
+
+    fn set_cursor(&mut self, cursor: CursorType);
 }
 
 #[cfg(target_os = "linux")]
@@ -598,7 +613,9 @@ mod windows {
         gl_context: ffi::HGLRC,
         window: ffi::HWND,
         swap_function: Option<ffi::wglSwapIntervalEXTType>,
+        cursors: [ffi::HCURSOR; CURSOR_TYPE_COUNT],
 
+        cursor: CursorType,
         screen_region: Region,
         close_requested: bool,
         resized: bool,
@@ -728,6 +745,19 @@ mod windows {
 
                 *sender = Some(raw_event_sender);
             });
+
+            // Load cursors
+            let cursors = unsafe {
+                let mut cursors: [ffi::HCURSOR; CURSOR_TYPE_COUNT] = mem::uninitialized();
+                for (i, &ty) in ALL_CURSOR_TYPES.iter().enumerate() {
+                    let cursor = match ty {
+                        CursorType::Normal => ffi::IDC_ARROW,
+                        CursorType::Clickable => ffi::IDC_HAND,
+                    };
+                    cursors[i] = ffi::LoadCursorW(ptr::null_mut(), cursor);
+                }
+                cursors
+            };
 
             // Actually create window 
             let window = unsafe { ffi::CreateWindowExW(
@@ -967,7 +997,9 @@ mod windows {
                 gl_context,
                 window,
                 swap_function,
+                cursors,
 
+                cursor: CursorType::Normal,
                 screen_region: region,
                 close_requested: false,
                 resized: false,
@@ -1081,7 +1113,14 @@ mod windows {
         }
 
         fn swap_buffers(&mut self) {
-            unsafe { ffi::SwapBuffers(self.device_context) };
+            unsafe { 
+                ffi::SwapBuffers(self.device_context);
+
+                if self.window_hovered() {
+                    let cursor = self.cursors[self.cursor as usize];
+                    ffi::SetCursor(cursor);
+                }
+            }
         }
 
         fn close_requested(&self) -> bool { self.close_requested }
@@ -1103,6 +1142,10 @@ mod windows {
                 println!("`set_vsync` called, but WGL_EXT_swap_control is not supported");
             }
         }
+
+        fn set_cursor(&mut self, cursor: CursorType) {
+            self.cursor = cursor;
+        }
     }
 
     impl Drop for Window {
@@ -1118,6 +1161,16 @@ mod windows {
     impl Window {
         pub fn window_handle(&self) -> ffi::HWND {
             self.window
+        }
+
+        fn window_hovered(&self) -> bool {
+            let mouse_pos = unsafe {
+                let mut p = ffi::POINT { x: 0, y: 0 };
+                ffi::GetCursorPos(&mut p);
+                Vec2::new(p.x, p.y).as_f32()
+            };
+
+            self.screen_region.contains(mouse_pos)
         }
     }
 }

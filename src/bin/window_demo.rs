@@ -2,7 +2,7 @@
 extern crate gondola;
 extern crate cable_math;
 
-use gondola::{Window, WindowCommon, Timer, InputManager, Key};
+use gondola::{Window, WindowCommon, CursorType, Timer, InputManager, Key};
 use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
@@ -66,6 +66,12 @@ fn main() {
 
         if input.key(Key::Key1).pressed() {
             window.change_title("Yo dawg");
+        }
+
+        if input.key(Key::Space).down() {
+            window.set_cursor(CursorType::Clickable);
+        } else {
+            window.set_cursor(CursorType::Normal);
         }
 
         if input.key(Key::Key2).pressed() {
