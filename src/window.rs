@@ -24,7 +24,8 @@ impl Default for GlRequest {
     }
 }
 
-pub trait Window: Drop {
+pub trait WindowCommon: Drop {
+    fn new(title: &str, gl_request: GlRequest) -> Self;
     fn show(&mut self);
 
     fn poll_events(&mut self, input: &mut InputManager);
@@ -36,7 +37,6 @@ pub trait Window: Drop {
     fn screen_region(&self) -> Region;
 
     fn change_title(&mut self, title: &str);
-
     /// Enables/disables vsync, if supported by the graphics driver. In debug mode a warning is
     /// printed when calling this function if changing vsync is not supported. By default, vsync is
     /// disabled.
@@ -69,7 +69,7 @@ mod linux {
         pub const GLX_RGBA_TYPE: i32 = 0x8014; // From /usr/include/GL/glx.h
     }
 
-    pub struct X11Window {
+    pub struct Window {
         xlib: ffi::Xlib,
         glx: ffi::Glx,
 
@@ -88,247 +88,251 @@ mod linux {
         region: Region,
     }
 
-    pub fn new_window(title: &str, gl_request: GlRequest) -> X11Window {
-        // Load xlib and glx
-        let xlib = match ffi::Xlib::open() {
-            Ok(x) => x,
-            Err(err) => {
-                panic!("Could not load xlib: {:?}", err);
-            },
-        };
-
-        let glx = match ffi::Glx::open() {
-            Ok(x) => x,
-            Err(err) => {
-                panic!("Could not load glx: {:?}", err);
-            },
-        };
-
-        unsafe { (xlib.XInitThreads)() };
-        unsafe { (xlib.XSetErrorHandler)(Some(x_error_callback)) };
-
-        // Create display
-        let display = unsafe { 
-            let display = (xlib.XOpenDisplay)(ptr::null());
-
-            if display.is_null() {
-                panic!("Could not connect to the X server");
-            }
-
-            display
-        };
-
-        // Set up OpenGL
-        let mut attributes = [
-            ffi::GLX_X_RENDERABLE,  1,
-            ffi::GLX_DRAWABLE_TYPE, ffi::GLX_WINDOW_BIT,
-            ffi::GLX_RENDER_TYPE,   ffi::GLX_RGBA_BIT,
-            ffi::GLX_X_VISUAL_TYPE, ffi::GLX_TRUE_COLOR,
-            ffi::GLX_RED_SIZE,      8,
-            ffi::GLX_GREEN_SIZE,    8,
-            ffi::GLX_BLUE_SIZE,     8,
-            ffi::GLX_ALPHA_SIZE,    8,
-            ffi::GLX_DEPTH_SIZE,    24,
-            ffi::GLX_STENCIL_SIZE,  8,
-            ffi::GLX_DOUBLEBUFFER,  1,
-
-            0,
-        ];
-
-        let default_screen = unsafe { (xlib.XDefaultScreen)(display) };
-
-        let mut count = 0;
-        let fb_configs = unsafe { (glx.glXChooseFBConfig)(
-            display,
-            default_screen,
-            attributes.as_mut_ptr(),
-            &mut count,
-        ) };
-        if fb_configs.is_null() {
-            panic!("No FB configs");
-        }
-
-        let fb_config = unsafe { *fb_configs }; // Just use the first one, whatever
-        unsafe { (xlib.XFree)(fb_configs as *mut _) };
-
-        let visual = unsafe { (glx.glXGetVisualFromFBConfig)(display, fb_config) };
-        if visual.is_null() {
-            panic!("No appropriate visual found");
-        }
-
-        // Create window
-        let root = unsafe { (xlib.XDefaultRootWindow)(display) };
-
-        let colormap = unsafe { (xlib.XCreateColormap)(display, root, (*visual).visual, 0) };
-
-        let mut win_attributes = ffi::XSetWindowAttributes {
-            event_mask: 
-                ffi::ExposureMask |
-                ffi::StructureNotifyMask |
-                ffi::PointerMotionMask |
-                ffi::KeyPressMask | ffi::KeyReleaseMask |
-                ffi::ButtonPressMask | ffi::ButtonReleaseMask,
-
-            colormap: colormap,
-
-            .. unsafe { mem::zeroed() }
-        };
-
-        let region = Region {
-            min: Vec2::new(0.0, 0.0),
-            max: Vec2::new(600.0, 600.0),
-        };
-
-        let window = unsafe { (xlib.XCreateWindow)(
-            display, root,
-            region.min.x as i32, region.min.y as i32,
-            region.width() as u32, region.height() as u32,
-            0, // Border
-
-            (*visual).depth, // Depth
-            ffi::InputOutput as _,
-            (*visual).visual,
-
-            ffi::CWColormap | ffi::CWEventMask,
-            &mut win_attributes,
-        ) };
-
-        unsafe { (xlib.XFree)(visual as *mut _); }
-
-        let title = CString::new(title).unwrap();
-        unsafe { (xlib.XStoreName)(display, window, title.into_raw()); }
-
-        // Finish setting up OpenGL
-        let _context = unsafe {
-            #[allow(non_camel_case_types)]
-            type glXCreateContextAttribsARB = extern "system" fn(
-                *mut ffi::Display,
-                ffi::GLXFBConfig,
-                ffi::GLXContext,
-                i32,
-                *const i32
-            ) -> ffi::GLXContext;
-
-            let create_fn = (glx.glXGetProcAddress)(b"glXCreateContextAttribsARB\0".as_ptr());
-
-            let context = if let Some(create_fn) = create_fn {
-                let profile_mask = if gl_request.core {
-                    ffi::GLX_CONTEXT_CORE_PROFILE_BIT_ARB
-                } else {
-                    ffi::GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
-                };
-
-                let mut flags = 0;
-                if gl_request.debug {
-                    flags |= ffi::GLX_CONTEXT_DEBUG_BIT_ARB;
-                }
-                if gl_request.forward_compatible {
-                    flags |= ffi::GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
-                }
-
-                let context_attributes = [
-                    ffi::GLX_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
-                    ffi::GLX_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
-                    ffi::GLX_CONTEXT_FLAGS_ARB, flags,
-                    ffi::GLX_CONTEXT_PROFILE_MASK_ARB, profile_mask,
-                    0,
-                ];
-
-                let create_fn = mem::transmute::<_, glXCreateContextAttribsARB>(create_fn);
-
-                create_fn(
-                    display, fb_config, 
-                    ptr::null_mut(), 1,
-                    context_attributes.as_ptr(),
-                )
-            } else {
-                println!("Could not use glXCreateContextAttribsARB!");
-                (glx.glXCreateNewContext)(
-                    display, fb_config,
-                    ffi::GLX_RGBA_TYPE,
-                    ptr::null_mut(), 1
-                )
+    impl WindowCommon for Window {
+        fn new(title: &str, gl_request: GlRequest) -> Window {
+            // Load xlib and glx
+            let xlib = match ffi::Xlib::open() {
+                Ok(x) => x,
+                Err(err) => {
+                    panic!("Could not load xlib: {:?}", err);
+                },
             };
 
-            if context.is_null() {
-                panic!("Could not create GLX context for the given request: {:?}", gl_request);
+            let glx = match ffi::Glx::open() {
+                Ok(x) => x,
+                Err(err) => {
+                    panic!("Could not load glx: {:?}", err);
+                },
+            };
+
+            unsafe { (xlib.XInitThreads)() };
+            unsafe { (xlib.XSetErrorHandler)(Some(x_error_callback)) };
+
+            // Create display
+            let display = unsafe { 
+                let display = (xlib.XOpenDisplay)(ptr::null());
+
+                if display.is_null() {
+                    panic!("Could not connect to the X server");
+                }
+
+                display
+            };
+
+            // Set up OpenGL
+            let mut attributes = [
+                ffi::GLX_X_RENDERABLE,  1,
+                ffi::GLX_DRAWABLE_TYPE, ffi::GLX_WINDOW_BIT,
+                ffi::GLX_RENDER_TYPE,   ffi::GLX_RGBA_BIT,
+                ffi::GLX_X_VISUAL_TYPE, ffi::GLX_TRUE_COLOR,
+                ffi::GLX_RED_SIZE,      8,
+                ffi::GLX_GREEN_SIZE,    8,
+                ffi::GLX_BLUE_SIZE,     8,
+                ffi::GLX_ALPHA_SIZE,    8,
+                ffi::GLX_DEPTH_SIZE,    24,
+                ffi::GLX_STENCIL_SIZE,  8,
+                ffi::GLX_DOUBLEBUFFER,  1,
+
+                0,
+            ];
+
+            let default_screen = unsafe { (xlib.XDefaultScreen)(display) };
+
+            let mut count = 0;
+            let fb_configs = unsafe { (glx.glXChooseFBConfig)(
+                display,
+                default_screen,
+                attributes.as_mut_ptr(),
+                &mut count,
+            ) };
+            if fb_configs.is_null() {
+                panic!("No FB configs");
             }
 
-            (glx.glXMakeCurrent)(display, window, context);
-            context
-        };
+            let fb_config = unsafe { *fb_configs }; // Just use the first one, whatever
+            unsafe { (xlib.XFree)(fb_configs as *mut _) };
 
-        let mut gl_name_buf = Vec::with_capacity(500);
-        gl::load_with(|name| {
-            gl_name_buf.clear();
-            gl_name_buf.extend_from_slice(name.as_bytes());
-            gl_name_buf.push(0);
+            let visual = unsafe { (glx.glXGetVisualFromFBConfig)(display, fb_config) };
+            if visual.is_null() {
+                panic!("No appropriate visual found");
+            }
 
+            // Create window
+            let root = unsafe { (xlib.XDefaultRootWindow)(display) };
+
+            let colormap = unsafe { (xlib.XCreateColormap)(display, root, (*visual).visual, 0) };
+
+            let mut win_attributes = ffi::XSetWindowAttributes {
+                event_mask: 
+                    ffi::ExposureMask |
+                    ffi::StructureNotifyMask |
+                    ffi::PointerMotionMask |
+                    ffi::KeyPressMask | ffi::KeyReleaseMask |
+                    ffi::ButtonPressMask | ffi::ButtonReleaseMask,
+
+                colormap: colormap,
+
+                .. unsafe { mem::zeroed() }
+            };
+
+            let region = Region {
+                min: Vec2::new(0.0, 0.0),
+                max: Vec2::new(600.0, 600.0),
+            };
+
+            let window = unsafe { (xlib.XCreateWindow)(
+                display, root,
+                region.min.x as i32, region.min.y as i32,
+                region.width() as u32, region.height() as u32,
+                0, // Border
+
+                (*visual).depth, // Depth
+                ffi::InputOutput as _,
+                (*visual).visual,
+
+                ffi::CWColormap | ffi::CWEventMask,
+                &mut win_attributes,
+            ) };
+
+            unsafe { (xlib.XFree)(visual as *mut _); }
+
+            let title = CString::new(title).unwrap();
+            unsafe { (xlib.XStoreName)(display, window, title.into_raw()); }
+
+            // Finish setting up OpenGL
+            let _context = unsafe {
+                #[allow(non_camel_case_types)]
+                type glXCreateContextAttribsARB = extern "system" fn(
+                    *mut ffi::Display,
+                    ffi::GLXFBConfig,
+                    ffi::GLXContext,
+                    i32,
+                    *const i32
+                ) -> ffi::GLXContext;
+
+                let create_fn = (glx.glXGetProcAddress)(b"glXCreateContextAttribsARB\0".as_ptr());
+
+                let context = if let Some(create_fn) = create_fn {
+                    let profile_mask = if gl_request.core {
+                        ffi::GLX_CONTEXT_CORE_PROFILE_BIT_ARB
+                    } else {
+                        ffi::GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
+                    };
+
+                    let mut flags = 0;
+                    if gl_request.debug {
+                        flags |= ffi::GLX_CONTEXT_DEBUG_BIT_ARB;
+                    }
+                    if gl_request.forward_compatible {
+                        flags |= ffi::GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+                    }
+
+                    let context_attributes = [
+                        ffi::GLX_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
+                        ffi::GLX_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
+                        ffi::GLX_CONTEXT_FLAGS_ARB, flags,
+                        ffi::GLX_CONTEXT_PROFILE_MASK_ARB, profile_mask,
+                        0,
+                    ];
+
+                    let create_fn = mem::transmute::<_, glXCreateContextAttribsARB>(create_fn);
+
+                    create_fn(
+                        display, fb_config, 
+                        ptr::null_mut(), 1,
+                        context_attributes.as_ptr(),
+                    )
+                } else {
+                    println!("Could not use glXCreateContextAttribsARB!");
+                    (glx.glXCreateNewContext)(
+                        display, fb_config,
+                        ffi::GLX_RGBA_TYPE,
+                        ptr::null_mut(), 1
+                    )
+                };
+
+                if context.is_null() {
+                    panic!("Could not create GLX context for the given request: {:?}", gl_request);
+                }
+
+                (glx.glXMakeCurrent)(display, window, context);
+                context
+            };
+
+            let mut gl_name_buf = Vec::with_capacity(500);
+            gl::load_with(|name| {
+                gl_name_buf.clear();
+                gl_name_buf.extend_from_slice(name.as_bytes());
+                gl_name_buf.push(0);
+
+                unsafe {
+                    (glx.glXGetProcAddress)(gl_name_buf.as_ptr()).unwrap() as *const _
+                }
+            });
+            
             unsafe {
-                (glx.glXGetProcAddress)(gl_name_buf.as_ptr()).unwrap() as *const _
+                let raw = gl::GetString(gl::VERSION);
+                if raw.is_null() {
+                    panic!("glGetString(GL_VERSION) returned null!");
+                }
+    //            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+    //            println!("{}", version);
             }
-        });
-        
-        unsafe {
-            let raw = gl::GetString(gl::VERSION);
-            if raw.is_null() {
-                panic!("glGetString(GL_VERSION) returned null!");
-            }
-//            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
-//            println!("{}", version);
-        }
 
-        // Create IM and IC (Input method and context)
-        let im = unsafe {
-            let im = (xlib.XOpenIM)(display, ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+            // Create IM and IC (Input method and context)
+            let im = unsafe {
+                let im = (xlib.XOpenIM)(display, ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
 
-            if im.is_null() {
-                panic!("xlib::XOpenIM failed");
-            }
-            im
-        };
+                if im.is_null() {
+                    panic!("xlib::XOpenIM failed");
+                }
+                im
+            };
 
-        let ic = unsafe {
-            let ic = (xlib.XCreateIC)(
-                im, 
-                b"inputStyle\0".as_ptr() as *const _,
-                ffi::XIMPreeditNothing | ffi::XIMStatusNothing,
-                b"clientWindow\0".as_ptr() as *const _,
+            let ic = unsafe {
+                let ic = (xlib.XCreateIC)(
+                    im, 
+                    b"inputStyle\0".as_ptr() as *const _,
+                    ffi::XIMPreeditNothing | ffi::XIMStatusNothing,
+                    b"clientWindow\0".as_ptr() as *const _,
+                    window,
+                    ptr::null::<()>(),
+                );
+
+                if ic.is_null() {
+                    panic!("xlib::XCreateIC failed");
+                }
+                ic
+            };
+
+            graphics::viewport(region.unpositioned());
+
+            // Listen for close events
+            let wm_delete_window = unsafe {
+                let mut atom = (xlib.XInternAtom)(
+                    display,
+                    b"WM_DELETE_WINDOW\0".as_ptr() as *const _,
+                    0
+                );
+                (xlib.XSetWMProtocols)(display, window, &mut atom, 1);
+                atom
+            };
+
+            Window {
+                xlib, glx,
+                display,
                 window,
-                ptr::null::<()>(),
-            );
+                im,
+                ic,
+                wm_delete_window,
+                region,
 
-            if ic.is_null() {
-                panic!("xlib::XCreateIC failed");
+                close_requested: false,
+                resized: false,
+                moved: false,
             }
-            ic
-        };
-
-        graphics::viewport(region.unpositioned());
-
-        // Listen for close events
-        let wm_delete_window = unsafe {
-            let mut atom = (xlib.XInternAtom)(display, b"WM_DELETE_WINDOW\0".as_ptr() as *const _, 0);
-            (xlib.XSetWMProtocols)(display, window, &mut atom, 1);
-            atom
-        };
-
-        X11Window {
-            xlib, glx,
-            display,
-            window,
-            im,
-            ic,
-            wm_delete_window,
-            region,
-
-            close_requested: false,
-            resized: false,
-            moved: false,
         }
-    }
 
-    impl Window for X11Window {
         fn show(&mut self) {
             unsafe { (self.xlib.XMapWindow)(self.display, self.window); }
         }
@@ -511,7 +515,7 @@ mod linux {
         }
     }
 
-    impl Drop for X11Window {
+    impl Drop for Window {
         fn drop(&mut self) {
             let ref xlib = self.xlib;
 
@@ -588,7 +592,7 @@ mod windows {
         pub(super) type wglSwapIntervalEXTType = extern "system" fn(i32) -> i32;
     }
 
-    pub struct WindowsWindow {
+    pub struct Window {
         raw_event_receiver: mpsc::Receiver<RawEvent>,
         device_context: ffi::HDC,
         gl_context: ffi::HGLRC,
@@ -611,285 +615,6 @@ mod windows {
     }
 
     fn last_win_error() -> u32 { unsafe { ffi::GetLastError() } }
-
-    pub fn new_window(title: &str, gl_request: GlRequest) -> WindowsWindow {
-        let instance = unsafe { ffi::GetModuleHandleW(ptr::null()) };
-
-        let class_name = encode_wide("My windows class is great");
-        let window_name = encode_wide(title);
-
-        let window_class = ffi::WNDCLASSW {
-            style:          ffi::CS_OWNDC,
-            lpfnWndProc:    Some(event_callback),
-            hInstance:      instance,
-            lpszClassName:  class_name.as_ptr(),
-
-            //            hIcon:          HICON, // Less so
-
-            .. unsafe { mem::zeroed() }
-        };
-
-        let window_class_atom = unsafe { ffi::RegisterClassW(&window_class) };
-        if window_class_atom == 0 {
-            panic!("Failed to register window class");
-        }
-
-        let (raw_event_sender, raw_event_receiver) = mpsc::channel();
-
-        MSG_SENDER.with(|sender| {
-            let mut sender = sender.borrow_mut();
-            if sender.is_some() {
-                panic!("Multiple windows on a single thread are not supported on windows atm");
-            }
-
-            *sender = Some(raw_event_sender);
-        });
-
-        // Actually create window 
-        let window = unsafe { ffi::CreateWindowExW(
-            // Extended style
-            0, 
-
-            class_name.as_ptr(),
-            window_name.as_ptr(),
-
-            ffi::WS_OVERLAPPEDWINDOW,
-
-            ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
-            ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
-
-            ptr::null_mut(), // Parent
-            ptr::null_mut(), // Menu
-            instance,
-            ptr::null_mut(), // lParam
-        ) };
-        if window.is_null() {
-            panic!("Failed to create window");
-        } 
-
-        let region = unsafe {
-            let mut rect = mem::zeroed::<ffi::RECT>();
-            if ffi::GetWindowRect(window, &mut rect) == 0 {
-                panic!("GetWindowRect failed: {}", last_win_error());
-            }
-
-            Region {
-                min: Vec2::new(rect.left, rect.top).as_f32(),
-                max: Vec2::new(rect.right, rect.bottom).as_f32(),
-            }
-        };
-
-        let device_context = unsafe { ffi::GetDC(window) };
-
-        // Choose a pixel format
-        let mut pixel_format_descriptor = ffi::PIXELFORMATDESCRIPTOR {
-            nSize: mem::size_of::<ffi::PIXELFORMATDESCRIPTOR>() as u16,
-            nVersion: 1,
-            dwFlags: ffi::PFD_DRAW_TO_WINDOW | ffi::PFD_SUPPORT_OPENGL | ffi::PFD_DOUBLEBUFFER,
-            iPixelType: ffi::PFD_TYPE_RGBA,
-            cColorBits: 24,
-            cAlphaBits: 8,
-            iLayerType: ffi::PFD_MAIN_PLANE,
-
-            .. unsafe { mem::zeroed() }
-        };
-
-        unsafe {
-            let i = ffi::ChoosePixelFormat(device_context, &mut pixel_format_descriptor);
-            let result = ffi::SetPixelFormat(device_context, i, &mut pixel_format_descriptor);
-
-            if result == ffi::FALSE {
-                panic!("Failed to set pixel format");
-            }
-        };
-
-        // We have to load opengl32 to get the proc address for old gl functions (e.g GetString)
-        let lib_name = encode_wide("opengl32.dll");
-        let gl32_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
-        if gl32_lib.is_null() {
-            panic!("Could not load opengl32.dll: {}", last_win_error());
-        }
-
-        // Set up opengl context
-        let legacy_gl_context = unsafe {
-            let c = ffi::wglCreateContext(device_context);
-            ffi::wglMakeCurrent(device_context, c);
-            c
-        };
-
-        let mut gl_name_buf = Vec::with_capacity(500);
-        let mut get_proc_address = |name: &str| { 
-            gl_name_buf.clear();
-            gl_name_buf.extend_from_slice(name.as_bytes());
-            gl_name_buf.push(0);
-
-            unsafe {
-                let address = ffi::wglGetProcAddress(gl_name_buf.as_ptr() as *const _);
-
-                // Acording to the khronos guide, -1, 0, 1, 2 and 3 indicate an error
-                let invalid =
-                    address == ((-1isize) as *const _) || address == (0 as *const _) ||
-                    address == (1 as *const _) || address == (2 as *const _) || address == (3 as *const _);
-
-                if invalid {
-                    // This is needed for some pre gl 3 functions
-                    kernel32::GetProcAddress(gl32_lib, gl_name_buf.as_ptr() as *const _)
-                } else {
-                    address
-                }
-            }
-        }; 
-
-        #[allow(non_snake_case)]
-        let wglGetExtensionsStringARB = unsafe {
-            let p = get_proc_address("wglGetExtensionsStringARB");
-            if p.is_null() {
-                panic!("WGL_ARB_extensions_string is not supported. Can not create a gl context");
-            }
-            mem::transmute::<_, ffi::wglGetExtensionsStringARBType>(p)
-        };
-
-        let extensions = unsafe {
-            // This gives us a space separated list of supported extenensions
-            let raw = wglGetExtensionsStringARB(device_context);
-            let string = CStr::from_ptr(raw).to_string_lossy();
-            string.split_whitespace().map(str::to_owned).collect::<Vec<_>>()
-        };
-
-        let has_extension = |name: &str| {
-            for extension in extensions.iter() {
-                if extension == name {
-                    return true;
-                }
-            }
-            false
-        };
-
-        let gl_context = if gl_request.version.0 < 3 {
-            legacy_gl_context
-
-        // Set up modern OpenGL
-        } else {
-            let required_extensions = [
-                "WGL_ARB_create_context",
-                "WGL_ARB_create_context_profile",
-            ];
-            for name in required_extensions.iter() {
-                if !has_extension(name) {
-                    panic!("{} is not supported. Can not create a gl 3+ context", name);
-                }
-            }
-
-            #[allow(non_snake_case)]
-            let wglCreateContextAttribsARB = unsafe {
-                let p = get_proc_address("wglCreateContextAttribsARB");
-                if p.is_null() {
-                    panic!(
-                        "wglCreateContextAttribsARB is not present, although the required \
-                        extensions are supported. Your drivers/the spec suck"
-                    );
-                }
-                mem::transmute::<_, ffi::wglCreateContextAttribsARBType>(p)
-            };
-
-            let mut flags = 0;
-            if gl_request.debug {
-                flags |= ffi::WGL_CONTEXT_DEBUG_BIT_ARB;
-            }
-            if gl_request.forward_compatible {
-                flags |= ffi::WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
-            }
-
-            let profile_mask = if gl_request.core {
-                ffi::WGL_CONTEXT_CORE_PROFILE_BIT_ARB
-            } else {
-                ffi::WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
-            };
-
-            let context_attributes = [
-                ffi::WGL_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
-                ffi::WGL_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
-                ffi::WGL_CONTEXT_FLAGS_ARB, flags,
-                ffi::WGL_CONTEXT_PROFILE_MASK_ARB, profile_mask,
-                0,
-            ];
-
-            let gl_context = wglCreateContextAttribsARB(
-                device_context,
-                ptr::null_mut(),
-                context_attributes.as_ptr()
-            );
-
-            if gl_context.is_null() {
-                let last_error = last_win_error();
-                match last_error {
-                    ffi::ERROR_INVALID_VERSION_ARB => panic!(
-                        "Could not create GL context. Invalid version: ({}.{} {})",
-                        gl_request.version.0, gl_request.version.1,
-                        if gl_request.core { "core" } else { "compat" },
-                    ),
-                    ffi::ERROR_INVALID_PROFILE_ARB => panic!(
-                        "Could not create GL context. Invalid profile: ({}.{} {})",
-                        gl_request.version.0, gl_request.version.1,
-                        if gl_request.core { "core" } else { "compat" },
-                    ),
-                    _ => panic!(
-                        "Could not create GL context. Unkown error: {}",
-                        last_error,
-                    ),
-                };
-            }
-
-            // Replace the legacy context with the new and improved context
-            unsafe {
-                ffi::wglDeleteContext(legacy_gl_context);
-                ffi::wglMakeCurrent(device_context, gl_context);
-            }
-
-            gl_context
-        };
-
-        let swap_function = if has_extension("WGL_EXT_swap_control") {
-            Some(unsafe {
-                let p = get_proc_address("wglSwapIntervalEXT");
-                if p.is_null() {
-                    panic!(
-                        "wglSwapIntervalEXTis not present, although the required \
-                        extensions are supported. Your drivers/the spec suck"
-                    );
-                }
-                mem::transmute::<_, ffi::wglSwapIntervalEXTType>(p)
-            })
-        } else {
-            None
-        };
-
-        gl::load_with(get_proc_address);
-        
-        unsafe {
-            let raw = gl::GetString(gl::VERSION);
-            if raw.is_null() {
-                panic!("glGetString(GL_VERSION) returned null!");
-            }
-//            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
-//            println!("{}", version);
-        }
-
-        graphics::viewport(region.unpositioned());
-
-        WindowsWindow {
-            raw_event_receiver,
-            device_context,
-            gl_context,
-            window,
-            swap_function,
-
-            screen_region: region,
-            close_requested: false,
-            resized: false,
-            moved: false,
-        }
-    } 
 
     #[derive(Debug, Copy, Clone)]
     enum RawEvent {
@@ -970,7 +695,286 @@ mod windows {
         return 0;
     }
 
-    impl Window for WindowsWindow {
+    impl WindowCommon for Window {
+        fn new(title: &str, gl_request: GlRequest) -> Window {
+            let instance = unsafe { ffi::GetModuleHandleW(ptr::null()) };
+
+            let class_name = encode_wide("My windows class is great");
+            let window_name = encode_wide(title);
+
+            let window_class = ffi::WNDCLASSW {
+                style:          ffi::CS_OWNDC,
+                lpfnWndProc:    Some(event_callback),
+                hInstance:      instance,
+                lpszClassName:  class_name.as_ptr(),
+
+                //            hIcon:          HICON, // Less so
+
+                .. unsafe { mem::zeroed() }
+            };
+
+            let window_class_atom = unsafe { ffi::RegisterClassW(&window_class) };
+            if window_class_atom == 0 {
+                panic!("Failed to register window class");
+            }
+
+            let (raw_event_sender, raw_event_receiver) = mpsc::channel();
+
+            MSG_SENDER.with(|sender| {
+                let mut sender = sender.borrow_mut();
+                if sender.is_some() {
+                    panic!("Multiple windows on a single thread are not supported on windows atm");
+                }
+
+                *sender = Some(raw_event_sender);
+            });
+
+            // Actually create window 
+            let window = unsafe { ffi::CreateWindowExW(
+                // Extended style
+                0, 
+
+                class_name.as_ptr(),
+                window_name.as_ptr(),
+
+                ffi::WS_OVERLAPPEDWINDOW,
+
+                ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+                ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+
+                ptr::null_mut(), // Parent
+                ptr::null_mut(), // Menu
+                instance,
+                ptr::null_mut(), // lParam
+            ) };
+            if window.is_null() {
+                panic!("Failed to create window");
+            } 
+
+            let region = unsafe {
+                let mut rect = mem::zeroed::<ffi::RECT>();
+                if ffi::GetWindowRect(window, &mut rect) == 0 {
+                    panic!("GetWindowRect failed: {}", last_win_error());
+                }
+
+                Region {
+                    min: Vec2::new(rect.left, rect.top).as_f32(),
+                    max: Vec2::new(rect.right, rect.bottom).as_f32(),
+                }
+            };
+
+            let device_context = unsafe { ffi::GetDC(window) };
+
+            // Choose a pixel format
+            let mut pixel_format_descriptor = ffi::PIXELFORMATDESCRIPTOR {
+                nSize: mem::size_of::<ffi::PIXELFORMATDESCRIPTOR>() as u16,
+                nVersion: 1,
+                dwFlags: ffi::PFD_DRAW_TO_WINDOW | ffi::PFD_SUPPORT_OPENGL | ffi::PFD_DOUBLEBUFFER,
+                iPixelType: ffi::PFD_TYPE_RGBA,
+                cColorBits: 24,
+                cAlphaBits: 8,
+                iLayerType: ffi::PFD_MAIN_PLANE,
+
+                .. unsafe { mem::zeroed() }
+            };
+
+            unsafe {
+                let i = ffi::ChoosePixelFormat(device_context, &mut pixel_format_descriptor);
+                let result = ffi::SetPixelFormat(device_context, i, &mut pixel_format_descriptor);
+
+                if result == ffi::FALSE {
+                    panic!("Failed to set pixel format");
+                }
+            };
+
+            // We have to load opengl32 to get the proc address for old gl functions (e.g GetString)
+            let lib_name = encode_wide("opengl32.dll");
+            let gl32_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
+            if gl32_lib.is_null() {
+                panic!("Could not load opengl32.dll: {}", last_win_error());
+            }
+
+            // Set up opengl context
+            let legacy_gl_context = unsafe {
+                let c = ffi::wglCreateContext(device_context);
+                ffi::wglMakeCurrent(device_context, c);
+                c
+            };
+
+            let mut gl_name_buf = Vec::with_capacity(500);
+            let mut get_proc_address = |name: &str| { 
+                gl_name_buf.clear();
+                gl_name_buf.extend_from_slice(name.as_bytes());
+                gl_name_buf.push(0);
+
+                unsafe {
+                    let address = ffi::wglGetProcAddress(gl_name_buf.as_ptr() as *const _);
+
+                    // Acording to the khronos guide, -1, 0, 1, 2 and 3 indicate an error
+                    let invalid =
+                        address == ((-1isize) as *const _) || address == (0 as *const _) ||
+                        address == (1 as *const _) || address == (2 as *const _) || address == (3 as *const _);
+
+                    if invalid {
+                        // This is needed for some pre gl 3 functions
+                        kernel32::GetProcAddress(gl32_lib, gl_name_buf.as_ptr() as *const _)
+                    } else {
+                        address
+                    }
+                }
+            }; 
+
+            #[allow(non_snake_case)]
+            let wglGetExtensionsStringARB = unsafe {
+                let p = get_proc_address("wglGetExtensionsStringARB");
+                if p.is_null() {
+                    panic!("WGL_ARB_extensions_string is not supported. Can not create a gl context");
+                }
+                mem::transmute::<_, ffi::wglGetExtensionsStringARBType>(p)
+            };
+
+            let extensions = unsafe {
+                // This gives us a space separated list of supported extenensions
+                let raw = wglGetExtensionsStringARB(device_context);
+                let string = CStr::from_ptr(raw).to_string_lossy();
+                string.split_whitespace().map(str::to_owned).collect::<Vec<_>>()
+            };
+
+            let has_extension = |name: &str| {
+                for extension in extensions.iter() {
+                    if extension == name {
+                        return true;
+                    }
+                }
+                false
+            };
+
+            let gl_context = if gl_request.version.0 < 3 {
+                legacy_gl_context
+
+            // Set up modern OpenGL
+            } else {
+                let required_extensions = [
+                    "WGL_ARB_create_context",
+                    "WGL_ARB_create_context_profile",
+                ];
+                for name in required_extensions.iter() {
+                    if !has_extension(name) {
+                        panic!("{} is not supported. Can not create a gl 3+ context", name);
+                    }
+                }
+
+                #[allow(non_snake_case)]
+                let wglCreateContextAttribsARB = unsafe {
+                    let p = get_proc_address("wglCreateContextAttribsARB");
+                    if p.is_null() {
+                        panic!(
+                            "wglCreateContextAttribsARB is not present, although the required \
+                            extensions are supported. Your drivers/the spec suck"
+                        );
+                    }
+                    mem::transmute::<_, ffi::wglCreateContextAttribsARBType>(p)
+                };
+
+                let mut flags = 0;
+                if gl_request.debug {
+                    flags |= ffi::WGL_CONTEXT_DEBUG_BIT_ARB;
+                }
+                if gl_request.forward_compatible {
+                    flags |= ffi::WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+                }
+
+                let profile_mask = if gl_request.core {
+                    ffi::WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+                } else {
+                    ffi::WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
+                };
+
+                let context_attributes = [
+                    ffi::WGL_CONTEXT_MAJOR_VERSION_ARB, gl_request.version.0 as i32,
+                    ffi::WGL_CONTEXT_MINOR_VERSION_ARB, gl_request.version.1 as i32,
+                    ffi::WGL_CONTEXT_FLAGS_ARB, flags,
+                    ffi::WGL_CONTEXT_PROFILE_MASK_ARB, profile_mask,
+                    0,
+                ];
+
+                let gl_context = wglCreateContextAttribsARB(
+                    device_context,
+                    ptr::null_mut(),
+                    context_attributes.as_ptr()
+                );
+
+                if gl_context.is_null() {
+                    let last_error = last_win_error();
+                    match last_error {
+                        ffi::ERROR_INVALID_VERSION_ARB => panic!(
+                            "Could not create GL context. Invalid version: ({}.{} {})",
+                            gl_request.version.0, gl_request.version.1,
+                            if gl_request.core { "core" } else { "compat" },
+                        ),
+                        ffi::ERROR_INVALID_PROFILE_ARB => panic!(
+                            "Could not create GL context. Invalid profile: ({}.{} {})",
+                            gl_request.version.0, gl_request.version.1,
+                            if gl_request.core { "core" } else { "compat" },
+                        ),
+                        _ => panic!(
+                            "Could not create GL context. Unkown error: {}",
+                            last_error,
+                        ),
+                    };
+                }
+
+                // Replace the legacy context with the new and improved context
+                unsafe {
+                    ffi::wglDeleteContext(legacy_gl_context);
+                    ffi::wglMakeCurrent(device_context, gl_context);
+                }
+
+                gl_context
+            };
+
+            let swap_function = if has_extension("WGL_EXT_swap_control") {
+                Some(unsafe {
+                    let p = get_proc_address("wglSwapIntervalEXT");
+                    if p.is_null() {
+                        panic!(
+                            "wglSwapIntervalEXTis not present, although the required \
+                            extensions are supported. Your drivers/the spec suck"
+                        );
+                    }
+                    mem::transmute::<_, ffi::wglSwapIntervalEXTType>(p)
+                })
+            } else {
+                None
+            };
+
+            gl::load_with(get_proc_address);
+            
+            unsafe {
+                let raw = gl::GetString(gl::VERSION);
+                if raw.is_null() {
+                    panic!("glGetString(GL_VERSION) returned null!");
+                }
+    //            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+    //            println!("{}", version);
+            }
+
+            graphics::viewport(region.unpositioned());
+
+            Window {
+                raw_event_receiver,
+                device_context,
+                gl_context,
+                window,
+                swap_function,
+
+                screen_region: region,
+                close_requested: false,
+                resized: false,
+                moved: false,
+            }
+        } 
+
         fn show(&mut self) {
             unsafe { ffi::ShowWindow(self.window, ffi::SW_SHOW) };
         }
@@ -1092,12 +1096,19 @@ mod windows {
         }
     }
 
-    impl Drop for WindowsWindow {
+    impl Drop for Window {
         fn drop(&mut self) {
             unsafe { 
                 ffi::wglDeleteContext(self.gl_context);
                 ffi::DestroyWindow(self.window);
             }
+        }
+    }
+
+    // Platform specific impls
+    impl Window {
+        pub fn window_handle(&self) -> ffi::HWND {
+            self.window
         }
     }
 }

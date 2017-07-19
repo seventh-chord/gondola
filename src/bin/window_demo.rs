@@ -2,7 +2,7 @@
 extern crate gondola;
 extern crate cable_math;
 
-use gondola::{Window, Timer, InputManager, Key};
+use gondola::{Window, WindowCommon, Timer, InputManager, Key};
 use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
@@ -16,7 +16,7 @@ fn main() {
     let mut input = InputManager::new();
 
     let gl_request = Default::default();
-    let mut window = gondola::new_window("This is hopefully still a window", gl_request);
+    let mut window = Window::new("This is hopefully still a window", gl_request);
 
     let mut draw_group = DrawGroup::new();
 
