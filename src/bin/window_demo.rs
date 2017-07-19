@@ -54,11 +54,14 @@ fn main() {
         draw_group.circle(pos, 10.0, Color::hex_int(0x00ff00));
 
         if input.key(Key::A).pressed_repeat() {
-            println!("Ahh");
+            println!("{}", delta.as_secs_float()*1000.0);
         }
 
-        if input.mouse_key(2).pressed() {
-            println!("{}", delta.as_secs_float()*1000.0);
+        if input.key(Key::B).pressed() {
+            window.set_vsync(true);
+        }
+        if input.key(Key::C).pressed() {
+            window.set_vsync(false);
         }
 
         if input.key(Key::Key1).pressed() {

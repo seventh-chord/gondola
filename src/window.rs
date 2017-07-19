@@ -33,10 +33,14 @@ pub trait Window: Drop {
     fn close_requested(&self) -> bool;
     fn resized(&self) -> bool;
     fn moved(&self) -> bool;
-
     fn screen_region(&self) -> Region;
 
     fn change_title(&mut self, title: &str);
+
+    /// Enables/disables vsync, if supported by the graphics driver. In debug mode a warning is
+    /// printed when calling this function if changing vsync is not supported. By default, vsync is
+    /// disabled.
+    fn set_vsync(&mut self, vsync: bool);
 }
 
 #[cfg(target_os = "linux")]
@@ -501,6 +505,10 @@ mod linux {
             let title = CString::new(title).unwrap();
             unsafe { (self.xlib.XStoreName)(self.display, self.window, title.into_raw()); }
         }
+
+        fn set_vsync(&mut self, vsync: bool) {
+            unimplemented!()
+        }
     }
 
     impl Drop for X11Window {
@@ -577,6 +585,7 @@ mod windows {
 
         pub(super) type wglCreateContextAttribsARBType = extern "system" fn(HDC, HGLRC, *const i32) -> HGLRC;
         pub(super) type wglGetExtensionsStringARBType = extern "system" fn(HDC) -> *const i8;
+        pub(super) type wglSwapIntervalEXTType = extern "system" fn(i32) -> i32;
     }
 
     pub struct WindowsWindow {
@@ -584,6 +593,7 @@ mod windows {
         device_context: ffi::HDC,
         gl_context: ffi::HGLRC,
         window: ffi::HWND,
+        swap_function: Option<ffi::wglSwapIntervalEXTType>,
 
         screen_region: Region,
         close_requested: bool,
@@ -730,46 +740,43 @@ mod windows {
             }
         }; 
 
+        #[allow(non_snake_case)]
+        let wglGetExtensionsStringARB = unsafe {
+            let p = get_proc_address("wglGetExtensionsStringARB");
+            if p.is_null() {
+                panic!("WGL_ARB_extensions_string is not supported. Can not create a gl context");
+            }
+            mem::transmute::<_, ffi::wglGetExtensionsStringARBType>(p)
+        };
+
+        let extensions = unsafe {
+            // This gives us a space separated list of supported extenensions
+            let raw = wglGetExtensionsStringARB(device_context);
+            let string = CStr::from_ptr(raw).to_string_lossy();
+            string.split_whitespace().map(str::to_owned).collect::<Vec<_>>()
+        };
+
+        let has_extension = |name: &str| {
+            for extension in extensions.iter() {
+                if extension == name {
+                    return true;
+                }
+            }
+            false
+        };
+
         let gl_context = if gl_request.version.0 < 3 {
             legacy_gl_context
 
         // Set up modern OpenGL
         } else {
-            #[allow(non_snake_case)]
-            let wglGetExtensionsStringARB = unsafe {
-                let p = get_proc_address("wglGetExtensionsStringARB");
-                if p.is_null() {
-                    panic!(
-                        "WGL_ARB_extensions_string is not supported. Can not create a OpenGL 3\
-                        context"
-                    );
-                }
-                mem::transmute::<_, ffi::wglGetExtensionsStringARBType>(p)
-            };
-
-            let extensions = unsafe {
-                // This gives us a space separated list of supported extenensions
-                let raw = wglGetExtensionsStringARB(device_context);
-                let string = CStr::from_ptr(raw).to_string_lossy();
-                string.split_whitespace().map(str::to_owned).collect::<Vec<_>>()
-            };
-
-            let has_extension = |name: &str| {
-                for extension in extensions.iter() {
-                    if extension == name {
-                        return true;
-                    }
-                }
-                false
-            };
-
             let required_extensions = [
                 "WGL_ARB_create_context",
                 "WGL_ARB_create_context_profile",
             ];
             for name in required_extensions.iter() {
                 if !has_extension(name) {
-                    panic!("{} is not supported. Can not createa a OpenGL 3 context", name);
+                    panic!("{} is not supported. Can not create a gl 3+ context", name);
                 }
             }
 
@@ -842,6 +849,21 @@ mod windows {
             gl_context
         };
 
+        let swap_function = if has_extension("WGL_EXT_swap_control") {
+            Some(unsafe {
+                let p = get_proc_address("wglSwapIntervalEXT");
+                if p.is_null() {
+                    panic!(
+                        "wglSwapIntervalEXTis not present, although the required \
+                        extensions are supported. Your drivers/the spec suck"
+                    );
+                }
+                mem::transmute::<_, ffi::wglSwapIntervalEXTType>(p)
+            })
+        } else {
+            None
+        };
+
         gl::load_with(get_proc_address);
         
         unsafe {
@@ -860,6 +882,7 @@ mod windows {
             device_context,
             gl_context,
             window,
+            swap_function,
 
             screen_region: region,
             close_requested: false,
@@ -1057,6 +1080,15 @@ mod windows {
         fn change_title(&mut self, title: &str) {
             let title = encode_wide(title);
             unsafe { ffi::SetWindowTextW(self.window, title.as_ptr()) };
+        }
+
+        fn set_vsync(&mut self, vsync: bool) {
+            if let Some(swap_function) = self.swap_function {
+                swap_function(if vsync { 1 } else { 0 });
+            } else {
+                #[cfg(debug_assertions)]
+                println!("`set_vsync` called, but WGL_EXT_swap_control is not supported");
+            }
         }
     }
 
