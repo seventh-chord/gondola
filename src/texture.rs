@@ -5,7 +5,8 @@ use std::io;
 use std::ptr;
 use std::fmt;
 use std::error;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::borrow::Cow;
 use std::fs::File;
 use png;
 use gl;
@@ -88,7 +89,11 @@ impl Texture {
                     path.to_string_lossy(),
                     file!(), line!()
                 );
-                return Err(TextureError { source: Some(path.to_owned()), error: io::Error::new(io::ErrorKind::Other, message) });
+
+                return Err(TextureError { 
+                    source: Some(path.to_string_lossy().into()),
+                    error: io::Error::new(io::ErrorKind::Other, message) 
+                });
             }
         };
         self.load_data(&buf, info.width, info.height, texture_format);
@@ -263,20 +268,43 @@ impl RawImageData {
         // Open file
         let file = match File::open(path) {
             Ok(file) => file,
-            Err(err) => return Err(TextureError { source: Some(path.to_owned()), error: err }),
+            Err(err) => return Err(TextureError { 
+                source: Some(path.to_string_lossy().into()),
+                error: err 
+            }),
         };
 
         let decoder = png::Decoder::new(file);
+
+        RawImageData::from_decoder(decoder, path.to_string_lossy().into())
+    }
+
+    /// Can be used in conjunction with the `include_bytes!(..)` in std.
+    pub fn from_bytes(bytes: &[u8], source: &str) -> Result<RawImageData, TextureError> {
+        RawImageData::from_decoder(png::Decoder::new(bytes), source.into())
+    }
+
+    fn from_decoder<R: io::Read>(
+        decoder: png::Decoder<R>,
+        source: Cow<str>,
+    ) -> Result<RawImageData, TextureError> 
+    {
         let (info, mut reader) = match decoder.read_info() {
             Ok(result) => result,
-            Err(err) => return Err(TextureError { source: Some(path.to_owned()), error: err.into() }),
+            Err(err) => return Err(TextureError { 
+                source: Some(source.into()),
+                error: err.into() 
+            }),
         };
 
         // Read data into buffer (This is what makes texture loading slow)
         let mut buf = vec![0; info.buffer_size()];
         match reader.next_frame(&mut buf) {
             Ok(()) => {},
-            Err(err) => return Err(TextureError { source: Some(path.to_owned()), error: err.into() }),
+            Err(err) => return Err(TextureError {
+                source: Some(source.into()),
+                error: err.into() 
+            }),
         };
 
         Ok(RawImageData {
@@ -381,7 +409,7 @@ pub enum SwizzleComp {
 /// A error which can occur during texture loading and creation.
 #[derive(Debug)]
 pub struct TextureError {
-    source: Option<PathBuf>,
+    source: Option<String>,
     error: io::Error,
 }
 
@@ -398,7 +426,7 @@ impl error::Error for TextureError {
 impl fmt::Display for TextureError {
     fn fmt(&self, mut f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(ref source) = self.source {
-            write!(f, "For texture \"{}\": ", source.to_string_lossy())?;
+            write!(f, "For texture \"{}\": ", source)?;
         }
 
         self.error.fmt(&mut f)?;
@@ -411,3 +439,25 @@ impl From<TextureError> for io::Error {
         io::Error::new(io::ErrorKind::Other, err)
     }
 }
+
+/// Includes the binary data from a texture file needed to load a texture in the binary. The
+/// texture is ATM still decoded at runtime. 
+#[macro_export]
+macro_rules! include_texture { ($SOURCE:expr) => {{
+    let _: &str = $SOURCE; // Type-checking
+
+    let mut texture = $crate::texture::Texture::new();
+
+    let bytes = include_bytes!($SOURCE);
+    let data = match $crate::texture::RawImageData::from_bytes(bytes, $SOURCE) {
+        Ok(d) => d,
+        Err(err) => panic!("Could not decode {}: {}", $SOURCE, err),
+    };
+
+    match texture.load_raw_image_data(data) {
+        Ok(()) => {},
+        Err(err) => panic!("Could not decode {}: {}", $SOURCE, err),
+    }
+
+    texture
+}}; }

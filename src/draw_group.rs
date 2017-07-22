@@ -163,6 +163,16 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         Ok(())
     }
 
+    /// Associates the given font with the given key.
+    pub fn include_font(&mut self, key: FontKey, font: Font) { 
+        self.fonts.insert(key, font);
+    }
+
+    /// Associates the given texture with the given key.
+    pub fn include_texture(&mut self, key: TexKey, texture: Texture) { 
+        self.textures.insert(key, texture);
+    }
+
     /// Removes all vertices and state commands in this group.
     pub fn reset(&mut self) {
         for layer in 0..LAYER_COUNT {
