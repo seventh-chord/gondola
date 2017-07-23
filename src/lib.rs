@@ -17,7 +17,6 @@ mod color;
 mod input;
 mod window;
 
-#[macro_use]
 pub mod texture;
 #[macro_use]
 pub mod shader;

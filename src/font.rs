@@ -57,6 +57,16 @@ impl Font {
         Ok(Font::with_rusttype_font(font))
     }
 
+    /// Constructs a font from raw data bytes. This can be used in conjunction with the
+    /// `include_bytes!(...)` macro. This function expects fonts in the same format as
+    /// `Font::from_file`.
+    pub fn from_bytes(bytes: &'static [u8]) -> Font {
+        let font_collection = rusttype::FontCollection::from_bytes(bytes);
+        let font = font_collection.font_at(0).unwrap();
+
+        Font::with_rusttype_font(font)
+    }
+
     fn with_rusttype_font(font: rusttype::Font<'static>) -> Font {
         let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.5, 0.5);
 

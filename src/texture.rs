@@ -40,6 +40,17 @@ impl Texture {
         Ok(texture)
     }
 
+    /// Creates a texturer from the bytes in a image file. The bytes can be sourced with the
+    /// `include_bytes!` macro. `source` is only used for context in error messages.
+    pub fn from_bytes(bytes: &[u8], source: &str) -> Result<Texture, TextureError> {
+        let mut texture = Texture::new();
+
+        let data = RawImageData::from_bytes(bytes, source)?;
+        texture.load_raw_image_data(data)?;
+
+        Ok(texture)
+    }
+
     /// Creates a new texture without any ascociated data. Use can use [`load_file`],
     /// [`load_raw_image_data`] and [`load_data`] to set the data to be used used
     /// with this texture.
@@ -439,25 +450,3 @@ impl From<TextureError> for io::Error {
         io::Error::new(io::ErrorKind::Other, err)
     }
 }
-
-/// Includes the binary data from a texture file needed to load a texture in the binary. The
-/// texture is ATM still decoded at runtime. 
-#[macro_export]
-macro_rules! include_texture { ($SOURCE:expr) => {{
-    let _: &str = $SOURCE; // Type-checking
-
-    let mut texture = $crate::texture::Texture::new();
-
-    let bytes = include_bytes!($SOURCE);
-    let data = match $crate::texture::RawImageData::from_bytes(bytes, $SOURCE) {
-        Ok(d) => d,
-        Err(err) => panic!("Could not decode {}: {}", $SOURCE, err),
-    };
-
-    match texture.load_raw_image_data(data) {
-        Ok(()) => {},
-        Err(err) => panic!("Could not decode {}: {}", $SOURCE, err),
-    }
-
-    texture
-}}; }
