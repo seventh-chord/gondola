@@ -216,6 +216,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         self.shader.set_uniform("transform", transform);
 
         for layer in 0..LAYER_COUNT {
+            graphics::set_scissor(None, win_size);
             self.white_texture.bind(0);
             self.shader.set_uniform("layer", layer as f32 / LAYER_COUNT as f32);
 
