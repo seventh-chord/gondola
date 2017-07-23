@@ -290,6 +290,31 @@ impl Font {
         (range, caret_pos)
     }
 
+    /// Calculates the index of the last completly visible character, and the width of the total
+    /// visible text (Not including partially visible characters) if the text where to be drawn in
+    /// a constrained space.
+    ///
+    /// Not tested for multiline strings!
+    pub fn cutoff(&self, text: &str, text_size: f32, space: f32) -> (usize, f32) {
+        let mut index = 0;
+        let mut width = 0.0;
+
+        let mut prev = (0, 0.0);
+
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        for PlacementInfo { caret, str_index, .. } in iter.clone() {
+            if caret.x > space {
+                break;
+            } else {
+                prev = (index, width);
+                index = str_index;
+                width = caret.x;
+            }
+        }
+
+        prev
+    }
+
     /// Finds the index of the character that would be under the cursor if the cursor is at the
     /// given x-offset (`pos`) from the start of where the text is drawn. The returned index is
     /// a byte index to the given piece of text.
