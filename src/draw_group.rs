@@ -667,6 +667,40 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
             self.connected_line_segment(a, b, c, d, width, color);
         }
     }
+    
+    /// Draws a line loop with neatly connected line corners. The first and last points of the loop
+    /// are not connected. This is not really a loop.
+    pub fn open_line_loop(&mut self, points: &[Vec2<f32>], width: f32, color: Color) {
+        if points.len() < 2 {
+            return;
+        } else if points.len() == 2 {
+            self.line(points[0], points[1], width, color);
+            return;
+        }
+
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
+
+        let b = points[0]; 
+        let c = points[1]; 
+        let d = points[2]; 
+        let a = b*2.0 - c;
+        self.connected_line_segment(a, b, c, d, width, color);
+
+        for i in 1..(points.len() - 1) {
+            let a = points[(i-1) % points.len()]; 
+            let b = points[(i) % points.len()]; 
+            let c = points[(i+1) % points.len()]; 
+            let d = points[(i+2) % points.len()]; 
+
+            self.connected_line_segment(a, b, c, d, width, color);
+        }
+
+        let a = points[points.len() - 3]; 
+        let b = points[points.len() - 2]; 
+        let c = points[points.len() - 1]; 
+        let d = c*2.0 - b;
+        self.connected_line_segment(a, b, c, d, width, color);
+    }
 
     /// Draws a line between `b` and `c` which are part of the line semgnet `a b c d`.
     pub fn connected_line_segment(
