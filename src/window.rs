@@ -620,6 +620,8 @@ mod windows {
         close_requested: bool,
         resized: bool,
         moved: bool,
+
+        mouse_captured: bool,
     }
 
     fn encode_wide(s: &str) -> Vec<u16> {
@@ -1004,6 +1006,7 @@ mod windows {
                 close_requested: false,
                 resized: false,
                 moved: false,
+                mouse_captured: false,
             }
         } 
 
@@ -1107,6 +1110,27 @@ mod windows {
 
                         let state = if down { KeyState::Pressed } else { KeyState::Released };
                         input.mouse_states[code] = state;
+
+                        let mut any_down = false;
+                        for state in input.mouse_states.iter() {
+                            if state.down() {
+                                any_down = true;
+                                break;
+                            }
+                        }
+
+                        // As long as any mouse buttons are down we want to capture the mouse. This
+                        // allows draging stuff around to work even when the mouse temporarily
+                        // leaves the window.
+                        let mouse_captured = any_down;
+                        if mouse_captured != self.mouse_captured {
+                            self.mouse_captured = mouse_captured;
+                            if self.mouse_captured {
+                                unsafe { ffi::SetCapture(self.window) };
+                            } else {
+                                unsafe { ffi::ReleaseCapture() };
+                            }
+                        }
                     },
                 }
             }
