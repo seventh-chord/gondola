@@ -199,4 +199,14 @@ impl Region {
             max: self.max - self.min,
         }
     }
+
+    /// Assumes that `min` is top left and `max` bottom right
+    pub fn top_right(self) -> Vec2<f32> {
+        Vec2::new(min.y, max.x)
+    }
+
+    /// Assumes that `min` is top left and `max` bottom right
+    pub fn bottom_left(self) -> Vec2<f32> {
+        Vec2::new(max.y, min.x)
+    }
 }
