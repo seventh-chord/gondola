@@ -247,8 +247,8 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
 
                             current_tex = new_tex;
                             match current_tex {
-                                SamplerId::Solid     => self.white_texture.bind(0),
-                                SamplerId::Font(key) => self.fonts[&key].texture().bind(0),
+                                SamplerId::Solid         => self.white_texture.bind(0),
+                                SamplerId::Font(key)     => self.fonts[&key].texture().bind(0),
                                 SamplerId::Texture(key)  => self.textures[&key].bind(0),
                             }
                         }

@@ -267,3 +267,18 @@ pub enum BlendFunction {
     /// `max(Dst, Src)`
     Max             = gl::MAX,
 }
+
+/// Changes how polygons are rasterized. By default this is set to `Fill`. `Line` means only
+/// outlines of polygons are drawn, and `Point` means only individual vertices are drawn. This
+/// works even with custom shaders.
+pub fn set_polygon_mode(mode: PolygonMode) {
+    unsafe { gl::PolygonMode(gl::FRONT_AND_BACK, mode as GLenum) };
+}
+
+#[repr(u32)] // GLenum is u32
+#[derive(Copy, Clone, Debug)]
+pub enum PolygonMode {
+    Line  = gl::LINE, 
+    Point = gl::POINT, 
+    Fill  = gl::FILL,
+}
