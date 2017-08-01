@@ -39,10 +39,53 @@ impl<T: Num + Float + Copy> Quaternion<T> {
         let axis = axis.normalize();
         let angle = angle / (T::one() + T::one());
         let (sin, cos) = angle.sin_cos();
+
         Quaternion {
             x: axis.x*sin,
             y: axis.y*sin,
             z: axis.z*sin,
+            w: cos,
+        }
+    }
+    
+    /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
+    /// x-axis.
+    pub fn rotation_x(angle: T) -> Quaternion<T> {
+        let angle = angle / (T::one() + T::one());
+        let (sin, cos) = angle.sin_cos();
+
+        Quaternion {
+            x: sin,
+            y: T::zero(),
+            z: T::zero(),
+            w: cos,
+        }
+    }
+
+    /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
+    /// y-axis.
+    pub fn rotation_y(angle: T) -> Quaternion<T> {
+        let angle = angle / (T::one() + T::one());
+        let (sin, cos) = angle.sin_cos();
+
+        Quaternion {
+            x: T::zero(),
+            y: sin,
+            z: T::zero(),
+            w: cos,
+        }
+    }
+
+    /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
+    /// z-axis.
+    pub fn rotation_z(angle: T) -> Quaternion<T> {
+        let angle = angle / (T::one() + T::one());
+        let (sin, cos) = angle.sin_cos();
+
+        Quaternion {
+            x: T::zero(),
+            y: T::zero(),
+            z: sin,
             w: cos,
         }
     }
@@ -82,6 +125,17 @@ impl<T: Num + Float + Copy> Quaternion<T> {
             (a*(T::one() - t) - b*t).normalize()
         } else {
             (a*(T::one() - t) + b*t).normalize()
+        }
+    }
+
+    /// Returns a quaternion represention the oposite rotation. This inverts the x, y and z
+    /// components of this quaternion.
+    pub fn conjugate(self) -> Quaternion<T> {
+        Quaternion {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+            w: self.w,
         }
     }
 }
