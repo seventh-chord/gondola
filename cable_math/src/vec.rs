@@ -108,7 +108,14 @@ impl<T: Num + Copy> Vec2<T> {
         let len = ray.x*ray.x + ray.y*ray.y;
         ray * (dot / len)
     }
+
+    /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
+    /// inclusive, where 0 gives just `a` and 1 gives just `b`.
+    pub fn lerp(a: Self, b: Self, t: T) -> Self {
+        a*(T::one() - t) + b*t
+    }
 }
+
 impl<T: Num + Copy> Vec3<T> {
     /// Creates a new vector with all components set to 0
     pub fn zero() -> Vec3<T> { Vec3 { x: T::zero(), y: T::zero(), z: T::zero() } }
@@ -131,7 +138,14 @@ impl<T: Num + Copy> Vec3<T> {
             z: a.x*b.y - a.y*b.x,
         }
     }
+
+    /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
+    /// inclusive, where 0 gives just `a` and 1 gives just `b`.
+    pub fn lerp(a: Self, b: Self, t: T) -> Self {
+        a*(T::one() - t) + b*t
+    }
 }
+
 impl<T: Num + Copy> Vec4<T> {
     /// Creates a new vector with all components set to 0
     pub fn zero() -> Vec4<T> { Vec4 { x: T::zero(), y: T::zero(), z: T::zero(), w: T::zero() } }
@@ -145,6 +159,12 @@ impl<T: Num + Copy> Vec4<T> {
 
     pub fn dot(a: Vec4<T>, b: Vec4<T>) -> T {
         a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w
+    }
+    
+    /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
+    /// inclusive, where 0 gives just `a` and 1 gives just `b`.
+    pub fn lerp(a: Self, b: Self, t: T) -> Self {
+        a*(T::one() - t) + b*t
     }
 }
 
