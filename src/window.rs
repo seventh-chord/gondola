@@ -95,6 +95,7 @@ mod linux {
         ic: ffi::XIC,
 
         wm_delete_window: ffi::Atom,
+        cursors: [u64; CURSOR_TYPE_COUNT],
 
         close_requested: bool,
         resized: bool,
@@ -213,6 +214,22 @@ mod linux {
 
             let title = CString::new(title).unwrap();
             unsafe { (xlib.XStoreName)(display, window, title.into_raw()); }
+
+            // Load cursors
+            let cursors = unsafe {
+                let mut cursors: [u64; CURSOR_TYPE_COUNT] = mem::uninitialized();
+                for (i, &ty) in ALL_CURSOR_TYPES.iter().enumerate() {
+                    // Stuff is not defined in the x11 crate, and I can't be arsed to create proper
+                    // definitions, so I just copy the values here from `/usr/include/X11/cursorfont.h`
+                    let cursor = match ty {
+                        CursorType::Normal    => 2,
+                        CursorType::Clickable => 58, // or 60 for different hand
+                    };
+
+                    cursors[i] = (xlib.XCreateFontCursor)(display, cursor);
+                }
+                cursors
+            };
 
             // Finish setting up OpenGL
             let _context = unsafe {
@@ -340,6 +357,7 @@ mod linux {
                 im,
                 ic,
                 wm_delete_window,
+                cursors,
                 region,
 
                 close_requested: false,
@@ -515,18 +533,25 @@ mod linux {
             }
         }
 
-        fn close_requested(&self) -> bool { self.close_requested }
-        fn resized(&self) -> bool { self.resized }
-        fn moved(&self) -> bool { self.resized }
-        fn screen_region(&self) -> Region { self.region }
+        fn close_requested(&self) -> bool   { self.close_requested }
+        fn resized(&self) -> bool           { self.resized }
+        fn moved(&self) -> bool             { self.resized }
+        fn screen_region(&self) -> Region   { self.region }
 
         fn change_title(&mut self, title: &str) {
             let title = CString::new(title).unwrap();
-            unsafe { (self.xlib.XStoreName)(self.display, self.window, title.into_raw()); }
+            unsafe { (self.xlib.XStoreName)(self.display, self.window, title.into_raw()) };
         }
 
         fn set_vsync(&mut self, vsync: bool) {
-            unimplemented!()
+//            unimplemented!() // Heh
+        }
+
+        fn set_cursor(&mut self, cursor: CursorType) {
+            unsafe { (self.xlib.XDefineCursor)(
+                self.display, self.window,
+                self.cursors[cursor as usize],
+            ) };
         }
     }
 
