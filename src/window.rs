@@ -82,6 +82,9 @@ mod linux {
         pub(super) use super::x11_dl::glx::arb::*;
 
         pub const GLX_RGBA_TYPE: i32 = 0x8014; // From /usr/include/GL/glx.h
+
+        #[allow(non_camel_case_types)]
+        pub type glXSwapIntervalEXT = extern "system" fn(*mut Display, GLXDrawable, i32);
     }
 
     pub struct Window {
@@ -96,6 +99,7 @@ mod linux {
 
         wm_delete_window: ffi::Atom,
         cursors: [u64; CURSOR_TYPE_COUNT],
+        swap_function: ffi::glXSwapIntervalEXT,
 
         close_requested: bool,
         resized: bool,
@@ -232,6 +236,7 @@ mod linux {
             };
 
             // Finish setting up OpenGL
+            // (_context is not used anywhere, hence the underscore)
             let _context = unsafe {
                 #[allow(non_camel_case_types)]
                 type glXCreateContextAttribsARB = extern "system" fn(
@@ -311,6 +316,21 @@ mod linux {
     //            println!("{}", version);
             }
 
+            // Vsync stuff
+            // TODO: This is not completly correct, we should be checking for extensions
+            // before retrieving the function. See https://www.khronos.org/opengl/wiki/Swap_Interval
+            // for more info.
+            let swap_function = unsafe { 
+                let function = (glx.glXGetProcAddress)(b"glXSwapIntervalEXT\0".as_ptr());
+                if let Some(function) = function {
+                    mem::transmute::<_, ffi::glXSwapIntervalEXT>(function)
+                } else {
+                    panic!(
+                        "Could not retrieve glXSwapIntervalEXT."
+                    )
+                }
+            };
+
             // Create IM and IC (Input method and context)
             let im = unsafe {
                 let im = (xlib.XOpenIM)(display, ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
@@ -358,6 +378,7 @@ mod linux {
                 ic,
                 wm_delete_window,
                 cursors,
+                swap_function,
                 region,
 
                 close_requested: false,
@@ -544,7 +565,7 @@ mod linux {
         }
 
         fn set_vsync(&mut self, vsync: bool) {
-//            unimplemented!() // Heh
+            (self.swap_function)(self.display, self.window, if vsync { 1 } else { 0 });
         }
 
         fn set_cursor(&mut self, cursor: CursorType) {
