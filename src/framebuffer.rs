@@ -28,7 +28,9 @@ pub struct FramebufferProperties {
     pub multisample: Option<usize>,
     /// The color formats in which color data is stored internally. The OpenGL spec states that at
     /// least 8 attachments will be supported, and in practice no card supports more than this.
-    pub color_formats: [Option<TextureFormat>; MAX_COLOR_ATTACHMENTS],
+    /// Currently, the implementation panic when trying to build a framebuffer with more than 8
+    /// color formats.
+    pub color_formats: Vec<TextureFormat>,
     /// If `true` a depthbuffer will be added to framebuffers
     pub depth_buffer: bool,
 }
@@ -38,7 +40,7 @@ impl Default for FramebufferProperties {
         FramebufferProperties {
             size: Vec2::zero(),
             multisample: None,
-            color_formats: [Some(TextureFormat::RGB_8), None, None, None, None, None, None, None],
+            color_formats: vec![TextureFormat::RGB_8],
             depth_buffer: false,
         }
     }
@@ -49,7 +51,7 @@ impl FramebufferProperties {
         FramebufferProperties {
             size,
             multisample: None,
-            color_formats: [Some(TextureFormat::RGB_8), None, None, None, None, None, None, None],
+            color_formats: vec![TextureFormat::RGB_8],
             depth_buffer: false,
         }
     }
@@ -103,11 +105,17 @@ impl Framebuffer {
 
             let texture_target = if properties.multisample.is_none() { gl::TEXTURE_2D } else { gl::TEXTURE_2D_MULTISAMPLE };
 
+            if properties.color_formats.len() >= MAX_COLOR_ATTACHMENTS {
+                panic!("Unsuported: Currently you can only have 8 color attachments!!!");
+            }
+
             // Add draw buffers
             let mut draw_buffers: [GLenum; MAX_COLOR_ATTACHMENTS] = Default::default();
             for i in 0..MAX_COLOR_ATTACHMENTS {
                 // Add a color attachment
-                if let Some(format) = properties.color_formats[i] {
+                if properties.color_formats.len() > i {
+                    let format = properties.color_formats[i];
+
                     let attachment = gl::COLOR_ATTACHMENT0 + (i as GLenum);
                     draw_buffers[i] = attachment;
 
@@ -131,11 +139,11 @@ impl Framebuffer {
                             format.unsized_format(), format.gl_primitive_enum(), 
                             ::std::ptr::null()
                         ); // Data for texture
-                        gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
+
                         gl::TexParameteri(texture_target, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
                         gl::TexParameteri(texture_target, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
-                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_BORDER as GLint);
-                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_BORDER as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as GLint);
+                        gl::TexParameteri(texture_target, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as GLint);
                     }
 
                     gl::FramebufferTexture(gl::FRAMEBUFFER, attachment, texture, 0);

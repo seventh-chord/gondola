@@ -195,9 +195,11 @@ mod linux {
                 .. unsafe { mem::zeroed() }
             };
 
+            let center = Vec2::new(500.0, 400.0);
+            let size = Vec2::new(640.0, 480.0);
             let region = Region {
-                min: Vec2::new(0.0, 0.0),
-                max: Vec2::new(600.0, 600.0),
+                min: center/2.0 - size/2.0,
+                max: center/2.0 + size/2.0,
             };
 
             let window = unsafe { (xlib.XCreateWindow)(
@@ -330,6 +332,9 @@ mod linux {
                     )
                 }
             };
+
+            // Disable vsync initially
+            swap_function(display, window, 0);
 
             // Create IM and IC (Input method and context)
             let im = unsafe {
