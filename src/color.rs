@@ -186,6 +186,7 @@ impl VertexData for Color {
     fn bytes() -> usize { std::mem::size_of::<f32>() * 4 }
     fn primitives() -> usize { 4 }
 }
+
 impl UniformValue for Color {
     unsafe fn set_uniform(color: &Color, location: GLint) {
         gl::Uniform4f(location, color.r, color.g, color.b, color.a);
@@ -193,6 +194,12 @@ impl UniformValue for Color {
 
     unsafe fn set_uniform_slice(colors: &[Color], location: GLint) {
         gl::Uniform4fv(location, colors.len() as GLsizei, colors.as_ptr() as *const GLfloat);
+    }
+}
+
+impl From<u32> for Color {
+    fn from(v: u32) -> Color {
+        Color::hex_int(v)
     }
 }
 
