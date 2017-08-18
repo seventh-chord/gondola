@@ -1,9 +1,11 @@
 
 //! A color type, with utility methods for modifying colors and parsing colors from hex integers and strings. 
 
+use std::mem;
+use std::str::FromStr;
+
 use gl;
 use gl::types::*;
-use std;
 use shader::UniformValue;
 use buffer::VertexData;
 
@@ -81,7 +83,7 @@ impl Color {
     /// "rrggbb", where each of r, g and b is a hexadecimal digit. Note that this currently does
     /// not support loading colors with a alpha channel. All colors created will be completly
     /// opaque.
-    pub fn hex(string: &str) -> Option<Color> {
+    pub fn hex_str(string: &str) -> Option<Color> {
         let value = {
             if string.len() == 6 {
                 u32::from_str_radix(string, 16)
@@ -183,7 +185,7 @@ fn clamp(value: f32, min: f32, max: f32) -> f32 {
 
 impl VertexData for Color {
     type Primitive = f32;
-    fn bytes() -> usize { std::mem::size_of::<f32>() * 4 }
+    fn bytes() -> usize { mem::size_of::<f32>() * 4 }
     fn primitives() -> usize { 4 }
 }
 
@@ -200,6 +202,17 @@ impl UniformValue for Color {
 impl From<u32> for Color {
     fn from(v: u32) -> Color {
         Color::hex_int(v)
+    }
+}
+
+impl FromStr for Color {
+    type Err = (); // User can probably see why his color failed to parse on inspection
+
+    fn from_str(s: &str) -> Result<Color, ()> {
+        match Color::hex_str(s) {
+            Some(c) => Ok(c),
+            None    => Err(()),
+        }
     }
 }
 
