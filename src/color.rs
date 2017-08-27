@@ -246,7 +246,7 @@ mod serialize {
         }
 
         fn visit_str<E: Error>(self, v: &str) -> Result<Self::Value, E> {
-            match Color::hex(v) {
+            match Color::hex_str(v) {
                 Some(color) => Ok(color),
                 None =>        Err(E::custom(format!("\"{}\" is not a valid color string", v))),
             }
