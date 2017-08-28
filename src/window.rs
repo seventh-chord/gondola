@@ -705,62 +705,67 @@ mod windows {
     // This is WNDPROC
     unsafe extern "system" 
     fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
-        let event = match msg {
+        let maybe_event = match msg {
             ffi::WM_SIZE => {
                 let width = ffi::LOWORD(l as ffi::DWORD) as u32;
                 let height = ffi::HIWORD(l as ffi::DWORD) as u32;
-                RawEvent::Resized(Vec2::new(width, height).as_f32())
+                Some(RawEvent::Resized(Vec2::new(width, height).as_f32()))
             },
 
             ffi::WM_MOVE => {
                 let x = ffi::LOWORD(l as ffi::DWORD) as u32;
                 let y = ffi::HIWORD(l as ffi::DWORD) as u32;
-                RawEvent::Moved(Vec2::new(x, y).as_f32())
+                Some(RawEvent::Moved(Vec2::new(x, y).as_f32()))
             },
 
             ffi::WM_CLOSE => {
-                RawEvent::CloseRequest
+                Some(RawEvent::CloseRequest)
             },
 
             ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
-                let down = msg == ffi::WM_KEYDOWN;
-                let scancode = ((l as usize) >> 16) & 0xff;
-                RawEvent::Key(down, scancode)
+                let down         = msg == ffi::WM_KEYDOWN;
+                let scancode     = ((l as usize) >> 16) & 0xff;
+                //let prev_down    = ((l >> 30 ) & 1) == 1;
+                //let repeat_count = (l as usize) & 0xffff;
+
+                Some(RawEvent::Key(down, scancode))
             },
 
             ffi::WM_CHAR => {
-                RawEvent::Char(w as u16)
+                Some(RawEvent::Char(w as u16))
             },
 
             ffi::WM_MOUSEWHEEL => {
                 let delta = ffi::GET_WHEEL_DELTA_WPARAM(w) as f32 / ffi::WHEEL_DELTA as f32;
-                RawEvent::Scroll(delta)
+                Some(RawEvent::Scroll(delta))
             },
 
             ffi::WM_MOUSEMOVE => {
                 let x = ffi::GET_X_LPARAM(l);
                 let y = ffi::GET_Y_LPARAM(l);
                 let pos = Vec2::new(x, y).as_f32();
-                RawEvent::MouseMove(pos)
+                Some(RawEvent::MouseMove(pos))
             },
 
-            ffi::WM_LBUTTONDOWN => RawEvent::MouseButton(true, 0),
-            ffi::WM_LBUTTONUP   => RawEvent::MouseButton(false, 0),
-            ffi::WM_MBUTTONDOWN => RawEvent::MouseButton(true, 2),
-            ffi::WM_MBUTTONUP   => RawEvent::MouseButton(false, 2),
-            ffi::WM_RBUTTONDOWN => RawEvent::MouseButton(true, 1),
-            ffi::WM_RBUTTONUP   => RawEvent::MouseButton(false, 1),
+            ffi::WM_LBUTTONDOWN => Some(RawEvent::MouseButton(true, 0)),
+            ffi::WM_LBUTTONUP   => Some(RawEvent::MouseButton(false, 0)),
+            ffi::WM_MBUTTONDOWN => Some(RawEvent::MouseButton(true, 2)),
+            ffi::WM_MBUTTONUP   => Some(RawEvent::MouseButton(false, 2)),
+            ffi::WM_RBUTTONDOWN => Some(RawEvent::MouseButton(true, 1)),
+            ffi::WM_RBUTTONUP   => Some(RawEvent::MouseButton(false, 1)),
 
             _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
         };
 
-        MSG_SENDER.with(|sender| {
-            if let Some(ref sender) = *sender.borrow() {
-                sender.send(event).unwrap();
-            } else {
-                panic!("`event_callback` called from unkown thread");
-            }
-        });
+        if let Some(event) = maybe_event {
+            MSG_SENDER.with(|sender| {
+                if let Some(ref sender) = *sender.borrow() {
+                    sender.send(event).unwrap();
+                } else {
+                    panic!("`event_callback` called from unkown thread");
+                }
+            });
+        }
 
         return 0;
     }
@@ -1117,11 +1122,11 @@ mod windows {
                         self.close_requested = true;
                     },
 
-                    Key(down, code) => {
+                    Key(pressed, code) => {
                         input.changed = true;
 
                         let ref mut state = input.keyboard_states[code];
-                        *state = if down {
+                        *state = if pressed {
                             if state.down() {
                                 KeyState::PressedRepeat
                             } else {

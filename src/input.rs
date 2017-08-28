@@ -49,12 +49,14 @@ impl InputManager {
         self.type_buffer.clear();
 
         for state in self.mouse_states.iter_mut() {
-            if *state == KeyState::Released { *state = KeyState::Up; }
-            if *state == KeyState::Pressed  { *state = KeyState::Down; }
+            if *state == KeyState::Released       { *state = KeyState::Up; }
+            if *state == KeyState::Pressed        { *state = KeyState::Down; }
+            if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
         }
         for state in self.keyboard_states.iter_mut() {
-            if *state == KeyState::Released { *state = KeyState::Up; }
-            if *state == KeyState::Pressed  { *state = KeyState::Down; }
+            if *state == KeyState::Released       { *state = KeyState::Up; }
+            if *state == KeyState::Pressed        { *state = KeyState::Down; }
+            if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
         }
 
         self.changed = false; 
