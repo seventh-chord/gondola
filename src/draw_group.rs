@@ -337,8 +337,16 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         self.current_layer = layer;
     }
 
+    /// Retrieves a reference to the font, or panics if no font has been registered for the given
+    /// key.
     pub fn font(&self, key: FontKey) -> &Font {
         &self.fonts[&key]
+    }
+    
+    /// Retrieves a reference to the texture, or panics if no texture has been registered for the 
+    /// given key.
+    pub fn texture(&self, key: TexKey) -> &Texture {
+        &self.textures[&key]
     }
 
     /// Retrieves the current clipping rectangle. The returned region is the region to which
