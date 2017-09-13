@@ -63,6 +63,10 @@ impl<T: Num + Copy> Vec2<T> {
         a.x*b.x + a.y*b.y
     }
 
+    pub fn entrywise(a: Vec2<T>, b: Vec2<T>) -> Vec2<T> {
+        Vec2::new(a.x*b.x, a.y*b.y)
+    }
+
     /// Calculates the 2D cross product of the given vectors. This is equal
     /// the `z` component of the 3D cross product of two 3D vectors with the
     /// same `x` and `y` components, and with `z = 0`.
@@ -131,6 +135,10 @@ impl<T: Num + Copy> Vec3<T> {
         a.x*b.x + a.y*b.y + a.z*b.z
     }
 
+    pub fn entrywise(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
+        Vec3::new(a.x*b.x, a.y*b.y, a.z*b.z)
+    }
+
     pub fn cross(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
         Vec3 {
             x: a.y*b.z - a.z*b.y,
@@ -159,6 +167,10 @@ impl<T: Num + Copy> Vec4<T> {
 
     pub fn dot(a: Vec4<T>, b: Vec4<T>) -> T {
         a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w
+    }
+
+    pub fn entrywise(a: Vec4<T>, b: Vec4<T>) -> Vec4<T> {
+        Vec4::new(a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w)
     }
     
     /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
@@ -808,16 +820,32 @@ macro_rules! impl_cast {
     };
 }
 
+impl_cast!(u8,  f32, as_f32);
+impl_cast!(i8,  f32, as_f32);
+impl_cast!(u16, f32, as_f32);
+impl_cast!(i16, f32, as_f32);
 impl_cast!(u32, f32, as_f32);
 impl_cast!(i32, f32, as_f32);
 impl_cast!(u64, f32, as_f32);
 impl_cast!(i64, f32, as_f32);
 
+impl_cast!(u8,  f64, as_f64);
+impl_cast!(i8,  f64, as_f64);
+impl_cast!(u16, f64, as_f64);
+impl_cast!(i16, f64, as_f64);
 impl_cast!(u32, f64, as_f64);
 impl_cast!(i32, f64, as_f64);
 impl_cast!(u64, f64, as_f64);
 impl_cast!(i64, f64, as_f64);
 
+impl_cast!(f32, i8,  as_i8);
+impl_cast!(f64, i8,  as_i8); 
+impl_cast!(f32, u8,  as_u8);
+impl_cast!(f64, u8,  as_u8); 
+impl_cast!(f32, i16, as_i16);
+impl_cast!(f64, i16, as_i16); 
+impl_cast!(f32, u16, as_u16);
+impl_cast!(f64, u16, as_u16); 
 impl_cast!(f32, i32, as_i32);
 impl_cast!(f64, i32, as_i32); 
 impl_cast!(f32, u32, as_u32);
