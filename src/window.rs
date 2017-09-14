@@ -5,6 +5,7 @@ use Region;
 use input::{KeyState, InputManager};
 use graphics;
 
+// Since most of the lib is written expecting gl 3.3 we currently don't allow customizing this.
 #[derive(Debug, Copy, Clone)]
 pub struct GlRequest {
     version: (u32, u32),
@@ -37,8 +38,23 @@ const ALL_CURSOR_TYPES: [CursorType; CURSOR_TYPE_COUNT] = [
     CursorType::Clickable,
 ];
 
+/// Because a different `struct Window` is used per platform, all functions are defined on this
+/// trait.
+///
+/// # Example
+/// ```rust,no_run
+/// use gondola::{Window, WindowCommon};
+///
+/// let mut window = Window::new("My title");
+///
+/// while !window.close_requested {
+///     // Update and render
+///
+///     window.swap_buffers();
+/// }
+/// ```
 pub trait WindowCommon: Drop {
-    fn new(title: &str, gl_request: GlRequest) -> Self;
+    fn new(title: &str) -> Self;
     fn show(&mut self);
 
     fn poll_events(&mut self, input: &mut InputManager);
@@ -109,7 +125,9 @@ mod linux {
     }
 
     impl WindowCommon for Window {
-        fn new(title: &str, gl_request: GlRequest) -> Window {
+        fn new(title: &str) -> Window {
+            let gl_request = GlRequest::default();
+
             // Load xlib and glx
             let xlib = match ffi::Xlib::open() {
                 Ok(x) => x,
@@ -771,7 +789,9 @@ mod windows {
     }
 
     impl WindowCommon for Window {
-        fn new(title: &str, gl_request: GlRequest) -> Window {
+        fn new(title: &str) -> Window {
+            let gl_request = GlRequest::default();
+
             let instance = unsafe { ffi::GetModuleHandleW(ptr::null()) };
 
             let class_name = encode_wide("My windows class is great");

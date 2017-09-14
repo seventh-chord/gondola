@@ -15,8 +15,7 @@ fn main() {
     let mut timer = Timer::new();
     let mut input = InputManager::new();
 
-    let gl_request = Default::default();
-    let mut window = Window::new("This is hopefully still a window", gl_request);
+    let mut window = Window::new("This is hopefully still a window");
 
     let mut draw_group = DrawGroup::new();
 

@@ -3,6 +3,24 @@
 //! utilities to make using OpenGL 3.3 safer. It uses rust's type system to encode some information
 //! which helps prevent common errors. This library is primarily intended to be used for games,
 //! but you can also use it to create other graphics applications.
+//!
+//! # Example
+//! Note: A more complete example can be found in `src/bin/window_demo.rs`.
+//!
+//! ```rust,no_run
+//! use gondola::{Window, WindowCommon, InputManager};
+//!
+//! let mut input = InputManager::new();
+//! let mut window = Window::new("My title");
+//!
+//! while !window.close_requested {
+//!     window.poll_events(input);
+//!
+//!     // Update and render here!
+//!
+//!     window.swap_buffers();
+//! }
+//! ```
 
 #[cfg(feature = "serialize")]
 extern crate serde;

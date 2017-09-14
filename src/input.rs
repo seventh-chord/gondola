@@ -26,9 +26,7 @@ pub struct InputManager {
 }
 
 impl InputManager {
-    /// Dont call this directly. Use [`GameState::gen_input_manager`] instead.
-    ///
-    /// [`GameState::gen_input_manager`]: struct.GameState.html#method.gen_input_manager
+    /// Creates a new input manager. Passed to `Window::poll_events` each frame to get updated.
     pub fn new() -> InputManager {
         InputManager {
             mouse_pos: Vec2::zero(),
@@ -83,6 +81,7 @@ impl InputManager {
     pub fn key(&self, key: Key) -> KeyState {
         self.keyboard_states[key as usize]
     }
+    
     /// Characters that have been typed. This is cleared each frame.
     pub fn typed(&self) -> &str {
         &self.type_buffer
@@ -93,6 +92,7 @@ impl InputManager {
         self.changed
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum KeyState {
@@ -107,6 +107,7 @@ pub enum KeyState {
     /// The button is not being held down. In the previous frame it was held down.
     Released,
 }
+
 impl KeyState {
     /// Returns true if the button is being held down (`Down` or `Pressed`) and
     /// false otherwise (`Up`, `Released` or `PressedRepeat`).
@@ -209,19 +210,5 @@ pub enum Key {
 
     F1 = 0x3b, F2 = 0x3c, F3 = 0x3d, F4 = 0x3e,  F5 = 0x3f,  F6 = 0x40,
     F7 = 0x41, F8 = 0x42, F9 = 0x43, F10 = 0x44, F11 = 0x57, F12 = 0x58,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CursorState {
-    Normal, 
-    /// The cursor is not drawn when over the game window. It can still move freely and leave the
-    /// window.
-    Hidden,
-    /// The cursor can not leave the game window.
-    Grabbed,
-    /// A comibnation of `Hidden` and `Grabbed`. In this state, the absolute position of the cursor
-    /// is constrained to (0, 0).
-    HiddenGrabbed,
-
 }
 
