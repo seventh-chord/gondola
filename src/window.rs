@@ -882,7 +882,7 @@ mod windows {
 
                 ffi::GetRawInputData(
                     l as _, ffi::RID_INPUT,
-                    bytes.as_ptr() as *mut _, &mut size,
+                    bytes.as_mut_ptr() as *mut _, &mut size,
                     mem::size_of::<ffi::RAWINPUTHEADER>() as u32,
                 );
                 let raw_input = (bytes.as_ptr() as *const ffi::RAWINPUT).as_ref().unwrap();
@@ -1373,26 +1373,30 @@ mod windows {
                 }
             }
 
+            // Mouse grabbing stuff
             if focus_changed {
                 self.clip_cursor(self.mouse_grabbed && self.focused);
             }
-
             if self.focused && self.mouse_grabbed {
                 let global_center = self.screen_region.center().as_i32();
                 let relative_center = self.screen_region.unpositioned().center().as_i32();
                 input.mouse_pos = relative_center.as_f32();
                 unsafe { ffi::SetCursorPos(global_center.x, global_center.y) };
             }
+
+            // Cursor stuff
+            if self.focused {
+                let cursor = self.cursors[self.cursor as usize];
+                unsafe { ffi::SetCursor(cursor) };
+            } else if focus_changed {
+                let cursor = self.cursors[CursorType::Normal as usize];
+                unsafe { ffi::SetCursor(cursor) };
+            }
         }
 
         fn swap_buffers(&mut self) {
             unsafe { 
-                ffi::SwapBuffers(self.device_context);
-
-                if self.window_hovered() {
-                    let cursor = self.cursors[self.cursor as usize];
-                    ffi::SetCursor(cursor);
-                }
+                ffi::SwapBuffers(self.device_context); 
             }
         }
 
@@ -1446,16 +1450,6 @@ mod windows {
     impl Window {
         pub fn window_handle(&self) -> ffi::HWND {
             self.window
-        }
-
-        fn window_hovered(&self) -> bool {
-            let mouse_pos = unsafe {
-                let mut p = ffi::POINT { x: 0, y: 0 };
-                ffi::GetCursorPos(&mut p);
-                Vec2::new(p.x, p.y).as_f32()
-            };
-
-            self.screen_region.contains(mouse_pos)
         }
 
         fn clip_cursor(&self, clip: bool) {
