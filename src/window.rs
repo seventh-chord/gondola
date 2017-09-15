@@ -568,7 +568,10 @@ mod linux {
 
                         let new_pos = Vec2::new(event.x, event.y).as_f32();
                         if new_pos != input.mouse_pos {
-                            input.mouse_delta += new_pos - input.mouse_pos;
+                            let delta = new_pos - input.mouse_pos;
+                            input.mouse_delta += delta;
+                            input.raw_mouse_delta += delta;
+
                             input.mouse_pos = new_pos;
                         }
                     },
@@ -818,7 +821,8 @@ mod windows {
         Key(bool, usize),
         Char(u16),
         Scroll(f32),
-        MouseMove(Vec2<f32>),
+        MousePos(Vec2<f32>),
+        MouseDelta(Vec2<f32>),
         MouseButton(bool, usize),
     }
 
@@ -828,71 +832,94 @@ mod windows {
 
     // This is WNDPROC
     unsafe extern "system" 
-        fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
-            let maybe_event = match msg {
-                ffi::WM_SIZE => {
-                    let width = ffi::LOWORD(l as ffi::DWORD) as u32;
-                    let height = ffi::HIWORD(l as ffi::DWORD) as u32;
-                    Some(RawEvent::Resized(Vec2::new(width, height).as_f32()))
-                },
+    fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT {
+        let maybe_event = match msg {
+            ffi::WM_SIZE => {
+                let width = ffi::LOWORD(l as ffi::DWORD) as u32;
+                let height = ffi::HIWORD(l as ffi::DWORD) as u32;
+                Some(RawEvent::Resized(Vec2::new(width, height).as_f32()))
+            },
 
-                ffi::WM_MOVE => {
-                    let x = ffi::LOWORD(l as ffi::DWORD) as u32;
-                    let y = ffi::HIWORD(l as ffi::DWORD) as u32;
-                    Some(RawEvent::Moved(Vec2::new(x, y).as_f32()))
-                },
+            ffi::WM_MOVE => {
+                let x = ffi::LOWORD(l as ffi::DWORD) as u32;
+                let y = ffi::HIWORD(l as ffi::DWORD) as u32;
+                Some(RawEvent::Moved(Vec2::new(x, y).as_f32()))
+            },
 
-                ffi::WM_CLOSE => {
-                    Some(RawEvent::CloseRequest)
-                },
+            ffi::WM_CLOSE => {
+                Some(RawEvent::CloseRequest)
+            },
 
-                ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
-                    let down         = msg == ffi::WM_KEYDOWN;
-                    let scancode     = ((l as usize) >> 16) & 0xff;
-                    //let prev_down    = ((l >> 30 ) & 1) == 1;
-                    //let repeat_count = (l as usize) & 0xffff;
+            ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
+                let down         = msg == ffi::WM_KEYDOWN;
+                let scancode     = ((l as usize) >> 16) & 0xff;
+                //let prev_down    = ((l >> 30 ) & 1) == 1;
+                //let repeat_count = (l as usize) & 0xffff;
 
-                    Some(RawEvent::Key(down, scancode))
-                },
+                Some(RawEvent::Key(down, scancode))
+            },
 
-                ffi::WM_CHAR => {
-                    Some(RawEvent::Char(w as u16))
-                },
+            ffi::WM_CHAR => {
+                Some(RawEvent::Char(w as u16))
+            },
 
-                ffi::WM_MOUSEWHEEL => {
-                    let delta = ffi::GET_WHEEL_DELTA_WPARAM(w) as f32 / ffi::WHEEL_DELTA as f32;
-                    Some(RawEvent::Scroll(delta))
-                },
+            ffi::WM_MOUSEWHEEL => {
+                let delta = ffi::GET_WHEEL_DELTA_WPARAM(w) as f32 / ffi::WHEEL_DELTA as f32;
+                Some(RawEvent::Scroll(delta))
+            },
 
-                ffi::WM_MOUSEMOVE => {
-                    let x = ffi::GET_X_LPARAM(l);
-                    let y = ffi::GET_Y_LPARAM(l);
-                    let pos = Vec2::new(x, y).as_f32();
-                    Some(RawEvent::MouseMove(pos))
-                },
+            ffi::WM_MOUSEMOVE => {
+                let x = ffi::GET_X_LPARAM(l);
+                let y = ffi::GET_Y_LPARAM(l);
+                let pos = Vec2::new(x, y).as_f32();
+                Some(RawEvent::MousePos(pos))
+            },
 
-                ffi::WM_LBUTTONDOWN => Some(RawEvent::MouseButton(true, 0)),
-                ffi::WM_LBUTTONUP   => Some(RawEvent::MouseButton(false, 0)),
-                ffi::WM_MBUTTONDOWN => Some(RawEvent::MouseButton(true, 2)),
-                ffi::WM_MBUTTONUP   => Some(RawEvent::MouseButton(false, 2)),
-                ffi::WM_RBUTTONDOWN => Some(RawEvent::MouseButton(true, 1)),
-                ffi::WM_RBUTTONUP   => Some(RawEvent::MouseButton(false, 1)),
+            ffi::WM_INPUT => {
+                let mut bytes = [0u8; 48];
+                let mut size = bytes.len() as u32;
+                assert_eq!(mem::size_of::<ffi::RAWINPUT>(), size as usize);
 
-                _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
-            };
+                ffi::GetRawInputData(
+                    l as _, ffi::RID_INPUT,
+                    bytes.as_ptr() as *mut _, &mut size,
+                    mem::size_of::<ffi::RAWINPUTHEADER>() as u32,
+                );
+                let raw_input = (bytes.as_ptr() as *const ffi::RAWINPUT).as_ref().unwrap();
 
-            if let Some(event) = maybe_event {
-                MSG_SENDER.with(|sender| {
-                    if let Some(ref sender) = *sender.borrow() {
-                        sender.send(event).unwrap();
-                    } else {
-                        panic!("`event_callback` called from unkown thread");
-                    }
-                });
-            }
+                if raw_input.header.dwType == ffi::RIM_TYPEMOUSE {
+                    let x = raw_input.mouse.lLastX;
+                    let y = raw_input.mouse.lLastY;
+                    let delta = Vec2::new(x, y).as_f32();
 
-            return 0;
+                    Some(RawEvent::MouseDelta(delta))
+                } else {
+                    None
+                }
+            },
+
+            ffi::WM_LBUTTONDOWN => Some(RawEvent::MouseButton(true, 0)),
+            ffi::WM_LBUTTONUP   => Some(RawEvent::MouseButton(false, 0)),
+            ffi::WM_MBUTTONDOWN => Some(RawEvent::MouseButton(true, 2)),
+            ffi::WM_MBUTTONUP   => Some(RawEvent::MouseButton(false, 2)),
+            ffi::WM_RBUTTONDOWN => Some(RawEvent::MouseButton(true, 1)),
+            ffi::WM_RBUTTONUP   => Some(RawEvent::MouseButton(false, 1)),
+
+            _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
+        };
+
+        if let Some(event) = maybe_event {
+            MSG_SENDER.with(|sender| {
+                if let Some(ref sender) = *sender.borrow() {
+                    sender.send(event).unwrap();
+                } else {
+                    panic!("`event_callback` called from unkown thread");
+                }
+            });
         }
+
+        return 0;
+    }
 
     impl WindowCommon for Window {
         fn new(title: &str) -> Window {
@@ -946,22 +973,22 @@ mod windows {
 
             // Actually create window 
             let window = unsafe { ffi::CreateWindowExW(
-                    // Extended style
-                    0, 
+                // Extended style
+                0, 
 
-                    class_name.as_ptr(),
-                    window_name.as_ptr(),
+                class_name.as_ptr(),
+                window_name.as_ptr(),
 
-                    ffi::WS_OVERLAPPEDWINDOW,
+                ffi::WS_OVERLAPPEDWINDOW,
 
-                    ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
-                    ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+                ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+                ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
 
-                    ptr::null_mut(), // Parent
-                    ptr::null_mut(), // Menu
-                    instance,
-                    ptr::null_mut(), // lParam
-                    ) };
+                ptr::null_mut(), // Parent
+                ptr::null_mut(), // Menu
+                instance,
+                ptr::null_mut(), // lParam
+            ) };
             if window.is_null() {
                 panic!("Failed to create window");
             } 
@@ -979,6 +1006,18 @@ mod windows {
             };
 
             let device_context = unsafe { ffi::GetDC(window) };
+
+            // Set up raw input
+            let raw_mouse_device = ffi::RAWINPUTDEVICE {
+                usUsagePage: 0x01,
+                usUsage:     0x02,
+                dwFlags:     ffi::RIDEV_INPUTSINK,
+                hwndTarget:  window,
+            };
+            unsafe { ffi::RegisterRawInputDevices(
+                &raw_mouse_device,
+                1, mem::size_of::<ffi::RAWINPUTDEVICE>() as u32,
+            ) };
 
             // Choose a pixel format
             let mut pixel_format_descriptor = ffi::PIXELFORMATDESCRIPTOR {
@@ -1288,12 +1327,20 @@ mod windows {
                         input.mouse_scroll += delta;
                     },
 
-                    MouseMove(new_pos) => {
-                        input.changed = true;
+                    MousePos(new_pos) => {
+                        if new_pos != input.mouse_pos {
+                            input.changed = true;
 
-                        let delta = new_pos - input.mouse_pos;
-                        input.mouse_delta += delta;
-                        input.mouse_pos = new_pos;
+                            input.mouse_delta += new_pos - input.mouse_pos;
+                            input.mouse_pos = new_pos;
+                        }
+                    },
+
+                    MouseDelta(delta) => {
+                        if delta != Vec2::zero() {
+                            input.changed = true;
+                            input.raw_mouse_delta += delta;
+                        }
                     },
 
                     MouseButton(down, code) => {

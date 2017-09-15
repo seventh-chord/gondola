@@ -17,6 +17,7 @@ const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
 pub struct InputManager {
     pub(crate) mouse_pos: Vec2<f32>,
     pub(crate) mouse_delta: Vec2<f32>,
+    pub(crate) raw_mouse_delta: Vec2<f32>,
     pub(crate) mouse_scroll: f32,
     pub(crate) mouse_states: [KeyState; MOUSE_KEYS],
     pub(crate) keyboard_states: [KeyState; KEYBOARD_KEYS],
@@ -32,6 +33,7 @@ impl InputManager {
         InputManager {
             mouse_pos: Vec2::zero(),
             mouse_delta: Vec2::zero(),
+            raw_mouse_delta: Vec2::zero(),
             mouse_scroll: 0.0,
             mouse_states: [KeyState::Up; MOUSE_KEYS],
             keyboard_states: [KeyState::Up; KEYBOARD_KEYS],
@@ -45,6 +47,7 @@ impl InputManager {
     // Called by `Window::poll_events` in the platform layer
     pub(crate) fn refresh(&mut self) {
         self.mouse_delta = Vec2::zero(); 
+        self.raw_mouse_delta = Vec2::zero(); 
         self.mouse_scroll = 0.0;
         self.type_buffer.clear();
 
@@ -62,13 +65,20 @@ impl InputManager {
         self.changed = false; 
     }
     
-    // Getters
     /// Position of the mouse cursor in pixels, relative to the top left corner of the screen
     pub fn mouse_pos(&self)   -> Vec2<f32> { self.mouse_pos }
-    /// The distance the mouse cursor moved in the last frame
+
+    /// The distance on screen the mouse cursor moved in the last frame
     pub fn mouse_delta(&self) -> Vec2<f32> { self.mouse_delta }
+
+    /// The distance the cursor moved, in unspecified units. This is the value reported directly
+    /// from the mouse, without software acceleartion and simillar. This value should be used for
+    /// e.g. first person cameras.
+    pub fn raw_mouse_delta(&self) -> Vec2<f32> { self.raw_mouse_delta }
+
     /// The number of units scrolled in the last frame
     pub fn mouse_scroll(&self) -> f32 { self.mouse_scroll }
+
     /// The state of the given mouse key. Panics if `key` is greater than 4. The left
     /// mouse key is 0, the right key is 1 and the middle key is 2.
     pub fn mouse_key(&self, key: u8) -> KeyState {
