@@ -668,7 +668,10 @@ mod linux {
                 return;
             }
             self.cursor_grabbed = grabbed;
-            self.internal_grab_cursor(grabbed);
+
+            if self.focused {
+                self.internal_grab_cursor(grabbed);
+            }
         }
     }
 
@@ -785,13 +788,15 @@ mod windows {
         swap_function: Option<ffi::wglSwapIntervalEXTType>,
         cursors: [ffi::HCURSOR; CURSOR_TYPE_COUNT],
 
-        cursor: CursorType,
         screen_region: Region,
         close_requested: bool,
         resized: bool,
         moved: bool,
+        focused: bool,
 
-        mouse_captured: bool,
+        cursor: CursorType,
+        mouse_captured: bool, // Cursor is dragging something out of the window, don't loose focus on release
+        mouse_grabbed: bool, // Cursor cant leave window
     }
 
     fn encode_wide(s: &str) -> Vec<u16> {
@@ -823,71 +828,71 @@ mod windows {
 
     // This is WNDPROC
     unsafe extern "system" 
-    fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
-        let maybe_event = match msg {
-            ffi::WM_SIZE => {
-                let width = ffi::LOWORD(l as ffi::DWORD) as u32;
-                let height = ffi::HIWORD(l as ffi::DWORD) as u32;
-                Some(RawEvent::Resized(Vec2::new(width, height).as_f32()))
-            },
+        fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT { 
+            let maybe_event = match msg {
+                ffi::WM_SIZE => {
+                    let width = ffi::LOWORD(l as ffi::DWORD) as u32;
+                    let height = ffi::HIWORD(l as ffi::DWORD) as u32;
+                    Some(RawEvent::Resized(Vec2::new(width, height).as_f32()))
+                },
 
-            ffi::WM_MOVE => {
-                let x = ffi::LOWORD(l as ffi::DWORD) as u32;
-                let y = ffi::HIWORD(l as ffi::DWORD) as u32;
-                Some(RawEvent::Moved(Vec2::new(x, y).as_f32()))
-            },
+                ffi::WM_MOVE => {
+                    let x = ffi::LOWORD(l as ffi::DWORD) as u32;
+                    let y = ffi::HIWORD(l as ffi::DWORD) as u32;
+                    Some(RawEvent::Moved(Vec2::new(x, y).as_f32()))
+                },
 
-            ffi::WM_CLOSE => {
-                Some(RawEvent::CloseRequest)
-            },
+                ffi::WM_CLOSE => {
+                    Some(RawEvent::CloseRequest)
+                },
 
-            ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
-                let down         = msg == ffi::WM_KEYDOWN;
-                let scancode     = ((l as usize) >> 16) & 0xff;
-                //let prev_down    = ((l >> 30 ) & 1) == 1;
-                //let repeat_count = (l as usize) & 0xffff;
+                ffi::WM_KEYUP | ffi::WM_KEYDOWN => {
+                    let down         = msg == ffi::WM_KEYDOWN;
+                    let scancode     = ((l as usize) >> 16) & 0xff;
+                    //let prev_down    = ((l >> 30 ) & 1) == 1;
+                    //let repeat_count = (l as usize) & 0xffff;
 
-                Some(RawEvent::Key(down, scancode))
-            },
+                    Some(RawEvent::Key(down, scancode))
+                },
 
-            ffi::WM_CHAR => {
-                Some(RawEvent::Char(w as u16))
-            },
+                ffi::WM_CHAR => {
+                    Some(RawEvent::Char(w as u16))
+                },
 
-            ffi::WM_MOUSEWHEEL => {
-                let delta = ffi::GET_WHEEL_DELTA_WPARAM(w) as f32 / ffi::WHEEL_DELTA as f32;
-                Some(RawEvent::Scroll(delta))
-            },
+                ffi::WM_MOUSEWHEEL => {
+                    let delta = ffi::GET_WHEEL_DELTA_WPARAM(w) as f32 / ffi::WHEEL_DELTA as f32;
+                    Some(RawEvent::Scroll(delta))
+                },
 
-            ffi::WM_MOUSEMOVE => {
-                let x = ffi::GET_X_LPARAM(l);
-                let y = ffi::GET_Y_LPARAM(l);
-                let pos = Vec2::new(x, y).as_f32();
-                Some(RawEvent::MouseMove(pos))
-            },
+                ffi::WM_MOUSEMOVE => {
+                    let x = ffi::GET_X_LPARAM(l);
+                    let y = ffi::GET_Y_LPARAM(l);
+                    let pos = Vec2::new(x, y).as_f32();
+                    Some(RawEvent::MouseMove(pos))
+                },
 
-            ffi::WM_LBUTTONDOWN => Some(RawEvent::MouseButton(true, 0)),
-            ffi::WM_LBUTTONUP   => Some(RawEvent::MouseButton(false, 0)),
-            ffi::WM_MBUTTONDOWN => Some(RawEvent::MouseButton(true, 2)),
-            ffi::WM_MBUTTONUP   => Some(RawEvent::MouseButton(false, 2)),
-            ffi::WM_RBUTTONDOWN => Some(RawEvent::MouseButton(true, 1)),
-            ffi::WM_RBUTTONUP   => Some(RawEvent::MouseButton(false, 1)),
+                ffi::WM_LBUTTONDOWN => Some(RawEvent::MouseButton(true, 0)),
+                ffi::WM_LBUTTONUP   => Some(RawEvent::MouseButton(false, 0)),
+                ffi::WM_MBUTTONDOWN => Some(RawEvent::MouseButton(true, 2)),
+                ffi::WM_MBUTTONUP   => Some(RawEvent::MouseButton(false, 2)),
+                ffi::WM_RBUTTONDOWN => Some(RawEvent::MouseButton(true, 1)),
+                ffi::WM_RBUTTONUP   => Some(RawEvent::MouseButton(false, 1)),
 
-            _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
-        };
+                _ => return ffi::DefWindowProcW(window, msg, w, l), // Maybe we don't need this
+            };
 
-        if let Some(event) = maybe_event {
-            MSG_SENDER.with(|sender| {
-                if let Some(ref sender) = *sender.borrow() {
-                    sender.send(event).unwrap();
-                } else {
-                    panic!("`event_callback` called from unkown thread");
-                }
-            });
+            if let Some(event) = maybe_event {
+                MSG_SENDER.with(|sender| {
+                    if let Some(ref sender) = *sender.borrow() {
+                        sender.send(event).unwrap();
+                    } else {
+                        panic!("`event_callback` called from unkown thread");
+                    }
+                });
+            }
+
+            return 0;
         }
-
-        return 0;
-    }
 
     impl WindowCommon for Window {
         fn new(title: &str) -> Window {
@@ -927,11 +932,12 @@ mod windows {
 
             // Load cursors
             let cursors = unsafe {
-                let mut cursors: [ffi::HCURSOR; CURSOR_TYPE_COUNT] = mem::uninitialized();
+                let mut cursors = [ptr::null_mut(); CURSOR_TYPE_COUNT];
                 for (i, &ty) in ALL_CURSOR_TYPES.iter().enumerate() {
                     let cursor = match ty {
-                        CursorType::Normal => ffi::IDC_ARROW,
+                        CursorType::Normal    => ffi::IDC_ARROW,
                         CursorType::Clickable => ffi::IDC_HAND,
+                        CursorType::Invisible => continue,
                     };
                     cursors[i] = ffi::LoadCursorW(ptr::null_mut(), cursor);
                 }
@@ -940,22 +946,22 @@ mod windows {
 
             // Actually create window 
             let window = unsafe { ffi::CreateWindowExW(
-                // Extended style
-                0, 
+                    // Extended style
+                    0, 
 
-                class_name.as_ptr(),
-                window_name.as_ptr(),
+                    class_name.as_ptr(),
+                    window_name.as_ptr(),
 
-                ffi::WS_OVERLAPPEDWINDOW,
+                    ffi::WS_OVERLAPPEDWINDOW,
 
-                ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
-                ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+                    ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
+                    ffi::CW_USEDEFAULT, ffi::CW_USEDEFAULT,
 
-                ptr::null_mut(), // Parent
-                ptr::null_mut(), // Menu
-                instance,
-                ptr::null_mut(), // lParam
-            ) };
+                    ptr::null_mut(), // Parent
+                    ptr::null_mut(), // Menu
+                    instance,
+                    ptr::null_mut(), // lParam
+                    ) };
             if window.is_null() {
                 panic!("Failed to create window");
             } 
@@ -1061,7 +1067,7 @@ mod windows {
             let gl_context = if gl_request.version.0 < 3 {
                 legacy_gl_context
 
-            // Set up modern OpenGL
+                    // Set up modern OpenGL
             } else {
                 let required_extensions = [
                     "WGL_ARB_create_context",
@@ -1080,7 +1086,7 @@ mod windows {
                         panic!(
                             "wglCreateContextAttribsARB is not present, although the required \
                             extensions are supported. Your drivers/the spec suck"
-                        );
+                            );
                     }
                     mem::transmute::<_, ffi::wglCreateContextAttribsARBType>(p)
                 };
@@ -1111,7 +1117,7 @@ mod windows {
                     device_context,
                     ptr::null_mut(),
                     context_attributes.as_ptr()
-                );
+                    );
 
                 if gl_context.is_null() {
                     let last_error = last_win_error();
@@ -1120,16 +1126,16 @@ mod windows {
                             "Could not create GL context. Invalid version: ({}.{} {})",
                             gl_request.version.0, gl_request.version.1,
                             if gl_request.core { "core" } else { "compat" },
-                        ),
+                            ),
                         ffi::ERROR_INVALID_PROFILE_ARB => panic!(
                             "Could not create GL context. Invalid profile: ({}.{} {})",
                             gl_request.version.0, gl_request.version.1,
                             if gl_request.core { "core" } else { "compat" },
-                        ),
+                            ),
                         _ => panic!(
                             "Could not create GL context. Unkown error: {}",
                             last_error,
-                        ),
+                            ),
                     };
                 }
 
@@ -1149,7 +1155,7 @@ mod windows {
                         panic!(
                             "wglSwapIntervalEXTis not present, although the required \
                             extensions are supported. Your drivers/the spec suck"
-                        );
+                            );
                     }
                     mem::transmute::<_, ffi::wglSwapIntervalEXTType>(p)
                 })
@@ -1158,14 +1164,14 @@ mod windows {
             };
 
             gl::load_with(get_proc_address);
-            
+
             unsafe {
                 let raw = gl::GetString(gl::VERSION);
                 if raw.is_null() {
                     panic!("glGetString(GL_VERSION) returned null!");
                 }
-    //            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
-    //            println!("{}", version);
+                //            let version = CStr::from_ptr(raw as *const _).to_string_lossy();
+                //            println!("{}", version);
             }
 
             graphics::viewport(region.unpositioned());
@@ -1178,12 +1184,15 @@ mod windows {
                 swap_function,
                 cursors,
 
-                cursor: CursorType::Normal,
                 screen_region: region,
                 close_requested: false,
                 resized: false,
                 moved: false,
+                focused: false,
+
+                cursor: CursorType::Normal,
                 mouse_captured: false,
+                mouse_grabbed: false,
             }
         } 
 
@@ -1192,15 +1201,20 @@ mod windows {
         }
 
         fn poll_events(&mut self, input: &mut InputManager) {
+            let focused = unsafe { ffi::GetFocus() == self.window };
+            let focus_changed = self.focused != focused;
+            self.focused = focused;
+            input.focused = self.focused;
+
             // Receive events from windows, dispatch them to `event_callback` and let them get sent
             // back through `raw_event_receiver`.
             let mut msg = unsafe { mem::uninitialized::<ffi::MSG>() };
             loop {
                 let result = unsafe { ffi::PeekMessageW(
-                    &mut msg, self.window, 
-                    0, 0,
-                    ffi::PM_REMOVE,
-                ) };
+                        &mut msg, self.window, 
+                        0, 0,
+                        ffi::PM_REMOVE,
+                        ) };
 
                 if result > 0 {
                     unsafe {
@@ -1311,6 +1325,17 @@ mod windows {
                     },
                 }
             }
+
+            if focus_changed {
+                self.clip_cursor(self.mouse_grabbed && self.focused);
+            }
+
+            if self.focused && self.mouse_grabbed {
+                let global_center = self.screen_region.center().as_i32();
+                let relative_center = self.screen_region.unpositioned().center().as_i32();
+                input.mouse_pos = relative_center.as_f32();
+                unsafe { ffi::SetCursorPos(global_center.x, global_center.y) };
+            }
         }
 
         fn swap_buffers(&mut self) {
@@ -1327,6 +1352,7 @@ mod windows {
         fn close_requested(&self) -> bool { self.close_requested }
         fn resized(&self) -> bool         { self.resized }
         fn moved(&self) -> bool           { self.moved }
+        fn focused(&self) -> bool         { self.focused }
 
         fn screen_region(&self) -> Region { self.screen_region }
 
@@ -1346,6 +1372,17 @@ mod windows {
 
         fn set_cursor(&mut self, cursor: CursorType) {
             self.cursor = cursor;
+        }
+
+        fn grab_cursor(&mut self, grabbed: bool) {
+            if self.mouse_grabbed == grabbed {
+                return;
+            }
+            self.mouse_grabbed = grabbed;
+
+            if self.focused {
+                self.clip_cursor(grabbed);
+            }
         }
     }
 
@@ -1372,6 +1409,23 @@ mod windows {
             };
 
             self.screen_region.contains(mouse_pos)
+        }
+
+        fn clip_cursor(&self, clip: bool) {
+            if clip {
+                unsafe {
+                    let region = self.screen_region;
+                    let rect = ffi::RECT {
+                        left:   region.min.x as i32,
+                        right:  region.max.x as i32,
+                        top:    region.min.y as i32,
+                        bottom: region.max.y as i32,
+                    };
+                    ffi::ClipCursor(&rect);
+                }
+            } else {
+                unsafe { ffi::ClipCursor(ptr::null()) };
+            }
         }
     }
 }
