@@ -21,6 +21,7 @@ pub struct InputManager {
     pub(crate) mouse_states: [KeyState; MOUSE_KEYS],
     pub(crate) keyboard_states: [KeyState; KEYBOARD_KEYS],
     pub(crate) type_buffer: String,
+    pub(crate) focused: bool, 
 
     pub(crate) changed: bool, 
 }
@@ -35,6 +36,7 @@ impl InputManager {
             mouse_states: [KeyState::Up; MOUSE_KEYS],
             keyboard_states: [KeyState::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
+            focused: false,
 
             changed: false,
         }
@@ -90,6 +92,11 @@ impl InputManager {
     /// True if new events have been added in the last poll.
     pub fn changed(&self) -> bool {
         self.changed
+    }
+
+    /// True if the window is receiving keyboard input
+    pub fn focused(&self) -> bool {
+        self.focused
     }
 }
 

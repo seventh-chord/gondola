@@ -30,12 +30,14 @@ impl Default for GlRequest {
 pub enum CursorType {
     Normal,
     Clickable,
+    Invisible,
 }
 
-const CURSOR_TYPE_COUNT: usize = 2;
+const CURSOR_TYPE_COUNT: usize = 3;
 const ALL_CURSOR_TYPES: [CursorType; CURSOR_TYPE_COUNT] = [
     CursorType::Normal,
     CursorType::Clickable,
+    CursorType::Invisible,
 ];
 
 /// Because a different `struct Window` is used per platform, all functions are defined on this
@@ -64,6 +66,7 @@ pub trait WindowCommon: Drop {
     fn resized(&self) -> bool;
     fn moved(&self) -> bool;
     fn screen_region(&self) -> Region;
+    fn focused(&self) -> bool;
 
     fn change_title(&mut self, title: &str);
     /// Enables/disables vsync, if supported by the graphics driver. In debug mode a warning is
@@ -72,6 +75,7 @@ pub trait WindowCommon: Drop {
     fn set_vsync(&mut self, vsync: bool);
 
     fn set_cursor(&mut self, cursor: CursorType);
+    fn grab_cursor(&mut self, grabbed: bool);
 }
 
 #[cfg(target_os = "linux")]
@@ -120,6 +124,9 @@ mod linux {
         close_requested: bool,
         resized: bool,
         moved: bool,
+        cursor_grabbed: bool,
+        cursor: CursorType,
+        focused: bool,
 
         region: Region,
     }
@@ -206,7 +213,8 @@ mod linux {
                     ffi::StructureNotifyMask |
                     ffi::PointerMotionMask |
                     ffi::KeyPressMask | ffi::KeyReleaseMask |
-                    ffi::ButtonPressMask | ffi::ButtonReleaseMask,
+                    ffi::ButtonPressMask | ffi::ButtonReleaseMask |
+                    ffi::FocusChangeMask,
 
                 colormap: colormap,
 
@@ -242,16 +250,35 @@ mod linux {
             // Load cursors
             let cursors = unsafe {
                 let mut cursors: [u64; CURSOR_TYPE_COUNT] = mem::uninitialized();
-                for (i, &ty) in ALL_CURSOR_TYPES.iter().enumerate() {
-                    // Stuff is not defined in the x11 crate, and I can't be arsed to create proper
-                    // definitions, so I just copy the values here from `/usr/include/X11/cursorfont.h`
-                    let cursor = match ty {
-                        CursorType::Normal    => 2,
-                        CursorType::Clickable => 58, // or 60 for different hand
-                    };
 
-                    cursors[i] = (xlib.XCreateFontCursor)(display, cursor);
+                for (i, &ty) in ALL_CURSOR_TYPES.iter().enumerate() {
+                    if ty == CursorType::Invisible {
+                        let no_data = [0i8; 8*8];
+                        let mut black = ffi::XColor { 
+                            pixel: 0, red: 0, green: 0, blue: 0, flags: 0, pad: 0 
+                        };
+                        let bitmap_no_data = (xlib.XCreateBitmapFromData)(
+                            display, window, no_data.as_ptr(), 8, 8
+                        );
+
+                        cursors[i] = (xlib.XCreatePixmapCursor)(
+                            display,
+                            bitmap_no_data, bitmap_no_data,
+                            &mut black, &mut black, 0, 0
+                        );
+                    } else {
+                        // Stuff is not defined in the x11 crate, and I can't be arsed to create proper
+                        // definitions, so I just copy the values here from `/usr/include/X11/cursorfont.h`
+                        let cursor = match ty {
+                            CursorType::Normal    => 2,
+                            CursorType::Clickable => 58, // or 60 for different hand
+                            CursorType::Invisible => 0,
+                        };
+
+                        cursors[i] = (xlib.XCreateFontCursor)(display, cursor);
+                    }
                 }
+
                 cursors
             };
 
@@ -407,6 +434,9 @@ mod linux {
                 close_requested: false,
                 resized: false,
                 moved: false,
+                cursor_grabbed: false,
+                cursor: CursorType::Normal,
+                focused: false,
             }
         }
 
@@ -421,18 +451,36 @@ mod linux {
             self.resized = false;
             self.close_requested = false;
 
-            let ref xlib = self.xlib;
-
             // Handle events
-            unsafe { while (xlib.XPending)(self.display) > 0 {
+            unsafe { while (self.xlib.XPending)(self.display) > 0 {
                 let mut event = mem::zeroed::<ffi::XEvent>();
-                (xlib.XNextEvent)(self.display, &mut event);
+                (self.xlib.XNextEvent)(self.display, &mut event);
                 let ty = event.get_type();
 
                 match ty {
                     ffi::Expose => {
                         // Sent whenever the screen should be redrawn. We can ignore this, since we
                         // continually redraw screen contents anyways.
+                    },
+
+                    ffi::FocusIn => {
+                        let cursor = self.cursor;
+                        self.internal_set_cursor(cursor);
+
+                        if self.cursor_grabbed {
+                            self.internal_grab_cursor(true);
+                        }
+
+                        self.focused = true;
+                        input.focused = self.focused;
+                    },
+
+                    ffi::FocusOut => {
+                        self.internal_grab_cursor(false);
+                        self.internal_set_cursor(CursorType::Normal);
+
+                        self.focused = false;
+                        input.focused = self.focused;
                     },
 
                     ffi::KeyPress | ffi::KeyRelease => {
@@ -458,7 +506,7 @@ mod linux {
                             let mut buffer = [0u8; 16];
                             let mut status: ffi::Status = 0;
 
-                            let count = (xlib.Xutf8LookupString)(
+                            let count = (self.xlib.Xutf8LookupString)(
                                 self.ic, &mut event,
                                 mem::transmute(buffer.as_mut_ptr()),
                                 buffer.len() as _,
@@ -471,7 +519,7 @@ mod linux {
                             } else {
                                 // Try again with a dynamic buffer
                                 let mut buffer = vec![0u8; count as usize];
-                                let count = (xlib.Xutf8LookupString)(
+                                let count = (self.xlib.Xutf8LookupString)(
                                     self.ic, &mut event,
                                     mem::transmute(buffer.as_mut_ptr()),
                                     buffer.len() as _,
@@ -526,7 +574,7 @@ mod linux {
                     },
 
                     ffi::MappingNotify => {
-                        (xlib.XRefreshKeyboardMapping)(event.as_mut());
+                        (self.xlib.XRefreshKeyboardMapping)(event.as_mut());
                     },
 
                     ffi::ConfigureNotify => {
@@ -567,6 +615,21 @@ mod linux {
                     },
                 }
             } }
+
+            // Constrain cursor if it is grabbed
+            if self.cursor_grabbed && self.focused {
+                let center = self.region.unpositioned().center().as_i32();
+                input.mouse_pos = center.as_f32();
+
+                unsafe {
+                    (self.xlib.XWarpPointer)(
+                        self.display, 0, self.window,
+                        0, 0, 0, 0,
+                        center.x, center.y,
+                    );
+                    (self.xlib.XFlush)(self.display);
+                }
+            }
         }
 
         fn swap_buffers(&mut self) {
@@ -580,6 +643,7 @@ mod linux {
         fn close_requested(&self) -> bool   { self.close_requested }
         fn resized(&self) -> bool           { self.resized }
         fn moved(&self) -> bool             { self.resized }
+        fn focused(&self) -> bool           { self.focused }
         fn screen_region(&self) -> Region   { self.region }
 
         fn change_title(&mut self, title: &str) {
@@ -592,6 +656,43 @@ mod linux {
         }
 
         fn set_cursor(&mut self, cursor: CursorType) {
+            if self.cursor == cursor {
+                return;
+            }
+            self.cursor = cursor;
+            self.internal_set_cursor(cursor);
+        }
+
+        fn grab_cursor(&mut self, grabbed: bool) {
+            if self.cursor_grabbed == grabbed {
+                return;
+            }
+            self.cursor_grabbed = grabbed;
+            self.internal_grab_cursor(grabbed);
+        }
+    }
+
+    impl Window {
+        fn internal_grab_cursor(&mut self, grab: bool) {
+            unsafe {
+                if grab {
+                    (self.xlib.XGrabPointer)(
+                        self.display, self.window,
+                        ffi::True, 0,
+                        ffi::GrabModeAsync,
+                        ffi::GrabModeAsync,
+
+                        self.window,
+                        0, // This is `None` (I think)
+                        ffi::CurrentTime,
+                    );
+                } else {
+                    (self.xlib.XUngrabPointer)(self.display, ffi::CurrentTime);
+                }
+            }
+        }
+
+        fn internal_set_cursor(&mut self, cursor: CursorType) {
             unsafe { (self.xlib.XDefineCursor)(
                 self.display, self.window,
                 self.cursors[cursor as usize],
