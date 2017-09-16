@@ -798,8 +798,8 @@ mod windows {
         focused: bool,
 
         cursor: CursorType,
-        mouse_captured: bool, // Cursor is dragging something out of the window, don't loose focus on release
-        mouse_grabbed: bool, // Cursor cant leave window
+        cursor_captured: bool, // Cursor is dragging something out of the window, don't loose focus on release
+        cursor_grabbed: bool, // Cursor cant leave window
     }
 
     fn encode_wide(s: &str) -> Vec<u16> {
@@ -815,8 +815,7 @@ mod windows {
 
     #[derive(Debug, Copy, Clone)]
     enum RawEvent {
-        Resized(Vec2<f32>),
-        Moved(Vec2<f32>),
+        MoveOrSize,
         CloseRequest,
         Key(bool, usize),
         Char(u16),
@@ -834,16 +833,8 @@ mod windows {
     unsafe extern "system" 
     fn event_callback(window: ffi::HWND, msg: u32, w: ffi::WPARAM, l: ffi::LPARAM) -> ffi::LRESULT {
         let maybe_event = match msg {
-            ffi::WM_SIZE => {
-                let width = ffi::LOWORD(l as ffi::DWORD) as u32;
-                let height = ffi::HIWORD(l as ffi::DWORD) as u32;
-                Some(RawEvent::Resized(Vec2::new(width, height).as_f32()))
-            },
-
-            ffi::WM_MOVE => {
-                let x = ffi::LOWORD(l as ffi::DWORD) as u32;
-                let y = ffi::HIWORD(l as ffi::DWORD) as u32;
-                Some(RawEvent::Moved(Vec2::new(x, y).as_f32()))
+            ffi::WM_SIZE | ffi::WM_MOVE => {
+                Some(RawEvent::MoveOrSize)
             },
 
             ffi::WM_CLOSE => {
@@ -994,7 +985,7 @@ mod windows {
             } 
 
             let region = unsafe {
-                let mut rect = mem::zeroed::<ffi::RECT>();
+                let mut rect = new_rect();
                 if ffi::GetWindowRect(window, &mut rect) == 0 {
                     panic!("GetWindowRect failed: {}", last_win_error());
                 }
@@ -1230,8 +1221,8 @@ mod windows {
                 focused: false,
 
                 cursor: CursorType::Normal,
-                mouse_captured: false,
-                mouse_grabbed: false,
+                cursor_captured: false,
+                cursor_grabbed: false,
             }
         } 
 
@@ -1274,22 +1265,37 @@ mod windows {
             for raw_event in self.raw_event_receiver.try_iter() {
                 use self::RawEvent::*;
                 match raw_event {
-                    Resized(new_size) => {
-                        self.screen_region.max = self.screen_region.min + new_size;
-                        self.resized = true;
+                    MoveOrSize => {
+                        let new_region = unsafe { 
+                            let mut rect = new_rect();
+                            ffi::GetClientRect(self.window, &mut rect);
 
-                        graphics::viewport(self.screen_region.unpositioned());
-                    },
+                            let mut min = ffi::POINT { x: rect.left,  y: rect.top };
+                            let mut max = ffi::POINT { x: rect.right, y: rect.bottom };
+                            ffi::ClientToScreen(self.window, &mut min);
+                            ffi::ClientToScreen(self.window, &mut max);
 
-                    Moved(new_pos) => {
-                        let size = self.screen_region.size();
+                            let min = Vec2::new(min.x, min.y).as_f32();
+                            let max = Vec2::new(max.x, max.y).as_f32();
 
-                        self.screen_region = Region {
-                            min: new_pos,
-                            max: new_pos + size,
+                            Region { min, max }
                         };
 
-                        self.moved = true;
+                        if new_region.min != self.screen_region.min {
+                            self.moved = true;
+                        }
+
+                        if new_region.size() != self.screen_region.size() {
+                            self.resized = true;
+                        }
+
+                        self.screen_region = new_region;
+                        graphics::viewport(self.screen_region.unpositioned());
+
+                        // Reclip to a new region
+                        if self.cursor_grabbed { 
+                            self.clip_cursor(true); 
+                        }
                     },
 
                     CloseRequest => {
@@ -1360,10 +1366,10 @@ mod windows {
                         // As long as any mouse buttons are down we want to capture the mouse. This
                         // allows draging stuff around to work even when the mouse temporarily
                         // leaves the window.
-                        let mouse_captured = any_down;
-                        if mouse_captured != self.mouse_captured {
-                            self.mouse_captured = mouse_captured;
-                            if self.mouse_captured {
+                        let cursor_captured = any_down;
+                        if cursor_captured != self.cursor_captured {
+                            self.cursor_captured = cursor_captured;
+                            if self.cursor_captured {
                                 unsafe { ffi::SetCapture(self.window) };
                             } else {
                                 unsafe { ffi::ReleaseCapture() };
@@ -1375,9 +1381,9 @@ mod windows {
 
             // Mouse grabbing stuff
             if focus_changed {
-                self.clip_cursor(self.mouse_grabbed && self.focused);
+                self.clip_cursor(self.cursor_grabbed && self.focused);
             }
-            if self.focused && self.mouse_grabbed {
+            if self.focused && self.cursor_grabbed {
                 let global_center = self.screen_region.center().as_i32();
                 let relative_center = self.screen_region.unpositioned().center().as_i32();
                 input.mouse_pos = relative_center.as_f32();
@@ -1385,7 +1391,7 @@ mod windows {
             }
 
             // Cursor stuff
-            if self.focused {
+            if self.focused && self.cursor_in_window() {
                 let cursor = self.cursors[self.cursor as usize];
                 unsafe { ffi::SetCursor(cursor) };
             } else if focus_changed {
@@ -1426,10 +1432,10 @@ mod windows {
         }
 
         fn grab_cursor(&mut self, grabbed: bool) {
-            if self.mouse_grabbed == grabbed {
+            if self.cursor_grabbed == grabbed {
                 return;
             }
-            self.mouse_grabbed = grabbed;
+            self.cursor_grabbed = grabbed;
 
             if self.focused {
                 self.clip_cursor(grabbed);
@@ -1468,5 +1474,19 @@ mod windows {
                 unsafe { ffi::ClipCursor(ptr::null()) };
             }
         }
+
+        pub fn cursor_in_window(&self) -> bool {
+            let mouse_pos = unsafe {
+                let mut p = ffi::POINT { x: 0, y: 0 };
+                ffi::GetCursorPos(&mut p);
+                Vec2::new(p.x, p.y).as_f32()
+            };
+
+            self.screen_region.contains(mouse_pos)
+        }
+    }
+
+    fn new_rect() -> ffi::RECT {
+        ffi::RECT { left: 0, right: 0, top: 0, bottom: 0 }
     }
 }
