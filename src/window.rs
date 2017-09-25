@@ -222,7 +222,7 @@ mod linux {
             };
 
             let center = Vec2::new(500.0, 400.0);
-            let size = Vec2::new(640.0, 480.0);
+            let size = Vec2::new(1024.0, 576.0);
             let region = Region {
                 min: center/2.0 - size/2.0,
                 max: center/2.0 + size/2.0,
