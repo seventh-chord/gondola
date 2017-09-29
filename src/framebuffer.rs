@@ -38,7 +38,7 @@ pub struct FramebufferProperties {
 impl Default for FramebufferProperties {
     fn default() -> FramebufferProperties {
         FramebufferProperties {
-            size: Vec2::zero(),
+            size: Vec2::ZERO,
             multisample: None,
             color_formats: vec![TextureFormat::RGB_8],
             depth_buffer: false,

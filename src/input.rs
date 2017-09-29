@@ -31,9 +31,9 @@ impl InputManager {
     /// Creates a new input manager. Passed to `Window::poll_events` each frame to get updated.
     pub fn new() -> InputManager {
         InputManager {
-            mouse_pos: Vec2::zero(),
-            mouse_delta: Vec2::zero(),
-            raw_mouse_delta: Vec2::zero(),
+            mouse_pos: Vec2::ZERO,
+            mouse_delta: Vec2::ZERO,
+            raw_mouse_delta: Vec2::ZERO,
             mouse_scroll: 0.0,
             mouse_states: [KeyState::Up; MOUSE_KEYS],
             keyboard_states: [KeyState::Up; KEYBOARD_KEYS],
@@ -46,8 +46,8 @@ impl InputManager {
 
     // Called by `Window::poll_events` in the platform layer
     pub(crate) fn refresh(&mut self) {
-        self.mouse_delta = Vec2::zero(); 
-        self.raw_mouse_delta = Vec2::zero(); 
+        self.mouse_delta = Vec2::ZERO; 
+        self.raw_mouse_delta = Vec2::ZERO; 
         self.mouse_scroll = 0.0;
         self.type_buffer.clear();
 

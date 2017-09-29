@@ -382,7 +382,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let normal = (b - a).normalize().left() * (width / 2.0);
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
         self.add_vertices(&[
             Vert { pos: a - normal, uv, color },
             Vert { pos: b - normal, uv, color },
@@ -403,7 +403,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let normal = (b - a).normalize().left() * (width / 2.0);
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
         self.add_vertices(&[
             Vert { pos: a - normal, uv, color: color_a },
             Vert { pos: b - normal, uv, color: color_b },
@@ -417,7 +417,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     /// Draws a thick line with rounded caps.
     pub fn round_capped_line(&mut self, a: Vec2<f32>, b: Vec2<f32>, width: f32, color: Color) {
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid)); 
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         let size = width/2.0;
 
@@ -557,7 +557,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
 
         let size = size / 2.0;
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
         self.add_vertices(&[
             Vert { pos: point + Vec2::new(-size, -size), uv, color },
             Vert { pos: point + Vec2::new( size, -size), uv, color },
@@ -571,7 +571,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     /// Generates the vertices for a circle with the given radius centered at the given position
     pub fn circle(&mut self, pos: Vec2<f32>, radius: f32, color: Color) {
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid)); 
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         for i in 0..(SIN_COS.len() - 1) {
             let a = SIN_COS[i];
@@ -611,7 +611,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         let arrow_size = arrow_size / 2.0;
         let tangent = (b - a).normalize();
         let normal = tangent.left();
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         // Line
         self.line(a, b - tangent*arrow_size, width, color);
@@ -637,7 +637,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         let arrow_size = arrow_size / 2.0;
         let tangent = (b - a).normalize();
         let normal = tangent.left();
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         // Line
         self.stippled_line(a, b - tangent*arrow_size, width, stipple_length, stipple_spacing, color);
@@ -652,7 +652,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     /// Draws a single solid triangle.
     pub fn triangle(&mut self, points: [Vec2<f32>; 3], color: Color) {
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         self.add_vertices(&[
             Vert { pos: points[0], uv, color },
@@ -732,7 +732,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         let dot = Vec2::dot(c_normal, center_normal);
         let c_normal = c_normal/dot * width/2.0;
 
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         self.add_vertices(&[
             Vert { pos: b - b_normal, uv, color },
@@ -761,7 +761,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     /// Draws a solid axis-aligned bounding box.
     pub fn aabb(&mut self, min: Vec2<f32>, max: Vec2<f32>, color: Color) {
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         self.add_vertices(&[
             Vert { pos: Vec2::new(min.x, min.y), uv, color },
@@ -782,7 +782,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         }
 
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
-        let uv = Vec2::zero();
+        let uv = Vec2::ZERO;
 
         self.add_vertices(&[
             // Draw inner + top/bottom border

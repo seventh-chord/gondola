@@ -1343,7 +1343,7 @@ mod windows {
                     },
 
                     MouseDelta(delta) => {
-                        if delta != Vec2::zero() {
+                        if delta != Vec2::ZERO {
                             input.changed = true;
                             input.raw_mouse_delta += delta;
                         }

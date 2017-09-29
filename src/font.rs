@@ -81,7 +81,7 @@ impl Font {
     /// size. This takes newlines into acount. 
     pub fn width(&self, text: &str, text_size: f32) -> f32 {
         let mut prev_glyph: Option<GlyphId> = None; 
-        let mut caret = Vec2::zero();
+        let mut caret = Vec2::ZERO;
         let mut max_x = 0.0;
 
         let scale = Scale::uniform(text_size);
@@ -130,7 +130,7 @@ impl Font {
         let mut prev_glyph: Option<GlyphId> = None; 
         let mut first_line = true;
         let mut first_ascent = 0.0;
-        let mut caret = Vec2::zero();
+        let mut caret = Vec2::ZERO;
         let mut max_x = 0.0;
 
         let scale = Scale::uniform(text_size);
@@ -248,7 +248,7 @@ impl Font {
 
         let mut focus_pos = 0.0;
         let mut text_width = 0.0; 
-        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::ZERO);
 
         // Find the location within the text, in draw space coordinates, which should be in focus
         for PlacementInfo { caret, str_index, .. } in iter.clone() {
@@ -301,7 +301,7 @@ impl Font {
 
         let mut prev = (0, 0.0);
 
-        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::ZERO);
         for PlacementInfo { caret, str_index, .. } in iter.clone() {
             if caret.x > space {
                 break;
@@ -319,7 +319,7 @@ impl Font {
     /// given x-offset (`pos`) from the start of where the text is drawn. The returned index is
     /// a byte index to the given piece of text.
     pub fn hovered_char(&self, text: &str, text_size: f32, pos: f32) -> Option<usize> {
-        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::zero());
+        let iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), Vec2::ZERO);
         for PlacementInfo { caret, glyph, str_index } in iter {
             let width = glyph.unpositioned().h_metrics().advance_width;
             if caret.x + width/2.0 >= pos {
