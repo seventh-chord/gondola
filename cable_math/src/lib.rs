@@ -1,6 +1,4 @@
 
-extern crate num;
-
 #[cfg(feature = "serialize")]
 extern crate serde;
 

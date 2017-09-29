@@ -1,8 +1,10 @@
 
-use num::*;
-use mat::{Mat4, Mat3};
+use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{MulAssign, DivAssign};
+
 use vec::Vec3;
-use std::ops::*;
+use mat::{Mat4, Mat3};
+use traits::{Number, Float};
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
@@ -15,20 +17,20 @@ pub struct Quaternion<T> {
 
 impl<T: Copy> Copy for Quaternion<T> {}
 
-impl<T: Num + Float + Copy> Default for Quaternion<T> {
+impl<T: Number + Float + Copy> Default for Quaternion<T> {
     fn default() -> Quaternion<T> {
         Quaternion::new()
     }
 }
 
-impl<T: Num + Float + Copy> Quaternion<T> {
+impl<T: Number + Float + Copy> Quaternion<T> {
     /// Creates a new identity quaternion
     pub fn new() -> Quaternion<T> {
         Quaternion {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::zero(),
-            w: T::one(),
+            x: T::ZERO,
+            y: T::ZERO,
+            z: T::ZERO,
+            w: T::ONE,
         }
     }
 
@@ -37,7 +39,7 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     /// will have its `x`, `y` and `z` fields set to 0.
     pub fn rotation(angle: T, axis: Vec3<T>) -> Quaternion<T> {
         let axis = axis.normalize();
-        let angle = angle / (T::one() + T::one());
+        let angle = angle / (T::ONE + T::ONE);
         let (sin, cos) = angle.sin_cos();
 
         Quaternion {
@@ -51,13 +53,13 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
     /// x-axis.
     pub fn rotation_x(angle: T) -> Quaternion<T> {
-        let angle = angle / (T::one() + T::one());
+        let angle = angle / (T::ONE + T::ONE);
         let (sin, cos) = angle.sin_cos();
 
         Quaternion {
             x: sin,
-            y: T::zero(),
-            z: T::zero(),
+            y: T::ZERO,
+            z: T::ZERO,
             w: cos,
         }
     }
@@ -65,13 +67,13 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
     /// y-axis.
     pub fn rotation_y(angle: T) -> Quaternion<T> {
-        let angle = angle / (T::one() + T::one());
+        let angle = angle / (T::ONE + T::ONE);
         let (sin, cos) = angle.sin_cos();
 
         Quaternion {
-            x: T::zero(),
+            x: T::ZERO,
             y: sin,
-            z: T::zero(),
+            z: T::ZERO,
             w: cos,
         }
     }
@@ -79,12 +81,12 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
     /// z-axis.
     pub fn rotation_z(angle: T) -> Quaternion<T> {
-        let angle = angle / (T::one() + T::one());
+        let angle = angle / (T::ONE + T::ONE);
         let (sin, cos) = angle.sin_cos();
 
         Quaternion {
-            x: T::zero(),
-            y: T::zero(),
+            x: T::ZERO,
+            y: T::ZERO,
             z: sin,
             w: cos,
         }
@@ -121,10 +123,10 @@ impl<T: Num + Float + Copy> Quaternion<T> {
     ///
     /// nlerp stands for normalized linear interpolation.
     pub fn nlerp(a: Quaternion<T>, b: Quaternion<T>, t: T) -> Quaternion<T> {
-        if Quaternion::dot(a, b) < T::zero() {
-            (a*(T::one() - t) - b*t).normalize()
+        if Quaternion::dot(a, b) < T::ZERO {
+            (a*(T::ONE - t) - b*t).normalize()
         } else {
-            (a*(T::one() - t) + b*t).normalize()
+            (a*(T::ONE - t) + b*t).normalize()
         }
     }
 
@@ -141,10 +143,10 @@ impl<T: Num + Float + Copy> Quaternion<T> {
 }
 
 // Quaternion vector multiplication
-impl<T: Num + Float + Copy> Mul<Vec3<T>> for Quaternion<T> {
+impl<T: Number + Float + Copy> Mul<Vec3<T>> for Quaternion<T> {
     type Output = Vec3<T>; 
     fn mul(self, vec: Vec3<T>) -> Vec3<T> {
-        let one = T::one();
+        let one = T::ONE;
         let two = one + one;
 
         let a11 = one - two*self.y*self.y - two*self.z*self.z;
@@ -168,7 +170,7 @@ impl<T: Num + Float + Copy> Mul<Vec3<T>> for Quaternion<T> {
 }
 
 // Quaternion quaternion multiplication
-impl<T: Num + Float + Copy> Mul for Quaternion<T> {
+impl<T: Number + Float + Copy> Mul for Quaternion<T> {
     type Output = Self; 
     fn mul(self, other: Quaternion<T>) -> Self {
         Quaternion {
@@ -179,7 +181,7 @@ impl<T: Num + Float + Copy> Mul for Quaternion<T> {
         }
     }
 }
-impl<T: Num + Float + Copy> MulAssign for Quaternion<T> {
+impl<T: Number + Float + Copy> MulAssign for Quaternion<T> {
     fn mul_assign(&mut self, other: Quaternion<T>) {
         let x = self.w*other.x + self.x*other.w + self.y*other.z - self.z*other.y;
         let y = self.w*other.y + self.y*other.w + self.z*other.x - self.x*other.z;
@@ -193,7 +195,7 @@ impl<T: Num + Float + Copy> MulAssign for Quaternion<T> {
 }
 
 // Quaternion quaternion addition
-impl<T: Num + Float + Copy> Add for Quaternion<T> {
+impl<T: Number + Float + Copy> Add for Quaternion<T> {
     type Output = Self; 
     fn add(self, other: Quaternion<T>) -> Self {
         Quaternion {
@@ -204,7 +206,7 @@ impl<T: Num + Float + Copy> Add for Quaternion<T> {
         }
     }
 }
-impl<T: Num + Float + Copy> Sub for Quaternion<T> {
+impl<T: Number + Float + Copy> Sub for Quaternion<T> {
     type Output = Self; 
     fn sub(self, other: Quaternion<T>) -> Self {
         Quaternion {
@@ -217,7 +219,7 @@ impl<T: Num + Float + Copy> Sub for Quaternion<T> {
 }
 
 // Quaternion scalar multiplication
-impl<T: Num + Float + Copy> Mul<T> for Quaternion<T> {
+impl<T: Number + Float + Copy> Mul<T> for Quaternion<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
         Quaternion {
@@ -228,7 +230,7 @@ impl<T: Num + Float + Copy> Mul<T> for Quaternion<T> {
         }
     }
 }
-impl<T: Num + Float + Copy> MulAssign<T> for Quaternion<T> {
+impl<T: Number + Float + Copy> MulAssign<T> for Quaternion<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.x = self.x * scalar;
         self.y = self.y * scalar;
@@ -236,7 +238,7 @@ impl<T: Num + Float + Copy> MulAssign<T> for Quaternion<T> {
         self.w = self.w * scalar;
     }
 }
-impl<T: Num + Float + Copy> Div<T> for Quaternion<T> {
+impl<T: Number + Float + Copy> Div<T> for Quaternion<T> {
     type Output = Self; 
     fn div(self, scalar: T) -> Self {
         Quaternion {
@@ -247,7 +249,7 @@ impl<T: Num + Float + Copy> Div<T> for Quaternion<T> {
         }
     }
 }
-impl<T: Num + Float + Copy> DivAssign<T> for Quaternion<T> {
+impl<T: Number + Float + Copy> DivAssign<T> for Quaternion<T> {
     fn div_assign(&mut self, scalar: T) {
         self.x = self.x / scalar;
         self.y = self.y / scalar;
@@ -256,13 +258,13 @@ impl<T: Num + Float + Copy> DivAssign<T> for Quaternion<T> {
     }
 }
 
-impl<T: Num + Float + Copy> From<Quaternion<T>> for Mat4<T> {
+impl<T: Number + Float + Copy> From<Quaternion<T>> for Mat4<T> {
     fn from(quat: Quaternion<T>) -> Mat4<T> {
         Mat4::from_quaternion(quat.x, quat.y, quat.z, quat.w)
     }
 }
 
-impl<T: Num + Float + Copy> From<Quaternion<T>> for Mat3<T> {
+impl<T: Number + Float + Copy> From<Quaternion<T>> for Mat3<T> {
     fn from(quat: Quaternion<T>) -> Mat3<T> {
         Mat3::from_quaternion(quat.x, quat.y, quat.z, quat.w)
     }

@@ -1,7 +1,9 @@
 
-use num::*;
+use std::ops::{Add, Sub, Mul};
+use std::ops::{AddAssign, SubAssign, MulAssign};
+
 use vec::{Vec2, Vec3, Vec4};
-use std::ops::*;
+use traits::{Number, Float};
 
 /// A matrix which is layed out in column major format in memory
 #[derive(Debug, Clone, PartialEq)]
@@ -37,42 +39,42 @@ impl<T: Copy> Copy for Mat2<T> {}
 impl<T: Copy> Copy for Mat3<T> {}
 impl<T: Copy> Copy for Mat4<T> {}
 
-impl<T: Num + Copy> Default for Mat2<T> {
+impl<T: Number + Copy> Default for Mat2<T> {
     fn default() -> Mat2<T> {
         Mat2::identity()
     }
 }
 
-impl<T: Num + Copy> Default for Mat3<T> {
+impl<T: Number + Copy> Default for Mat3<T> {
     fn default() -> Mat3<T> {
         Mat3::identity()
     }
 }
 
-impl<T: Num + Copy> Default for Mat4<T> {
+impl<T: Number + Copy> Default for Mat4<T> {
     fn default() -> Mat4<T> {
         Mat4::identity()
     }
 }
 
-impl<T: Num + Copy> Mat4<T> {
+impl<T: Number + Copy> Mat4<T> {
     /// Creates a new matrix with all values set to 0
     pub fn zero() -> Mat4<T> {
         Mat4 {
-            a11: T::zero(), a12: T::zero(), a13: T::zero(), a14: T::zero(),
-            a21: T::zero(), a22: T::zero(), a23: T::zero(), a24: T::zero(),
-            a31: T::zero(), a32: T::zero(), a33: T::zero(), a34: T::zero(),
-            a41: T::zero(), a42: T::zero(), a43: T::zero(), a44: T::zero(),
+            a11: T::ZERO, a12: T::ZERO, a13: T::ZERO, a14: T::ZERO,
+            a21: T::ZERO, a22: T::ZERO, a23: T::ZERO, a24: T::ZERO,
+            a31: T::ZERO, a32: T::ZERO, a33: T::ZERO, a34: T::ZERO,
+            a41: T::ZERO, a42: T::ZERO, a43: T::ZERO, a44: T::ZERO,
         }
     }
 
     /// Creates a new identity matrix
     pub fn identity() -> Mat4<T> {
         Mat4 {
-            a11: T::one(),  a12: T::zero(), a13: T::zero(), a14: T::zero(),
-            a21: T::zero(), a22: T::one(),  a23: T::zero(), a24: T::zero(),
-            a31: T::zero(), a32: T::zero(), a33: T::one(),  a34: T::zero(),
-            a41: T::zero(), a42: T::zero(), a43: T::zero(), a44: T::one(),
+            a11: T::ONE,  a12: T::ZERO, a13: T::ZERO, a14: T::ZERO,
+            a21: T::ZERO, a22: T::ONE,  a23: T::ZERO, a24: T::ZERO,
+            a31: T::ZERO, a32: T::ZERO, a33: T::ONE,  a34: T::ZERO,
+            a41: T::ZERO, a42: T::ZERO, a43: T::ZERO, a44: T::ONE,
         }
     }
 
@@ -114,8 +116,8 @@ impl<T: Num + Copy> Mat4<T> {
 
     /// Converts the given quaterion to a matrix.
     pub fn from_quaternion(x: T, y: T, z: T, w: T) -> Mat4<T> {
-        let zero = T::zero();
-        let one = T::one();
+        let zero = T::ZERO;
+        let one = T::ONE;
         let two = one + one;
 
         Mat4 {
@@ -169,7 +171,7 @@ impl<T: Num + Copy> Mat4<T> {
     /// difference is usually so small that it is negligible.
     pub fn inverse(self) -> Mat4<T> {
         let det = self.determinant();
-        if det == T::zero() {
+        if det == T::ZERO {
             panic!("Determinant of matrix is 0. Inverse is not defined");
         }
 
@@ -191,19 +193,19 @@ impl<T: Num + Copy> Mat4<T> {
             a42: self.a11*self.a32*self.a43 + self.a12*self.a33*self.a41 + self.a13*self.a31*self.a42 - self.a11*self.a33*self.a42 - self.a12*self.a31*self.a43 - self.a13*self.a32*self.a41,
             a43: self.a11*self.a23*self.a42 + self.a12*self.a21*self.a43 + self.a13*self.a22*self.a41 - self.a11*self.a22*self.a43 - self.a12*self.a23*self.a41 - self.a13*self.a21*self.a42,
             a44: self.a11*self.a22*self.a33 + self.a12*self.a23*self.a31 + self.a13*self.a21*self.a32 - self.a11*self.a23*self.a32 - self.a12*self.a21*self.a33 - self.a13*self.a22*self.a31
-        } * (T::one() / det)
+        } * (T::ONE / det)
     }
 
     /// Creates a new orthographic projection matrix.
     pub fn ortho(left: T, right: T, top: T, bottom: T, near: T, far: T) -> Mat4<T> {
-        let two = T::one() + T::one();
+        let two = T::ONE + T::ONE;
         let a11 = two / (right-left);
         let a22 = two / (top-bottom);
         let a33 = two / (near-far);
 
-        let a14 = T::zero() - ((right+left) / (right-left));
-        let a24 = T::zero() - ((top+bottom) / (top-bottom));
-        let a34 = T::zero() - ((far+near) / (far - near));
+        let a14 = T::ZERO - ((right+left) / (right-left));
+        let a24 = T::ZERO - ((top+bottom) / (top-bottom));
+        let a34 = T::ZERO - ((far+near) / (far - near));
 
         Mat4 {
             a11, a22, a33,
@@ -265,7 +267,7 @@ impl<T: Float + Copy> Mat4<T> {
     /// Creates a new perspective projection matrix. `fov` is the vertical field of view and should
     /// be in degrees.
     pub fn perspective(fov: T, aspect: T, near: T, far: T) -> Mat4<T> {
-        let two = T::one() + T::one();
+        let two = T::ONE + T::ONE;
         let top = (fov / two).to_radians().tan() * near;
         let right = top * aspect;
         Mat4 {
@@ -273,7 +275,7 @@ impl<T: Float + Copy> Mat4<T> {
             a22: near / top,
             a33: -(far + near) / (far - near),
             a34: (-two*far*near) / (far - near),
-            a43: -T::one(),
+            a43: -T::ONE,
             .. Mat4::zero()
         }
     }
@@ -315,22 +317,22 @@ impl<T: Float + Copy> Mat4<T> {
     }
 }
 
-impl<T: Num + Copy> Mat3<T> {
+impl<T: Number + Copy> Mat3<T> {
     /// Creates a new matrix with all values set to 0
     pub fn zero() -> Mat3<T> {
         Mat3 {
-            a11: T::zero(), a12: T::zero(), a13: T::zero(),
-            a21: T::zero(), a22: T::zero(), a23: T::zero(),
-            a31: T::zero(), a32: T::zero(), a33: T::zero(),
+            a11: T::ZERO, a12: T::ZERO, a13: T::ZERO,
+            a21: T::ZERO, a22: T::ZERO, a23: T::ZERO,
+            a31: T::ZERO, a32: T::ZERO, a33: T::ZERO,
         }
     }
 
     /// Creates a new identity matrix
     pub fn identity() -> Mat3<T> {
         Mat3 {
-            a11: T::one(),  a12: T::zero(), a13: T::zero(),
-            a21: T::zero(), a22: T::one(),  a23: T::zero(),
-            a31: T::zero(), a32: T::zero(), a33: T::one(),
+            a11: T::ONE,  a12: T::ZERO, a13: T::ZERO,
+            a21: T::ZERO, a22: T::ONE,  a23: T::ZERO,
+            a31: T::ZERO, a32: T::ZERO, a33: T::ONE,
         }
     }
 
@@ -368,7 +370,7 @@ impl<T: Num + Copy> Mat3<T> {
 
     /// Converts the given quaterion to a matrix.
     pub fn from_quaternion(x: T, y: T, z: T, w: T) -> Mat3<T> {
-        let one = T::one();
+        let one = T::ONE;
         let two = one + one;
 
         Mat3 {
@@ -415,7 +417,7 @@ impl<T: Num + Copy> Mat3<T> {
     /// difference is usually so small that it is negligible.
     pub fn inverse(self) -> Mat3<T> {
         let det = self.determinant();
-        if det == T::zero() {
+        if det == T::ZERO {
             panic!("Determinant of matrix is 0. Inverse is not defined");
         }
 
@@ -430,7 +432,7 @@ impl<T: Num + Copy> Mat3<T> {
             a31: self.a21*self.a32 - self.a22*self.a31,
             a32: self.a12*self.a31 - self.a11*self.a32,
             a33: self.a11*self.a22 - self.a12*self.a21,
-        } * (T::one() / det)
+        } * (T::ONE / det)
     }
 
     /// Creates a translation matrix.
@@ -478,14 +480,14 @@ impl<T: Num + Copy> Mat3<T> {
     /// Transforms the given vector as if it was a position. This is equal to multiplying a `Vec3`
     /// with equal x and y values, and z set to 1 by this matrix.
     pub fn apply(&self, pos: Vec2<T>) -> Vec2<T> {
-        (*self * Vec3::from2(pos, T::one())).xy() 
+        (*self * Vec3::from2(pos, T::ONE)).xy() 
     }
 
     /// Transforms the given vector as if it was a direction, ignoring translation but applying
     /// scaling and rotation. This is equal to multiplying a `Vec3` with equal x and y values, and
     /// z set to 0 by this matrix.
     pub fn apply_dir(&self, dir: Vec2<T>) -> Vec2<T> {
-        (*self * Vec3::from2(dir, T::zero())).xy() 
+        (*self * Vec3::from2(dir, T::ZERO)).xy() 
     } 
 }
 
@@ -503,20 +505,20 @@ impl<T: Float + Copy> Mat3<T> {
     }
 }
 
-impl<T: Num + Copy> Mat2<T> {
+impl<T: Number + Copy> Mat2<T> {
     /// Creates a new matrix with all values set to 0
     pub fn zero() -> Mat2<T> {
         Mat2 {
-            a11: T::zero(), a12: T::zero(),
-            a21: T::zero(), a22: T::zero(),
+            a11: T::ZERO, a12: T::ZERO,
+            a21: T::ZERO, a22: T::ZERO,
         }
     }
 
     /// Creates a new identity matrix
     pub fn identity() -> Mat2<T> {
         Mat2 {
-            a11: T::one(),  a12: T::zero(),
-            a21: T::zero(), a22: T::one(),
+            a11: T::ONE,  a12: T::ZERO,
+            a21: T::ZERO, a22: T::ONE,
         }
     }
 
@@ -572,7 +574,7 @@ impl<T: Num + Copy> Mat2<T> {
     /// difference is usually so small that it is negligible.
     pub fn inverse(self) -> Mat2<T> {
         let det = self.determinant();
-        if det == T::zero() {
+        if det == T::ZERO {
             panic!("Determinant of matrix is 0. Inverse is not defined");
         }
 
@@ -580,9 +582,9 @@ impl<T: Num + Copy> Mat2<T> {
         Mat2 {
             a11: self.a22,
             a22: self.a11,
-            a12: T::zero() - self.a12,
-            a21: T::zero() - self.a21,
-        } * (T::one() / det)
+            a12: T::ZERO - self.a12,
+            a21: T::ZERO - self.a21,
+        } * (T::ONE / det)
     }
 
 
@@ -618,7 +620,7 @@ impl<T: Float + Copy> Mat2<T> {
 }
 
 // Multiplication
-impl<T: Num + Copy> Mul for Mat4<T> {
+impl<T: Number + Copy> Mul for Mat4<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -649,7 +651,7 @@ impl<T: Num + Copy> Mul for Mat4<T> {
     }
 }
 
-impl<T: Num + Copy> Mul for Mat3<T> {
+impl<T: Number + Copy> Mul for Mat3<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -672,7 +674,7 @@ impl<T: Num + Copy> Mul for Mat3<T> {
     }
 }
 
-impl<T: Num + Copy> Mul for Mat2<T> {
+impl<T: Number + Copy> Mul for Mat2<T> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -689,12 +691,12 @@ impl<T: Num + Copy> Mul for Mat2<T> {
 }
 
 // Scaling
-impl<T: Num + Copy> MulAssign for Mat4<T> {
+impl<T: Number + Copy> MulAssign for Mat4<T> {
     fn mul_assign(&mut self, other: Self) {
         *self = *self * other;
     }
 }
-impl<T: Num + Copy> Mul<T> for Mat4<T> {
+impl<T: Number + Copy> Mul<T> for Mat4<T> {
     type Output = Self;
     fn mul(self, scalar: T) -> Self {
         Mat4 {
@@ -705,7 +707,7 @@ impl<T: Num + Copy> Mul<T> for Mat4<T> {
         }
     }
 }
-impl<T: Num + Copy> MulAssign<T> for Mat4<T> {
+impl<T: Number + Copy> MulAssign<T> for Mat4<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.a11 = self.a11 * scalar; self.a12 = self.a12 * scalar; self.a13 = self.a13 * scalar; self.a14 = self.a14 * scalar;
         self.a21 = self.a21 * scalar; self.a22 = self.a22 * scalar; self.a23 = self.a23 * scalar; self.a24 = self.a24 * scalar;
@@ -714,12 +716,12 @@ impl<T: Num + Copy> MulAssign<T> for Mat4<T> {
     }
 }
 
-impl<T: Num + Copy> MulAssign for Mat3<T> {
+impl<T: Number + Copy> MulAssign for Mat3<T> {
     fn mul_assign(&mut self, other: Self) {
         *self = *self * other;
     }
 }
-impl<T: Num + Copy> Mul<T> for Mat3<T> {
+impl<T: Number + Copy> Mul<T> for Mat3<T> {
     type Output = Self;
     fn mul(self, scalar: T) -> Self {
         Mat3 {
@@ -729,7 +731,7 @@ impl<T: Num + Copy> Mul<T> for Mat3<T> {
         }
     }
 }
-impl<T: Num + Copy> MulAssign<T> for Mat3<T> {
+impl<T: Number + Copy> MulAssign<T> for Mat3<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.a11 = self.a11 * scalar; self.a12 = self.a12 * scalar; self.a13 = self.a13 * scalar;
         self.a21 = self.a21 * scalar; self.a22 = self.a22 * scalar; self.a23 = self.a23 * scalar;
@@ -737,12 +739,12 @@ impl<T: Num + Copy> MulAssign<T> for Mat3<T> {
     }
 }
 
-impl<T: Num + Copy> MulAssign for Mat2<T> {
+impl<T: Number + Copy> MulAssign for Mat2<T> {
     fn mul_assign(&mut self, other: Self) {
         *self = *self * other;
     }
 }
-impl<T: Num + Copy> Mul<T> for Mat2<T> {
+impl<T: Number + Copy> Mul<T> for Mat2<T> {
     type Output = Self;
     fn mul(self, scalar: T) -> Self {
         Mat2 {
@@ -751,7 +753,7 @@ impl<T: Num + Copy> Mul<T> for Mat2<T> {
         }
     }
 }
-impl<T: Num + Copy> MulAssign<T> for Mat2<T> {
+impl<T: Number + Copy> MulAssign<T> for Mat2<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.a11 = self.a11 * scalar; self.a12 = self.a12 * scalar;
         self.a21 = self.a21 * scalar; self.a22 = self.a22 * scalar;
@@ -759,7 +761,7 @@ impl<T: Num + Copy> MulAssign<T> for Mat2<T> {
 }
 
 // Vector multiplication
-impl<T: Num + Copy> Mul<Vec4<T>> for Mat4<T> {
+impl<T: Number + Copy> Mul<Vec4<T>> for Mat4<T> {
     type Output = Vec4<T>;
     fn mul(self, v: Vec4<T>) -> Vec4<T> {
         Vec4 {
@@ -771,7 +773,7 @@ impl<T: Num + Copy> Mul<Vec4<T>> for Mat4<T> {
     }
 }
 
-impl<T: Num + Copy> Mul<Vec3<T>> for Mat3<T> {
+impl<T: Number + Copy> Mul<Vec3<T>> for Mat3<T> {
     type Output = Vec3<T>;
     fn mul(self, v: Vec3<T>) -> Vec3<T> {
         Vec3 {
@@ -782,7 +784,7 @@ impl<T: Num + Copy> Mul<Vec3<T>> for Mat3<T> {
     }
 }
 
-impl<T: Num + Copy> Mul<Vec2<T>> for Mat2<T> {
+impl<T: Number + Copy> Mul<Vec2<T>> for Mat2<T> {
     type Output = Vec2<T>;
     fn mul(self, v: Vec2<T>) -> Vec2<T> {
         Vec2 {
@@ -793,7 +795,7 @@ impl<T: Num + Copy> Mul<Vec2<T>> for Mat2<T> {
 }
 
 // Addition and subtraction
-impl<T: Num + Copy> Add for Mat4<T> {
+impl<T: Number + Copy> Add for Mat4<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Mat4 {
@@ -804,7 +806,7 @@ impl<T: Num + Copy> Add for Mat4<T> {
         }
     }
 }
-impl<T: Num + Copy> AddAssign for Mat4<T> {
+impl<T: Number + Copy> AddAssign for Mat4<T> {
     fn add_assign(&mut self, other: Self) {
         self.a11 = self.a11 + other.a11; self.a12 = self.a12 + other.a12; self.a13 = self.a13 + other.a13; self.a14 = self.a14 + other.a14;
         self.a21 = self.a21 + other.a21; self.a22 = self.a22 + other.a22; self.a23 = self.a23 + other.a23; self.a24 = self.a24 + other.a24;
@@ -812,7 +814,7 @@ impl<T: Num + Copy> AddAssign for Mat4<T> {
         self.a41 = self.a41 + other.a41; self.a42 = self.a42 + other.a42; self.a43 = self.a43 + other.a43; self.a44 = self.a44 + other.a44;
     }
 }
-impl<T: Num + Copy> Sub for Mat4<T> {
+impl<T: Number + Copy> Sub for Mat4<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Mat4 {
@@ -823,7 +825,7 @@ impl<T: Num + Copy> Sub for Mat4<T> {
         }
     }
 }
-impl<T: Num + Copy> SubAssign for Mat4<T> {
+impl<T: Number + Copy> SubAssign for Mat4<T> {
     fn sub_assign(&mut self, other: Self) {
         self.a11 = self.a11 - other.a11; self.a12 = self.a12 - other.a12; self.a13 = self.a13 - other.a13; self.a14 = self.a14 - other.a14;
         self.a21 = self.a21 - other.a21; self.a22 = self.a22 - other.a22; self.a23 = self.a23 - other.a23; self.a24 = self.a24 - other.a24;
@@ -832,7 +834,7 @@ impl<T: Num + Copy> SubAssign for Mat4<T> {
     }
 }
 
-impl<T: Num + Copy> AsRef<[T]> for Mat4<T> {
+impl<T: Number + Copy> AsRef<[T]> for Mat4<T> {
     fn as_ref(&self) -> &[T] {
         use std::slice;
         unsafe {
@@ -841,7 +843,7 @@ impl<T: Num + Copy> AsRef<[T]> for Mat4<T> {
     }
 }
 
-impl<T: Num + Copy> Add for Mat3<T> {
+impl<T: Number + Copy> Add for Mat3<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Mat3 {
@@ -851,14 +853,14 @@ impl<T: Num + Copy> Add for Mat3<T> {
         }
     }
 }
-impl<T: Num + Copy> AddAssign for Mat3<T> {
+impl<T: Number + Copy> AddAssign for Mat3<T> {
     fn add_assign(&mut self, other: Self) {
         self.a11 = self.a11 + other.a11; self.a12 = self.a12 + other.a12; self.a13 = self.a13 + other.a13; 
         self.a21 = self.a21 + other.a21; self.a22 = self.a22 + other.a22; self.a23 = self.a23 + other.a23;
         self.a31 = self.a31 + other.a31; self.a32 = self.a32 + other.a32; self.a33 = self.a33 + other.a33;
     }
 }
-impl<T: Num + Copy> Sub for Mat3<T> {
+impl<T: Number + Copy> Sub for Mat3<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Mat3 {
@@ -868,7 +870,7 @@ impl<T: Num + Copy> Sub for Mat3<T> {
         }
     }
 }
-impl<T: Num + Copy> SubAssign for Mat3<T> {
+impl<T: Number + Copy> SubAssign for Mat3<T> {
     fn sub_assign(&mut self, other: Self) {
         self.a11 = self.a11 - other.a11; self.a12 = self.a12 - other.a12; self.a13 = self.a13 - other.a13;
         self.a21 = self.a21 - other.a21; self.a22 = self.a22 - other.a22; self.a23 = self.a23 - other.a23;
@@ -876,7 +878,7 @@ impl<T: Num + Copy> SubAssign for Mat3<T> {
     }
 }
 
-impl<T: Num + Copy> AsRef<[T]> for Mat3<T> {
+impl<T: Number + Copy> AsRef<[T]> for Mat3<T> {
     fn as_ref(&self) -> &[T] {
         use std::slice;
         unsafe {
@@ -885,7 +887,7 @@ impl<T: Num + Copy> AsRef<[T]> for Mat3<T> {
     }
 }
 
-impl<T: Num + Copy> Add for Mat2<T> {
+impl<T: Number + Copy> Add for Mat2<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Mat2 {
@@ -894,13 +896,13 @@ impl<T: Num + Copy> Add for Mat2<T> {
         }
     }
 }
-impl<T: Num + Copy> AddAssign for Mat2<T> {
+impl<T: Number + Copy> AddAssign for Mat2<T> {
     fn add_assign(&mut self, other: Self) {
         self.a11 = self.a11 + other.a11; self.a12 = self.a12 + other.a12;
         self.a21 = self.a21 + other.a21; self.a22 = self.a22 + other.a22;
     }
 }
-impl<T: Num + Copy> Sub for Mat2<T> {
+impl<T: Number + Copy> Sub for Mat2<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Mat2 {
@@ -909,14 +911,14 @@ impl<T: Num + Copy> Sub for Mat2<T> {
         }
     }
 }
-impl<T: Num + Copy> SubAssign for Mat2<T> {
+impl<T: Number + Copy> SubAssign for Mat2<T> {
     fn sub_assign(&mut self, other: Self) {
         self.a11 = self.a11 - other.a11; self.a12 = self.a12 - other.a12;
         self.a21 = self.a21 - other.a21; self.a22 = self.a22 - other.a22;
     }
 }
 
-impl<T: Num + Copy> AsRef<[T]> for Mat2<T> {
+impl<T: Number + Copy> AsRef<[T]> for Mat2<T> {
     fn as_ref(&self) -> &[T] {
         use std::slice;
         unsafe {

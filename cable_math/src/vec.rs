@@ -1,8 +1,10 @@
 
 use std::fmt;
-use std::ops::*;
+use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
+use std::ops::Neg;
 
-use num::*;
+use traits::{Number, Float, Signed};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 #[repr(C)]
@@ -48,9 +50,9 @@ impl<T> Vec4<T> {
 }
 
 // General functions
-impl<T: Num + Copy> Vec2<T> {
+impl<T: Number + Copy> Vec2<T> {
     /// Creates a new vector with all components set to 0
-    pub fn zero() -> Vec2<T> { Vec2 { x: T::zero(), y: T::zero() } }
+    pub fn zero() -> Vec2<T> { Vec2 { x: T::ZERO, y: T::ZERO } }
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -88,7 +90,7 @@ impl<T: Num + Copy> Vec2<T> {
     /// assert_eq!(Vec2::new(-2, 3), a.left());
     /// ```
     pub fn left(self) -> Vec2<T> {
-        Vec2::new(T::zero() - self.y, self.x)
+        Vec2::new(T::ZERO - self.y, self.x)
     }
 
     /// Rotates this vector 90 degrees (π/2 radians) clockwise
@@ -99,7 +101,7 @@ impl<T: Num + Copy> Vec2<T> {
     /// assert_eq!(Vec2::new(2, -3), a.right());
     /// ```
     pub fn right(self) -> Vec2<T> {
-        Vec2::new(self.y, T::zero() - self.x)
+        Vec2::new(self.y, T::ZERO - self.x)
     }
 
     /// Projects this vector onto the given other vector. The returned vector will lie on a line
@@ -116,13 +118,13 @@ impl<T: Num + Copy> Vec2<T> {
     /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
     /// inclusive, where 0 gives just `a` and 1 gives just `b`.
     pub fn lerp(a: Self, b: Self, t: T) -> Self {
-        a*(T::one() - t) + b*t
+        a*(T::ONE - t) + b*t
     }
 }
 
-impl<T: Num + Copy> Vec3<T> {
+impl<T: Number + Copy> Vec3<T> {
     /// Creates a new vector with all components set to 0
-    pub fn zero() -> Vec3<T> { Vec3 { x: T::zero(), y: T::zero(), z: T::zero() } }
+    pub fn zero() -> Vec3<T> { Vec3 { x: T::ZERO, y: T::ZERO, z: T::ZERO } }
     
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -150,13 +152,13 @@ impl<T: Num + Copy> Vec3<T> {
     /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
     /// inclusive, where 0 gives just `a` and 1 gives just `b`.
     pub fn lerp(a: Self, b: Self, t: T) -> Self {
-        a*(T::one() - t) + b*t
+        a*(T::ONE - t) + b*t
     }
 }
 
-impl<T: Num + Copy> Vec4<T> {
+impl<T: Number + Copy> Vec4<T> {
     /// Creates a new vector with all components set to 0
-    pub fn zero() -> Vec4<T> { Vec4 { x: T::zero(), y: T::zero(), z: T::zero(), w: T::zero() } }
+    pub fn zero() -> Vec4<T> { Vec4 { x: T::ZERO, y: T::ZERO, z: T::ZERO, w: T::ZERO } }
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -176,11 +178,11 @@ impl<T: Num + Copy> Vec4<T> {
     /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both
     /// inclusive, where 0 gives just `a` and 1 gives just `b`.
     pub fn lerp(a: Self, b: Self, t: T) -> Self {
-        a*(T::one() - t) + b*t
+        a*(T::ONE - t) + b*t
     }
 }
 
-impl <T: Num + Copy + Signed> Vec2<T> {
+impl <T: Number + Copy + Signed> Vec2<T> {
     /// Makes all components positive
     /// # Example
     /// ```
@@ -192,7 +194,7 @@ impl <T: Num + Copy + Signed> Vec2<T> {
         Vec2 { x: self.x.abs(), y: self.y.abs() }
     }
 }
-impl <T: Num + Copy + Signed> Vec3<T> {
+impl <T: Number + Copy + Signed> Vec3<T> {
     /// Makes all components positive
     /// # Example
     /// ```
@@ -204,7 +206,7 @@ impl <T: Num + Copy + Signed> Vec3<T> {
         Vec3 { x: self.x.abs(), y: self.y.abs(), z: self.z.abs() }
     }
 }
-impl <T: Num + Copy + Signed> Vec4<T> {
+impl <T: Number + Copy + Signed> Vec4<T> {
     /// Makes all components positive
     /// # Example
     /// ```
@@ -563,7 +565,7 @@ impl<T: Float> Vec4<T> {
 }
 
 // Swizzling
-impl<T: Num + Copy> Vec3<T> {
+impl<T: Number + Copy> Vec3<T> {
     /// Equal to `Vec3::new(vec.x, vec.y, z)`
     pub fn from2(vec: Vec2<T>, z: T) -> Vec3<T> { Vec3 { x: vec.x, y: vec.y, z: z } }
     /// Equal to `Vec2::new(vec.x, vec.y)`.
@@ -573,7 +575,7 @@ impl<T: Num + Copy> Vec3<T> {
     /// Equal to `Vec2::new(vec.y, vec.z)`.
     pub fn yz(self) -> Vec2<T> { Vec2 { x: self.y, y: self.z } }
 }
-impl<T: Num + Copy> Vec4<T> {
+impl<T: Number + Copy> Vec4<T> {
     /// Equal to `Vec4::new(vec.x, vec.y, vec.z, w)`
     pub fn from3(vec: Vec3<T>, w: T) -> Vec4<T> { Vec4 { x: vec.x, y: vec.y, z: vec.z, w: w } }
     /// Equal to `Vec4::new(vec.x, vec.y, z, w)`
@@ -589,45 +591,45 @@ impl<T: Num + Copy> Vec4<T> {
 }
 
 // Addition, subtraction and scaling
-impl<T: Num + Copy> Add for Vec2<T> {
+impl<T: Number + Copy> Add for Vec2<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self { Vec2::new(self.x + other.x, self.y + other.y) }
 }
-impl<T: Num + Copy> Add for Vec3<T> {
+impl<T: Number + Copy> Add for Vec3<T> {
     type Output = Self;
     fn add(self, other: Self) -> Vec3<T> { Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z) }
 }
-impl<T: Num + Copy> Add for Vec4<T> {
+impl<T: Number + Copy> Add for Vec4<T> {
     type Output = Self;
     fn add(self, other: Self) -> Self { Vec4::new(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w) }
 }
-impl<T: Num + Copy> Sub for Vec2<T> {
+impl<T: Number + Copy> Sub for Vec2<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self { Vec2::new(self.x - other.x, self.y - other.y) }
 }
-impl<T: Num + Copy> Sub for Vec3<T> {
+impl<T: Number + Copy> Sub for Vec3<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self { Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z) }
 }
-impl<T: Num + Copy> Sub for Vec4<T> {
+impl<T: Number + Copy> Sub for Vec4<T> {
     type Output = Self;
     fn sub(self, other: Self) -> Self { Vec4::new(self.x - other.x, self.y - other.y, self.z - other.z, self.w - other.w) }
 }
 
-impl<T: Num + Copy> AddAssign for Vec2<T> {
+impl<T: Number + Copy> AddAssign for Vec2<T> {
     fn add_assign(&mut self, other: Self) {
         self.x = self.x + other.x;
         self.y = self.y + other.y;
     }
 }
-impl<T: Num + Copy> AddAssign for Vec3<T> {
+impl<T: Number + Copy> AddAssign for Vec3<T> {
     fn add_assign(&mut self, other: Self) {
         self.x = self.x + other.x;
         self.y = self.y + other.y;
         self.z = self.z + other.z;
     }
 }
-impl<T: Num + Copy> AddAssign for Vec4<T> {
+impl<T: Number + Copy> AddAssign for Vec4<T> {
     fn add_assign(&mut self, other: Self) {
         self.x = self.x + other.x;
         self.y = self.y + other.y;
@@ -635,20 +637,20 @@ impl<T: Num + Copy> AddAssign for Vec4<T> {
         self.w = self.w + other.w;
     }
 }
-impl<T: Num + Copy> SubAssign for Vec2<T> {
+impl<T: Number + Copy> SubAssign for Vec2<T> {
     fn sub_assign(&mut self, other: Self) {
         self.x = self.x - other.x;
         self.y = self.y - other.y;
     }
 }
-impl<T: Num + Copy> SubAssign for Vec3<T> {
+impl<T: Number + Copy> SubAssign for Vec3<T> {
     fn sub_assign(&mut self, other: Self) {
         self.x = self.x - other.x;
         self.y = self.y - other.y;
         self.z = self.z - other.z;
     }
 }
-impl<T: Num + Copy> SubAssign for Vec4<T> {
+impl<T: Number + Copy> SubAssign for Vec4<T> {
     fn sub_assign(&mut self, other: Self) {
         self.x = self.x - other.x;
         self.y = self.y - other.y;
@@ -657,7 +659,7 @@ impl<T: Num + Copy> SubAssign for Vec4<T> {
     }
 }
 
-impl<T: Num + Copy> Mul<T> for Vec2<T> {
+impl<T: Number + Copy> Mul<T> for Vec2<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
         Vec2 {
@@ -666,13 +668,13 @@ impl<T: Num + Copy> Mul<T> for Vec2<T> {
         }
     }
 }
-impl<T: Num + Copy> MulAssign<T> for Vec2<T> {
+impl<T: Number + Copy> MulAssign<T> for Vec2<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.x = self.x * scalar;
         self.y = self.y * scalar;
     }
 }
-impl<T: Num + Copy> Mul<T> for Vec3<T> {
+impl<T: Number + Copy> Mul<T> for Vec3<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
         Vec3 {
@@ -682,14 +684,14 @@ impl<T: Num + Copy> Mul<T> for Vec3<T> {
         }
     }
 }
-impl<T: Num + Copy> MulAssign<T> for Vec3<T> {
+impl<T: Number + Copy> MulAssign<T> for Vec3<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.x = self.x * scalar;
         self.y = self.y * scalar;
         self.z = self.z * scalar;
     }
 }
-impl<T: Num + Copy> Mul<T> for Vec4<T> {
+impl<T: Number + Copy> Mul<T> for Vec4<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
         Vec4 {
@@ -700,7 +702,7 @@ impl<T: Num + Copy> Mul<T> for Vec4<T> {
         }
     }
 }
-impl<T: Num + Copy> MulAssign<T> for Vec4<T> {
+impl<T: Number + Copy> MulAssign<T> for Vec4<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.x = self.x * scalar;
         self.y = self.y * scalar;
@@ -709,7 +711,7 @@ impl<T: Num + Copy> MulAssign<T> for Vec4<T> {
     }
 }
 
-impl<T: Num + Copy> Div<T> for Vec2<T> {
+impl<T: Number + Copy> Div<T> for Vec2<T> {
     type Output = Self; 
     fn div(self, scalar: T) -> Self {
         Vec2 {
@@ -718,13 +720,13 @@ impl<T: Num + Copy> Div<T> for Vec2<T> {
         }
     }
 }
-impl<T: Num + Copy> DivAssign<T> for Vec2<T> {
+impl<T: Number + Copy> DivAssign<T> for Vec2<T> {
     fn div_assign(&mut self, scalar: T) {
         self.x = self.x / scalar;
         self.y = self.y / scalar;
     }
 }
-impl<T: Num + Copy> Div<T> for Vec3<T> {
+impl<T: Number + Copy> Div<T> for Vec3<T> {
     type Output = Self; 
     fn div(self, scalar: T) -> Self {
         Vec3 {
@@ -734,14 +736,14 @@ impl<T: Num + Copy> Div<T> for Vec3<T> {
         }
     }
 }
-impl<T: Num + Copy> DivAssign<T> for Vec3<T> {
+impl<T: Number + Copy> DivAssign<T> for Vec3<T> {
     fn div_assign(&mut self, scalar: T) {
         self.x = self.x / scalar;
         self.y = self.y / scalar;
         self.z = self.z / scalar;
     }
 }
-impl<T: Num + Copy> Div<T> for Vec4<T> {
+impl<T: Number + Copy> Div<T> for Vec4<T> {
     type Output = Self; 
     fn div(self, scalar: T) -> Self {
         Vec4 {
@@ -752,7 +754,7 @@ impl<T: Num + Copy> Div<T> for Vec4<T> {
         }
     }
 }
-impl<T: Num + Copy> DivAssign<T> for Vec4<T> {
+impl<T: Number + Copy> DivAssign<T> for Vec4<T> {
     fn div_assign(&mut self, scalar: T) {
         self.x = self.x / scalar;
         self.y = self.y / scalar;
@@ -761,37 +763,37 @@ impl<T: Num + Copy> DivAssign<T> for Vec4<T> {
     }
 }
 
-impl<T: Num + Copy> Neg for Vec2<T> {
+impl<T: Number + Copy> Neg for Vec2<T> {
     type Output = Self;
     fn neg(self) -> Self {
-        Vec2 { x: T::zero()-self.x, y: T::zero()-self.y }
+        Vec2 { x: T::ZERO-self.x, y: T::ZERO-self.y }
     }
 }
-impl<T: Num + Copy> Neg for Vec3<T> {
+impl<T: Number + Copy> Neg for Vec3<T> {
     type Output = Self;
     fn neg(self) -> Self {
-        Vec3 { x: T::zero()-self.x, y: T::zero()-self.y, z: T::zero()-self.z }
+        Vec3 { x: T::ZERO-self.x, y: T::ZERO-self.y, z: T::ZERO-self.z }
     }
 }
-impl<T: Num + Copy> Neg for Vec4<T> {
+impl<T: Number + Copy> Neg for Vec4<T> {
     type Output = Self;
     fn neg(self) -> Self {
-        Vec4 { x: T::zero()-self.x, y: T::zero()-self.y, z: T::zero()-self.z, w: T::zero()-self.w }
+        Vec4 { x: T::ZERO-self.x, y: T::ZERO-self.y, z: T::ZERO-self.z, w: T::ZERO-self.w }
     }
 }
 
 // Printing
-impl<T: fmt::Display + Num + Copy> fmt::Display for Vec2<T> {
+impl<T: fmt::Display + Number + Copy> fmt::Display for Vec2<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {})", self.x, self.y)
     }
 }
-impl<T: fmt::Display + Num + Copy> fmt::Display for Vec3<T> {
+impl<T: fmt::Display + Number + Copy> fmt::Display for Vec3<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {}, {})", self.x, self.y, self.z)
     }
 }
-impl<T: fmt::Display + Num + Copy> fmt::Display for Vec4<T> {
+impl<T: fmt::Display + Number + Copy> fmt::Display for Vec4<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}, {}, {}, {})", self.x, self.y, self.z, self.w)
     }

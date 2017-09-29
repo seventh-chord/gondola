@@ -3,7 +3,6 @@
 
 use std::fmt;
 use std::marker::PhantomData;
-use num::*;
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use serde::ser::SerializeTuple;
 use serde::de::{Visitor, SeqAccess, Error};
