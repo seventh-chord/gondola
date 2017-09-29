@@ -10,6 +10,7 @@ use serde::de::{Visitor, SeqAccess, Error};
 use quat::Quaternion;
 use vec::{Vec2, Vec3, Vec4};
 use mat::{Mat3, Mat4};
+use traits::{Number, Float};
 
 impl<T: Serialize> Serialize for Vec2<T> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
@@ -42,7 +43,7 @@ impl<T: Serialize> Serialize for Vec4<T> {
 }
 
 impl<T: Serialize> Serialize for Quaternion<T> 
-    where T: Num + Float + Copy,
+    where T: Number + Float + Copy,
 {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let mut tuple = s.serialize_tuple(4)?;
@@ -113,7 +114,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Vec4<T> {
 
 impl<'de, T> Deserialize<'de> for Quaternion<T> 
     where T: Deserialize<'de>,
-          T: Num + Float + Copy,
+          T: Number + Float + Copy,
 {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_tuple(4, QuaternionVisitor::new())
@@ -122,7 +123,7 @@ impl<'de, T> Deserialize<'de> for Quaternion<T>
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mat4<T> 
     where T: Deserialize<'de>,
-          T: Num + Float + Copy,
+          T: Number + Float + Copy,
 {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_tuple(16, Mat4Visitor::new())
@@ -131,7 +132,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mat4<T>
 
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mat3<T> 
     where T: Deserialize<'de>,
-          T: Num + Float + Copy,
+          T: Number + Float + Copy,
 {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         d.deserialize_tuple(9, Mat3Visitor::new())
@@ -227,14 +228,14 @@ impl<'de, T: Deserialize<'de>> Visitor<'de> for Vec4Visitor<T> {
 
 struct QuaternionVisitor<T>(PhantomData<T>);
 impl<T> QuaternionVisitor<T> 
-    where T: Num + Float + Copy,
+    where T: Number + Float + Copy,
 {
     fn new() -> Self { QuaternionVisitor(PhantomData) }
 }
 
 impl<'de, T: Deserialize<'de>> Visitor<'de> for QuaternionVisitor<T> 
     where T: Deserialize<'de>,
-          T: Num + Float + Copy,
+          T: Number + Float + Copy,
 {
     type Value = Quaternion<T>;
 
@@ -268,7 +269,7 @@ impl<T> Mat4Visitor<T> {
 }
 impl<'de, T> Visitor<'de> for Mat4Visitor<T> 
     where T: Deserialize<'de>,
-          T: Num + Float + Copy,
+          T: Number + Float + Copy,
 {
     type Value = Mat4<T>;
 
@@ -279,7 +280,7 @@ impl<'de, T> Visitor<'de> for Mat4Visitor<T>
     fn visit_seq<A>(self, mut a: A) -> Result<Self::Value, A::Error> 
         where A: SeqAccess<'de>,
     {
-        let mut values = [T::zero(); 16];
+        let mut values = [T::ZERO; 16];
         for i in 0..values.len() {
             match a.next_element()? {
                 Some(x) => values[i] = x,
@@ -296,7 +297,7 @@ impl<T> Mat3Visitor<T> {
 }
 impl<'de, T> Visitor<'de> for Mat3Visitor<T> 
     where T: Deserialize<'de>,
-          T: Num + Float + Copy,
+          T: Number + Float + Copy,
 {
     type Value = Mat3<T>;
 
@@ -307,7 +308,7 @@ impl<'de, T> Visitor<'de> for Mat3Visitor<T>
     fn visit_seq<A>(self, mut a: A) -> Result<Self::Value, A::Error> 
         where A: SeqAccess<'de>,
     {
-        let mut values = [T::zero(); 9];
+        let mut values = [T::ZERO; 9];
         for i in 0..values.len() {
             match a.next_element()? {
                 Some(x) => values[i] = x,
