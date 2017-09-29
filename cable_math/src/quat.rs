@@ -19,20 +19,18 @@ impl<T: Copy> Copy for Quaternion<T> {}
 
 impl<T: Number + Float + Copy> Default for Quaternion<T> {
     fn default() -> Quaternion<T> {
-        Quaternion::new()
+        Quaternion::IDENTITY
     }
 }
 
 impl<T: Number + Float + Copy> Quaternion<T> {
     /// Creates a new identity quaternion
-    pub fn new() -> Quaternion<T> {
-        Quaternion {
+    pub const IDENTITY: Quaternion<T> = Quaternion {
             x: T::ZERO,
             y: T::ZERO,
             z: T::ZERO,
             w: T::ONE,
-        }
-    }
+    };
 
     /// Creates a quaternion representing a counterclockwise rotation of `angle` radians around the 
     /// given axis. This function normalizes the axis, but if the axis is `(0, 0, 0)` the quaternion
@@ -278,7 +276,7 @@ mod tests {
 
     #[test]
     fn identity() {
-        let identity = Quaternion::<f32>::new();
+        let identity = Quaternion::<f32>::IDENTITY;
         assert_eq!(identity, identity*identity);
         assert_eq!(identity, identity*identity*identity);
     }
@@ -329,7 +327,7 @@ mod tests {
     #[test]
     fn nlerp() {
         let a = Quaternion::rotation(f32::consts::PI/2.0, Vec3::new(1.0, 0.0, 0.0)).into();
-        let b = Quaternion::new();
+        let b = Quaternion::IDENTITY;
 
         let c = Quaternion::nlerp(a, b, 0.5);
         let expected = Quaternion::rotation(f32::consts::PI/4.0, Vec3::new(1.0, 0.0, 0.0));

@@ -51,8 +51,7 @@ impl<T> Vec4<T> {
 
 // General functions
 impl<T: Number + Copy> Vec2<T> {
-    /// Creates a new vector with all components set to 0
-    pub fn zero() -> Vec2<T> { Vec2 { x: T::ZERO, y: T::ZERO } }
+    pub const ZERO: Vec2<T> = Vec2 { x: T::ZERO, y: T::ZERO };
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -123,8 +122,7 @@ impl<T: Number + Copy> Vec2<T> {
 }
 
 impl<T: Number + Copy> Vec3<T> {
-    /// Creates a new vector with all components set to 0
-    pub fn zero() -> Vec3<T> { Vec3 { x: T::ZERO, y: T::ZERO, z: T::ZERO } }
+    pub const ZERO: Vec3<T> = Vec3 { x: T::ZERO, y: T::ZERO, z: T::ZERO };
     
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -157,8 +155,7 @@ impl<T: Number + Copy> Vec3<T> {
 }
 
 impl<T: Number + Copy> Vec4<T> {
-    /// Creates a new vector with all components set to 0
-    pub fn zero() -> Vec4<T> { Vec4 { x: T::ZERO, y: T::ZERO, z: T::ZERO, w: T::ZERO } }
+    pub const ZERO: Vec4<T> = Vec4 { x: T::ZERO, y: T::ZERO, z: T::ZERO, w: T::ZERO };
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -906,8 +903,8 @@ mod tests {
         let a = Vec2::new(1, 2);
         let b = Vec2::new(4, -3);
 
-        assert_eq!(a, a + Vec2::zero());
-        assert_eq!(b, b + Vec2::zero());
+        assert_eq!(a, a + Vec2::ZERO);
+        assert_eq!(b, b + Vec2::ZERO);
 
         assert_eq!(Vec2::new(5, -1), a + b);
 
@@ -924,8 +921,8 @@ mod tests {
         let a = Vec2::new(1, 2);
         let b = Vec2::new(4, -3);
 
-        assert_eq!(a, a - Vec2::zero());
-        assert_eq!(b, b - Vec2::zero());
+        assert_eq!(a, a - Vec2::ZERO);
+        assert_eq!(b, b - Vec2::ZERO);
 
         assert_eq!(Vec2::new(-3, 5), a - b);
 
@@ -939,7 +936,7 @@ mod tests {
 
     #[test]
     fn len() {
-        assert_eq!(0.0, Vec2::<f32>::zero().len());
+        assert_eq!(0.0, Vec2::<f32>::ZERO.len());
 
         let a = Vec2::new(4, 4);
         let b = Vec2::new(4.0, -3.0);
@@ -950,9 +947,9 @@ mod tests {
 
     #[test]
     fn dot() {
-        assert_eq!(0.0, Vec2::dot(Vec2::zero(), Vec2::zero()));
-        assert_eq!(0.0, Vec3::dot(Vec3::zero(), Vec3::zero()));
-        assert_eq!(0.0, Vec4::dot(Vec4::zero(), Vec4::zero()));
+        assert_eq!(0.0, Vec2::dot(Vec2::ZERO, Vec2::ZERO));
+        assert_eq!(0.0, Vec3::dot(Vec3::ZERO, Vec3::ZERO));
+        assert_eq!(0.0, Vec4::dot(Vec4::ZERO, Vec4::ZERO));
 
         let a = Vec3::new(0.0, 1.0, 1.0);
         let b = Vec3::new(1.0, 0.0, 0.0);

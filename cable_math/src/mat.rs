@@ -41,42 +41,36 @@ impl<T: Copy> Copy for Mat4<T> {}
 
 impl<T: Number + Copy> Default for Mat2<T> {
     fn default() -> Mat2<T> {
-        Mat2::identity()
+        Mat2::IDENTITY
     }
 }
 
 impl<T: Number + Copy> Default for Mat3<T> {
     fn default() -> Mat3<T> {
-        Mat3::identity()
+        Mat3::IDENTITY
     }
 }
 
 impl<T: Number + Copy> Default for Mat4<T> {
     fn default() -> Mat4<T> {
-        Mat4::identity()
+        Mat4::IDENTITY
     }
 }
 
 impl<T: Number + Copy> Mat4<T> {
-    /// Creates a new matrix with all values set to 0
-    pub fn zero() -> Mat4<T> {
-        Mat4 {
-            a11: T::ZERO, a12: T::ZERO, a13: T::ZERO, a14: T::ZERO,
-            a21: T::ZERO, a22: T::ZERO, a23: T::ZERO, a24: T::ZERO,
-            a31: T::ZERO, a32: T::ZERO, a33: T::ZERO, a34: T::ZERO,
-            a41: T::ZERO, a42: T::ZERO, a43: T::ZERO, a44: T::ZERO,
-        }
-    }
+    pub const ZERO: Mat4<T> = Mat4 {
+        a11: T::ZERO, a12: T::ZERO, a13: T::ZERO, a14: T::ZERO,
+        a21: T::ZERO, a22: T::ZERO, a23: T::ZERO, a24: T::ZERO,
+        a31: T::ZERO, a32: T::ZERO, a33: T::ZERO, a34: T::ZERO,
+        a41: T::ZERO, a42: T::ZERO, a43: T::ZERO, a44: T::ZERO,
+    };
 
-    /// Creates a new identity matrix
-    pub fn identity() -> Mat4<T> {
-        Mat4 {
-            a11: T::ONE,  a12: T::ZERO, a13: T::ZERO, a14: T::ZERO,
-            a21: T::ZERO, a22: T::ONE,  a23: T::ZERO, a24: T::ZERO,
-            a31: T::ZERO, a32: T::ZERO, a33: T::ONE,  a34: T::ZERO,
-            a41: T::ZERO, a42: T::ZERO, a43: T::ZERO, a44: T::ONE,
-        }
-    }
+    pub const IDENTITY: Mat4<T> = Mat4 {
+        a11: T::ONE,  a12: T::ZERO, a13: T::ZERO, a14: T::ZERO,
+        a21: T::ZERO, a22: T::ONE,  a23: T::ZERO, a24: T::ZERO,
+        a31: T::ZERO, a32: T::ZERO, a33: T::ONE,  a34: T::ZERO,
+        a41: T::ZERO, a42: T::ZERO, a43: T::ZERO, a44: T::ONE,
+    };
 
     /// Creates a new matrix with the given values. The values are specified
     /// row by row.
@@ -210,7 +204,7 @@ impl<T: Number + Copy> Mat4<T> {
         Mat4 {
             a11, a22, a33,
             a14, a24, a34,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -218,7 +212,7 @@ impl<T: Number + Copy> Mat4<T> {
     pub fn translation(translation: Vec3<T>) -> Mat4<T> {
         Mat4 {
             a14: translation.x, a24: translation.y, a34: translation.z,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -226,7 +220,7 @@ impl<T: Number + Copy> Mat4<T> {
     pub fn translation_x(x: T) -> Mat4<T> {
         Mat4 {
             a14: x,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -234,7 +228,7 @@ impl<T: Number + Copy> Mat4<T> {
     pub fn translation_y(y: T) -> Mat4<T> {
         Mat4 {
             a24: y,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -242,7 +236,7 @@ impl<T: Number + Copy> Mat4<T> {
     pub fn translation_z(z: T) -> Mat4<T> {
         Mat4 {
             a34: z,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -250,7 +244,7 @@ impl<T: Number + Copy> Mat4<T> {
     pub fn scaling(scale: T) -> Mat4<T> {
         Mat4 {
             a11: scale, a22: scale, a33: scale,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -258,7 +252,7 @@ impl<T: Number + Copy> Mat4<T> {
     pub fn scaling_by_axes(scale: Vec3<T>) -> Mat4<T> {
         Mat4 {
             a11: scale.x, a22: scale.y, a33: scale.z,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 }
@@ -276,7 +270,7 @@ impl<T: Float + Copy> Mat4<T> {
             a33: -(far + near) / (far - near),
             a34: (-two*far*near) / (far - near),
             a43: -T::ONE,
-            .. Mat4::zero()
+            .. Mat4::ZERO
         }
     }
 
@@ -288,7 +282,7 @@ impl<T: Float + Copy> Mat4<T> {
         Mat4 {
             a22: cos, a23: -sin,
             a32: sin, a33: cos,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -300,7 +294,7 @@ impl<T: Float + Copy> Mat4<T> {
         Mat4 {
             a11: cos, a13: sin,
             a31: -sin, a33: cos,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 
@@ -312,29 +306,23 @@ impl<T: Float + Copy> Mat4<T> {
         Mat4 {
             a11: cos, a12: -sin,
             a21: sin, a22: cos,
-            .. Mat4::identity()
+            .. Mat4::IDENTITY
         }
     }
 }
 
 impl<T: Number + Copy> Mat3<T> {
-    /// Creates a new matrix with all values set to 0
-    pub fn zero() -> Mat3<T> {
-        Mat3 {
-            a11: T::ZERO, a12: T::ZERO, a13: T::ZERO,
-            a21: T::ZERO, a22: T::ZERO, a23: T::ZERO,
-            a31: T::ZERO, a32: T::ZERO, a33: T::ZERO,
-        }
-    }
+    pub const ZERO: Mat3<T> = Mat3 {
+        a11: T::ZERO, a12: T::ZERO, a13: T::ZERO,
+        a21: T::ZERO, a22: T::ZERO, a23: T::ZERO,
+        a31: T::ZERO, a32: T::ZERO, a33: T::ZERO,
+    };
 
-    /// Creates a new identity matrix
-    pub fn identity() -> Mat3<T> {
-        Mat3 {
-            a11: T::ONE,  a12: T::ZERO, a13: T::ZERO,
-            a21: T::ZERO, a22: T::ONE,  a23: T::ZERO,
-            a31: T::ZERO, a32: T::ZERO, a33: T::ONE,
-        }
-    }
+    pub const IDENTITY: Mat3<T> = Mat3 {
+        a11: T::ONE,  a12: T::ZERO, a13: T::ZERO,
+        a21: T::ZERO, a22: T::ONE,  a23: T::ZERO,
+        a31: T::ZERO, a32: T::ZERO, a33: T::ONE,
+    };
 
     /// Creates a new matrix with the given values. The values are specified
     /// row by row.
@@ -439,7 +427,7 @@ impl<T: Number + Copy> Mat3<T> {
     pub fn translation(translation: Vec2<T>) -> Mat3<T> {
         Mat3 {
             a13: translation.x, a23: translation.y,
-            .. Mat3::identity()
+            .. Mat3::IDENTITY
         }
     }
 
@@ -447,7 +435,7 @@ impl<T: Number + Copy> Mat3<T> {
     pub fn translation_x(x: T) -> Mat3<T> {
         Mat3 {
             a13: x,
-            .. Mat3::identity()
+            .. Mat3::IDENTITY
         }
     }
 
@@ -455,7 +443,7 @@ impl<T: Number + Copy> Mat3<T> {
     pub fn translation_y(y: T) -> Mat3<T> {
         Mat3 {
             a23: y,
-            .. Mat3::identity()
+            .. Mat3::IDENTITY
         }
     }
 
@@ -464,7 +452,7 @@ impl<T: Number + Copy> Mat3<T> {
     pub fn scaling(scale: T) -> Mat3<T> {
         Mat3 {
             a11: scale, a22: scale,
-            .. Mat3::identity()
+            .. Mat3::IDENTITY
         }
     }
 
@@ -473,7 +461,7 @@ impl<T: Number + Copy> Mat3<T> {
     pub fn scaling_by_axes(scale: Vec2<T>) -> Mat3<T> {
         Mat3 {
             a11: scale.x, a22: scale.y,
-            .. Mat3::identity()
+            .. Mat3::IDENTITY
         }
     }
 
@@ -500,27 +488,21 @@ impl<T: Float + Copy> Mat3<T> {
         Mat3 {
             a11: cos, a12: -sin,
             a21: sin, a22: cos,
-            .. Mat3::identity()
+            .. Mat3::IDENTITY
         }
     }
 }
 
 impl<T: Number + Copy> Mat2<T> {
-    /// Creates a new matrix with all values set to 0
-    pub fn zero() -> Mat2<T> {
-        Mat2 {
-            a11: T::ZERO, a12: T::ZERO,
-            a21: T::ZERO, a22: T::ZERO,
-        }
-    }
+    pub const ZERO: Mat2<T> = Mat2 {
+        a11: T::ZERO, a12: T::ZERO,
+        a21: T::ZERO, a22: T::ZERO,
+    };
 
-    /// Creates a new identity matrix
-    pub fn identity() -> Mat2<T> {
-        Mat2 {
-            a11: T::ONE,  a12: T::ZERO,
-            a21: T::ZERO, a22: T::ONE,
-        }
-    }
+    pub const IDENTITY: Mat2<T> = Mat2 {
+        a11: T::ONE,  a12: T::ZERO,
+        a21: T::ZERO, a22: T::ONE,
+    };
 
     /// Creates a new matrix with the given values. The values are specified
     /// row by row.
@@ -592,7 +574,7 @@ impl<T: Number + Copy> Mat2<T> {
     pub fn scaling(scale: T) -> Mat2<T> {
         Mat2 {
             a11: scale, a22: scale,
-            .. Mat2::identity()
+            .. Mat2::IDENTITY
         }
     }
 
@@ -600,7 +582,7 @@ impl<T: Number + Copy> Mat2<T> {
     pub fn scaling_by_axes(scale: Vec2<T>) -> Mat2<T> {
         Mat2 {
             a11: scale.x, a22: scale.y,
-            .. Mat2::identity()
+            .. Mat2::IDENTITY
         }
     }
 }
@@ -614,7 +596,7 @@ impl<T: Float + Copy> Mat2<T> {
         Mat2 {
             a11: cos, a12: -sin,
             a21: sin, a22: cos,
-            .. Mat2::identity()
+            .. Mat2::IDENTITY
         }
     }
 }
@@ -962,7 +944,7 @@ mod mat4_tests {
         let a = mat_a();
         let b = mat_b();
         let c = mat_c();
-        let identity = Mat4::identity();
+        let identity = Mat4::IDENTITY;
 
         assert_eq!(a, a * identity);
         assert_eq!(b, b * identity);
@@ -983,8 +965,8 @@ mod mat4_tests {
         let a = mat_a();
         let b = mat_b();
         let c = mat_c();
-        let identity = Mat4::identity();
-        let zero = Mat4::zero();
+        let identity = Mat4::IDENTITY;
+        let zero = Mat4::ZERO;
 
         assert_eq!(identity * zero, zero);
 
@@ -1090,7 +1072,7 @@ mod mat4_tests {
 
     #[test]
     fn inverse() {
-        let identity = Mat4::<f32>::identity();
+        let identity = Mat4::<f32>::IDENTITY;
         let inverse = identity.inverse();
 
         assert_eq!(identity, inverse);
@@ -1108,7 +1090,7 @@ mod mat4_tests {
 
     #[test]
     fn vec_mul() {
-        let identity = Mat4::<f32>::identity();
+        let identity = Mat4::<f32>::IDENTITY;
         let vec = Vec4::new(7.2, 2.4, 3.4, 1.9);
 
         assert_eq!(vec, identity * vec);
@@ -1164,7 +1146,7 @@ mod mat3_tests {
         let a = mat_a();
         let b = mat_b();
         let c = mat_c();
-        let identity = Mat3::identity();
+        let identity = Mat3::IDENTITY;
 
         assert_eq!(a, a * identity);
         assert_eq!(b, b * identity);
@@ -1185,8 +1167,8 @@ mod mat3_tests {
         let a = mat_a();
         let b = mat_b();
         let c = mat_c();
-        let identity = Mat3::identity();
-        let zero = Mat3::zero();
+        let identity = Mat3::IDENTITY;
+        let zero = Mat3::ZERO;
 
         assert_eq!(identity * zero, zero);
 
@@ -1286,7 +1268,7 @@ mod mat3_tests {
 
     #[test]
     fn inverse() {
-        let identity = Mat3::<f32>::identity();
+        let identity = Mat3::<f32>::IDENTITY;
         let inverse = identity.inverse();
 
         assert_eq!(identity, inverse);
@@ -1304,7 +1286,7 @@ mod mat3_tests {
 
     #[test]
     fn vec_mul() {
-        let identity = Mat3::<f32>::identity();
+        let identity = Mat3::<f32>::IDENTITY;
         let vec = Vec3::new(7.2, 2.4, 3.4);
 
         assert_eq!(vec, identity * vec);
@@ -1357,7 +1339,7 @@ mod mat2_tests {
         let a = mat_a();
         let b = mat_b();
         let c = mat_c();
-        let identity = Mat2::identity();
+        let identity = Mat2::IDENTITY;
 
         assert_eq!(a, a * identity);
         assert_eq!(b, b * identity);
@@ -1378,8 +1360,8 @@ mod mat2_tests {
         let a = mat_a();
         let b = mat_b();
         let c = mat_c();
-        let identity = Mat2::identity();
-        let zero = Mat2::zero();
+        let identity = Mat2::IDENTITY;
+        let zero = Mat2::ZERO;
 
         assert_eq!(identity * zero, zero);
 
@@ -1473,7 +1455,7 @@ mod mat2_tests {
 
     #[test]
     fn inverse() {
-        let identity = Mat2::<f32>::identity();
+        let identity = Mat2::<f32>::IDENTITY;
         let inverse = identity.inverse();
 
         assert_eq!(identity, inverse);
@@ -1491,7 +1473,7 @@ mod mat2_tests {
 
     #[test]
     fn vec_mul() {
-        let identity = Mat2::<f32>::identity();
+        let identity = Mat2::<f32>::IDENTITY;
         let vec = Vec2::new(7.2, 2.4);
 
         assert_eq!(vec, identity * vec);
