@@ -17,13 +17,13 @@ pub struct Quaternion<T> {
 
 impl<T: Copy> Copy for Quaternion<T> {}
 
-impl<T: Number + Float + Copy> Default for Quaternion<T> {
+impl<T: Number + Float> Default for Quaternion<T> {
     fn default() -> Quaternion<T> {
         Quaternion::IDENTITY
     }
 }
 
-impl<T: Number + Float + Copy> Quaternion<T> {
+impl<T: Number + Float> Quaternion<T> {
     /// Creates a new identity quaternion
     pub const IDENTITY: Quaternion<T> = Quaternion {
             x: T::ZERO,
@@ -141,7 +141,7 @@ impl<T: Number + Float + Copy> Quaternion<T> {
 }
 
 // Quaternion vector multiplication
-impl<T: Number + Float + Copy> Mul<Vec3<T>> for Quaternion<T> {
+impl<T: Number + Float> Mul<Vec3<T>> for Quaternion<T> {
     type Output = Vec3<T>; 
     fn mul(self, vec: Vec3<T>) -> Vec3<T> {
         let one = T::ONE;
@@ -168,7 +168,7 @@ impl<T: Number + Float + Copy> Mul<Vec3<T>> for Quaternion<T> {
 }
 
 // Quaternion quaternion multiplication
-impl<T: Number + Float + Copy> Mul for Quaternion<T> {
+impl<T: Number + Float> Mul for Quaternion<T> {
     type Output = Self; 
     fn mul(self, other: Quaternion<T>) -> Self {
         Quaternion {
@@ -179,7 +179,7 @@ impl<T: Number + Float + Copy> Mul for Quaternion<T> {
         }
     }
 }
-impl<T: Number + Float + Copy> MulAssign for Quaternion<T> {
+impl<T: Number + Float> MulAssign for Quaternion<T> {
     fn mul_assign(&mut self, other: Quaternion<T>) {
         let x = self.w*other.x + self.x*other.w + self.y*other.z - self.z*other.y;
         let y = self.w*other.y + self.y*other.w + self.z*other.x - self.x*other.z;
@@ -193,7 +193,7 @@ impl<T: Number + Float + Copy> MulAssign for Quaternion<T> {
 }
 
 // Quaternion quaternion addition
-impl<T: Number + Float + Copy> Add for Quaternion<T> {
+impl<T: Number + Float> Add for Quaternion<T> {
     type Output = Self; 
     fn add(self, other: Quaternion<T>) -> Self {
         Quaternion {
@@ -204,7 +204,7 @@ impl<T: Number + Float + Copy> Add for Quaternion<T> {
         }
     }
 }
-impl<T: Number + Float + Copy> Sub for Quaternion<T> {
+impl<T: Number + Float> Sub for Quaternion<T> {
     type Output = Self; 
     fn sub(self, other: Quaternion<T>) -> Self {
         Quaternion {
@@ -217,7 +217,7 @@ impl<T: Number + Float + Copy> Sub for Quaternion<T> {
 }
 
 // Quaternion scalar multiplication
-impl<T: Number + Float + Copy> Mul<T> for Quaternion<T> {
+impl<T: Number + Float> Mul<T> for Quaternion<T> {
     type Output = Self; 
     fn mul(self, scalar: T) -> Self {
         Quaternion {
@@ -228,7 +228,7 @@ impl<T: Number + Float + Copy> Mul<T> for Quaternion<T> {
         }
     }
 }
-impl<T: Number + Float + Copy> MulAssign<T> for Quaternion<T> {
+impl<T: Number + Float> MulAssign<T> for Quaternion<T> {
     fn mul_assign(&mut self, scalar: T) {
         self.x = self.x * scalar;
         self.y = self.y * scalar;
@@ -236,7 +236,7 @@ impl<T: Number + Float + Copy> MulAssign<T> for Quaternion<T> {
         self.w = self.w * scalar;
     }
 }
-impl<T: Number + Float + Copy> Div<T> for Quaternion<T> {
+impl<T: Number + Float> Div<T> for Quaternion<T> {
     type Output = Self; 
     fn div(self, scalar: T) -> Self {
         Quaternion {
@@ -247,7 +247,7 @@ impl<T: Number + Float + Copy> Div<T> for Quaternion<T> {
         }
     }
 }
-impl<T: Number + Float + Copy> DivAssign<T> for Quaternion<T> {
+impl<T: Number + Float> DivAssign<T> for Quaternion<T> {
     fn div_assign(&mut self, scalar: T) {
         self.x = self.x / scalar;
         self.y = self.y / scalar;
@@ -256,13 +256,13 @@ impl<T: Number + Float + Copy> DivAssign<T> for Quaternion<T> {
     }
 }
 
-impl<T: Number + Float + Copy> From<Quaternion<T>> for Mat4<T> {
+impl<T: Number + Float> From<Quaternion<T>> for Mat4<T> {
     fn from(quat: Quaternion<T>) -> Mat4<T> {
         Mat4::from_quaternion(quat.x, quat.y, quat.z, quat.w)
     }
 }
 
-impl<T: Number + Float + Copy> From<Quaternion<T>> for Mat3<T> {
+impl<T: Number + Float> From<Quaternion<T>> for Mat3<T> {
     fn from(quat: Quaternion<T>) -> Mat3<T> {
         Mat3::from_quaternion(quat.x, quat.y, quat.z, quat.w)
     }
