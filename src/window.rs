@@ -65,6 +65,8 @@ pub trait WindowCommon: Drop {
     fn close_requested(&self) -> bool;
     fn resized(&self) -> bool;
     fn moved(&self) -> bool;
+    /// The region covered by the window, in display space. Use `Region::size` to find the size of
+    /// the window.
     fn screen_region(&self) -> Region;
     fn focused(&self) -> bool;
 
@@ -74,7 +76,12 @@ pub trait WindowCommon: Drop {
     /// disabled.
     fn set_vsync(&mut self, vsync: bool);
 
+    /// Sets the visual apperance of the cursor when it is inside this window
     fn set_cursor(&mut self, cursor: CursorType);
+    /// Clips the cursor so it can not leave the given region. The region should be in screen
+    /// space. If `None` is passed, this unclips the cursor.
+    fn clip_cursor(&mut self, region: Option<Region>);
+    /// Constrains the cursor to the center of the screen. This takes precedence over `clip_cursor`
     fn grab_cursor(&mut self, grabbed: bool);
 }
 
@@ -800,6 +807,7 @@ mod windows {
         cursor: CursorType,
         cursor_captured: bool, // Cursor is dragging something out of the window, don't loose focus on release
         cursor_grabbed: bool, // Cursor cant leave window
+        cursor_clip_region: Option<Region>, // Relative to `screen_region.min`!
     }
 
     fn encode_wide(s: &str) -> Vec<u16> {
@@ -1223,6 +1231,7 @@ mod windows {
                 cursor: CursorType::Normal,
                 cursor_captured: false,
                 cursor_grabbed: false,
+                cursor_clip_region: None,
             }
         } 
 
@@ -1292,10 +1301,7 @@ mod windows {
                         self.screen_region = new_region;
                         graphics::viewport(self.screen_region.unpositioned());
 
-                        // Reclip to a new region
-                        if self.cursor_grabbed { 
-                            self.clip_cursor(true); 
-                        }
+                        self.update_cursor_clip();
                     },
 
                     CloseRequest => {
@@ -1379,10 +1385,10 @@ mod windows {
                 }
             }
 
-            // Mouse grabbing stuff
             if focus_changed {
-                self.clip_cursor(self.cursor_grabbed && self.focused);
+                self.update_cursor_clip();
             }
+
             if self.focused && self.cursor_grabbed {
                 let global_center = self.screen_region.center().as_i32();
                 let relative_center = self.screen_region.unpositioned().center().as_i32();
@@ -1390,7 +1396,7 @@ mod windows {
                 unsafe { ffi::SetCursorPos(global_center.x, global_center.y) };
             }
 
-            // Cursor stuff
+            // Change cursor graphic
             if self.focused && self.cursor_in_window() {
                 let cursor = self.cursors[self.cursor as usize];
                 unsafe { ffi::SetCursor(cursor) };
@@ -1437,9 +1443,12 @@ mod windows {
             }
             self.cursor_grabbed = grabbed;
 
-            if self.focused {
-                self.clip_cursor(grabbed);
-            }
+            self.update_cursor_clip();
+        }
+
+        fn clip_cursor(&mut self, region: Option<Region>) {
+            self.cursor_clip_region = region;
+            self.update_cursor_clip();
         }
     }
 
@@ -1458,21 +1467,18 @@ mod windows {
             self.window
         }
 
-        fn clip_cursor(&self, clip: bool) {
-            if clip {
-                unsafe {
-                    let region = self.screen_region;
-                    let rect = ffi::RECT {
-                        left:   region.min.x as i32,
-                        right:  region.max.x as i32,
-                        top:    region.min.y as i32,
-                        bottom: region.max.y as i32,
-                    };
-                    ffi::ClipCursor(&rect);
+        fn update_cursor_clip(&self) {
+            let mut clip = None;
+
+            if self.focused {
+                if self.cursor_grabbed {
+                    internal_clip_cursor(Some(self.screen_region));
+                } else if let Some(region) = self.cursor_clip_region {
+                    clip = Some(region.offset(self.screen_region.min));
                 }
-            } else {
-                unsafe { ffi::ClipCursor(ptr::null()) };
             }
+
+            internal_clip_cursor(clip);
         }
 
         pub fn cursor_in_window(&self) -> bool {
@@ -1488,5 +1494,21 @@ mod windows {
 
     fn new_rect() -> ffi::RECT {
         ffi::RECT { left: 0, right: 0, top: 0, bottom: 0 }
+    }
+
+    fn internal_clip_cursor(clip_region: Option<Region>) {
+        if let Some(region) = clip_region {
+            unsafe {
+                let rect = ffi::RECT {
+                    left:   region.min.x as i32,
+                    right:  region.max.x as i32,
+                    top:    region.min.y as i32,
+                    bottom: region.max.y as i32,
+                };
+                ffi::ClipCursor(&rect);
+            }
+        } else {
+            unsafe { ffi::ClipCursor(ptr::null()) };
+        }
     }
 }

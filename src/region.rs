@@ -43,6 +43,14 @@ impl Region {
         }
     }
 
+    /// Creates a new region with all corners offset by the given amount
+    pub fn offset(self, by: Vec2<f32>) -> Region {
+        Region {
+            min: self.min + by,
+            max: self.max + by,
+        }
+    }
+
     /// Returns the region in which this region overlaps the given other region. This might produce
     /// a negative region.
     pub fn overlap(self, other: Region) -> Region {
