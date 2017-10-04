@@ -7,6 +7,7 @@ use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
 use gondola::framebuffer::FramebufferProperties;
+use gondola::audio::{Audio, AudioCommon};
 use cable_math::{Vec2, Mat4};
 
 type DrawGroup = draw_group::DrawGroup<(), ()>;
@@ -16,6 +17,11 @@ fn main() {
     let mut input = InputManager::new();
 
     let mut window = Window::new("This is hopefully still a window");
+
+    let mut audio = Audio::initialize(&window);
+    if audio.is_none() {
+        println!("Could not initialize sound system. Running without audio");
+    }
 
     let mut draw_group = DrawGroup::new();
 

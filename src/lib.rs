@@ -47,6 +47,9 @@ pub mod font;
 pub mod draw_group;
 //pub mod ui; // Temporarily disabled. Broken due to changes in font code. Should be rewritten to use draw_group
 
+#[cfg(feature = "audio")]
+pub mod audio;
+
 pub use color::*;
 pub use input::*;
 pub use window::*;

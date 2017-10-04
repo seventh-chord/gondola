@@ -5,27 +5,32 @@ version = "0.1.0"
 authors = ["Morten H. Solvang <morten.hauke.solvang@gmail.com>"]
 
 [features]
-default = []
+default   = ["audio"]
 serialize = ["serde"]
+audio     = []
+
+[[bin]]
+name = "window_demo"
+required-features = ["audio"]
 
 [dependencies]
 gondola_derive = { path = "gondola_derive" }
-cable_math = { path = "cable_math" }
+cable_math     = { path = "cable_math" }
 
 gl = "*"
 
 rusttype = "0.2"
 # Only needed if we want custom serialization derives for color types
 serde = { version = "1.0", optional = true }
-png = { version = "0.9", features = [] }
+png   = { version = "0.9", features = [] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11-dl = "2.14"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = "0.2"
-user32-sys = "0.2"
+winapi       = "0.2"
+user32-sys   = "0.2"
 kernel32-sys = "0.2"
-gdi32-sys = "0.2"
+gdi32-sys    = "0.2"
 opengl32-sys = "0.1"
 # comdlg32-sys = "0.2"
