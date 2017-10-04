@@ -11,8 +11,10 @@ use std::path::Path;
 use std::io::{BufRead, BufReader};
 use std::ffi::CString;
 use std::borrow::Borrow;
+
 use gl;
 use gl::types::*;
+
 use buffer::Vertex;
 
 mod uniform;

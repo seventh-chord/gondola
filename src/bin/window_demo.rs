@@ -13,6 +13,11 @@ use cable_math::{Vec2, Mat4};
 type DrawGroup = draw_group::DrawGroup<(), ()>;
 
 fn main() {
+    match ::gondola::audio::wav::load("hit.wav") {
+        Ok(()) => println!("All good"),
+        Err(err) => println!("Oh snap: {}", err),
+    };
+
     let mut timer = Timer::new();
     let mut input = InputManager::new();
 
