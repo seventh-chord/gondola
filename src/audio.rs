@@ -167,6 +167,7 @@ mod windows {
             buffer_description.dwSize = mem::size_of::<ffi::DSBUFFERDESC>() as u32;
             buffer_description.dwBufferBytes = buffer_size as u32;
             buffer_description.lpwfxFormat = &mut wave_format;
+            buffer_description.dwFlags = ffi::DSBCAPS_GLOBALFOCUS;
 
             let mut secondary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
             let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut secondary_buffer, ptr::null_mut()) };
@@ -271,7 +272,7 @@ mod windows {
                 *frame_counter += 1;
 
                 let v = (t*2.0*PI).sin();
-                let v = (v * volume as f32) as i16;
+                let v = (v * volume as f32) as SampleData;
 
                 for i in 0..CHANNELS {
                     frame[i] = v;
@@ -285,7 +286,7 @@ mod windows {
                 *frame_counter += 1;
 
                 let v = (t*2.0*PI).sin();
-                let v = (v * volume as f32) as i16;
+                let v = (v * volume as f32) as SampleData;
 
                 for i in 0..CHANNELS {
                     frame[i] = v;
