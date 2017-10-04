@@ -91,7 +91,7 @@ impl AudioBackend {
         let bytes_per_sample = mem::size_of::<SampleData>();
         let bytes_per_frame  = bytes_per_sample * CHANNELS;
         let bytes_per_second = bytes_per_frame * sample_rate as usize;
-        let buffer_size      = bytes_per_second * backend_settings.duration_in_secs as usize;
+        let buffer_size      = bytes_per_frame * backend_settings.duration_in_frames as usize;
 
         let mut wave_format = ffi::WAVEFORMATEX {
             wFormatTag:      ffi::WAVE_FORMAT_PCM,
@@ -137,13 +137,6 @@ impl AudioBackend {
         let frequency = 256;
         let period = (self.sample_rate / frequency) as u64;
 
-        // Ensure we are playing
-        // TODO Try moving this to the end!
-        if !self.playing {
-            self.playing = true;
-            unsafe { self.secondary_buffer.Play(0, 0, ffi::DSBPLAY_LOOPING) };
-        }
-
         // Figure out where and how much to write
         let mut write_cursor = 0;
         let mut play_cursor  = 0;
@@ -182,7 +175,7 @@ impl AudioBackend {
         // Lock secondary buffer, get write region
         let mut len1 = 0;
         let mut ptr1 = ptr::null_mut();
-        let mut len2 = 0; // TODO docs say len2 or ptr2 must != 0 for them to be used
+        let mut len2 = 0;
         let mut ptr2 = ptr::null_mut();
 
         let result = unsafe { self.secondary_buffer.Lock(
@@ -249,6 +242,12 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             println!("Failed to unlock secondary buffer. Error code: {}", result);
         } 
+
+        // Ensure we are playing
+        if !self.playing {
+            self.playing = true;
+            unsafe { self.secondary_buffer.Play(0, 0, ffi::DSBPLAY_LOOPING) };
+        }
     }
 }
 

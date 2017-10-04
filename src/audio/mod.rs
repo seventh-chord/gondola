@@ -5,6 +5,8 @@
 // A sample is a single i16 (Or whatever `SampleData` is)
 // A frame is one i16 per channel
 
+// TODO fix error handling, custom error types!
+
 use std::f32::consts::PI;
 
 use window::Window;
@@ -29,7 +31,7 @@ impl AudioSystem {
     pub fn initialize(window: &Window) -> Option<AudioSystem> {
         let backend_settings = BackendSettings {
             sample_rate: 44100,
-            duration_in_secs: 2,
+            duration_in_frames: 44100*2,
         };
 
         let backend = match AudioBackend::initialize(window, backend_settings) {
@@ -53,5 +55,5 @@ impl AudioSystem {
 #[derive(Copy, Clone)]
 struct BackendSettings {
     sample_rate: u32,
-    duration_in_secs: u32,
+    duration_in_frames: u32,
 }
