@@ -91,6 +91,10 @@ fn main() {
         if let Some(ref mut audio) = audio {
             if input.mouse_key(0).pressed() {
                 audio.play(0);
+            }
+
+            if input.mouse_key(1).pressed() {
+                audio.play(0);
                 audio.play(0);
             }
         }

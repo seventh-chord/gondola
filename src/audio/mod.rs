@@ -33,7 +33,7 @@ pub struct AudioSystem {
 impl AudioSystem {
     pub fn initialize(window: &Window) -> Option<AudioSystem> {
         let sample_rate = 48000; // TODO try chaning this back to 44100
-        let buffer_duration_in_frames = sample_rate / 2; // TODO should be 2*sample_rate for two seconds
+        let buffer_duration_in_frames = sample_rate / 16; // TODO should be 2*sample_rate for two seconds
 
         let backend = match AudioBackend::initialize(window, sample_rate, buffer_duration_in_frames) {
             Some(b) => b,

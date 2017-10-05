@@ -1,5 +1,4 @@
 
-
 extern crate winapi;
 extern crate kernel32;
 
@@ -225,15 +224,10 @@ impl AudioBackend {
 
             let start_frame = max(sound_start_frame, target_start_frame);
             let end_frame   = min(sound_end_frame, target_end_frame);
+            let mid_frame = max(min(target_mid_frame, end_frame), start_frame);
 
             assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * CHANNELS);
             assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize * CHANNELS);
-
-            /*
-            println!();
-            println!("{} {} {}", target_start_frame, target_mid_frame, target_end_frame);
-            println!("{} {}", start_frame, end_frame);
-            */
 
             if end_frame < target_start_frame {
                 sound.done = true;
@@ -244,13 +238,14 @@ impl AudioBackend {
                 let b = (end_frame - sound_start_frame) as usize * buffer.channels as usize;
                 let read_data = &buffer.data[a..b];
 
-                // Write a bit to slice1
-                let mid_frame = min(end_frame, target_mid_frame);
-                let a = (start_frame - target_start_frame) as usize * CHANNELS;
-                let b = (mid_frame - target_start_frame) as usize * CHANNELS;
-                let write_data_1 = &mut slice1[a..b];
-                
-                // Write another bit to slice2
+                let write_data_1 = if mid_frame > start_frame {
+                    let a = (start_frame - target_start_frame) as usize * CHANNELS;
+                    let b = (mid_frame - target_start_frame) as usize * CHANNELS;
+                    &mut slice1[a..b]
+                } else {
+                    &mut []
+                };
+
                 let write_data_2 = if mid_frame < end_frame {
                     let a = (mid_frame - target_mid_frame) as usize * CHANNELS;
                     let b = (end_frame - target_mid_frame) as usize * CHANNELS;
