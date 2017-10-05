@@ -10,8 +10,7 @@ use std::ops::Range;
 pub struct PrimitiveBuffer<T: VertexData> {
     phantom: std::marker::PhantomData<T>,
 
-    /// This is only exposed because `pub(restricted)` is not stabilized
-    pub buffer: GLuint, // TODO: Make this pub(restricted) once that comes to stable
+    pub(super) buffer: GLuint,
     target: BufferTarget,
     usage: BufferUsage,
 
