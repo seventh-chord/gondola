@@ -5,8 +5,6 @@
 // A sample is a single i16 (Or whatever `SampleData` is)
 // A frame is one i16 per channel
 
-// TODO fix error handling, custom error types!
-
 use window::Window;
 use time::Time;
 
@@ -18,11 +16,20 @@ use self::windows::*;
 
 pub mod wav;
 
-const CHANNELS: usize = 2; // TODO channels is u8 everywhere else!
+// TODO fix error handling, custom error types!
+
+// TODO Change sample rate back to 44100, implement resampling for sound buffers
+// We don't neccesarily have to output at 44.1kHz in the end, but this would be
+// an easy way to implement and test resampling
+
+// TODO OUTPUT_BUFFER_SIZE_IN_FRAMES should be two seconds or something
+
+const OUTPUT_CHANNELS: u32 = 2;
+const OUTPUT_SAMPLE_RATE: u32 = 48000;
+const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 10000;
 type SampleData = i16;
 
 pub struct AudioSystem {
-    sample_rate: u32,
     backend: AudioBackend,
     frame_counter: u64,
 
@@ -32,10 +39,7 @@ pub struct AudioSystem {
 
 impl AudioSystem {
     pub fn initialize(window: &Window) -> Option<AudioSystem> {
-        let sample_rate = 48000; // TODO try chaning this back to 44100
-        let buffer_duration_in_frames = sample_rate / 16; // TODO should be 2*sample_rate for two seconds
-
-        let backend = match AudioBackend::initialize(window, sample_rate, buffer_duration_in_frames) {
+        let backend = match AudioBackend::initialize(window ) {
             Some(b) => b,
             None => {
                 return None;
@@ -44,7 +48,6 @@ impl AudioSystem {
 
         Some(AudioSystem {
             backend,
-            sample_rate,
             frame_counter: 0,
             buffers: Vec::with_capacity(30),
             sounds:  Vec::with_capacity(30),
@@ -67,7 +70,7 @@ impl AudioSystem {
 
     pub fn play(&mut self, buffer: usize) {
         self.sounds.push(Sound {
-            start_frame: self.frame_counter + (self.sample_rate/30) as u64,
+            start_frame: self.frame_counter + (OUTPUT_SAMPLE_RATE/30) as u64, // TODO Figoure out how to actually do audio-video sync
             done: false,
             buffer,
         });
@@ -76,7 +79,7 @@ impl AudioSystem {
 
 #[derive(Clone)]
 pub struct AudioBuffer {
-    pub channels: u8,
+    pub channels: u32,
     pub sample_rate: u32,
     pub data: Vec<i16>,
 }

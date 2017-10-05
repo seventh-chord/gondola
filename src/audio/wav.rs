@@ -131,7 +131,7 @@ pub fn load<P: AsRef<Path>>(path: P) -> Result<AudioBuffer, WavError> {
     drop(file); // Closes the file
 
     return Ok(AudioBuffer {
-        channels: channels as u8,
+        channels: channels as u32,
         sample_rate: sample_rate as u32,
         data,
     });

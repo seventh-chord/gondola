@@ -27,12 +27,7 @@ pub(super) struct AudioBackend {
 }
 
 impl AudioBackend {
-    pub fn initialize(
-        window: &Window,
-        sample_rate: u32,
-        duration_in_frames: u32,
-    ) -> Option<AudioBackend> 
-    {
+    pub fn initialize(window: &Window) -> Option<AudioBackend> {
         // Load library
         let lib_name = encode_wide("dsound.dll");
         let dsound_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
@@ -87,14 +82,14 @@ impl AudioBackend {
         let primary_buffer = unsafe { &mut *primary_buffer };
 
         let bytes_per_sample = mem::size_of::<SampleData>();
-        let bytes_per_frame  = bytes_per_sample * CHANNELS;
-        let bytes_per_second = bytes_per_frame * sample_rate as usize;
-        let buffer_size      = bytes_per_frame * duration_in_frames as usize;
+        let bytes_per_frame  = bytes_per_sample * OUTPUT_CHANNELS as usize;
+        let bytes_per_second = bytes_per_frame * OUTPUT_SAMPLE_RATE as usize;
+        let buffer_size      = bytes_per_frame * OUTPUT_BUFFER_SIZE_IN_FRAMES;
 
         let mut wave_format = ffi::WAVEFORMATEX {
             wFormatTag:      ffi::WAVE_FORMAT_PCM,
-            nChannels:       CHANNELS as u16,
-            nSamplesPerSec:  sample_rate,
+            nChannels:       OUTPUT_CHANNELS as u16,
+            nSamplesPerSec:  OUTPUT_SAMPLE_RATE,
             nAvgBytesPerSec: bytes_per_second as u32,
             nBlockAlign:     bytes_per_frame as u16,
             wBitsPerSample:  8 * bytes_per_sample as u16,
@@ -151,7 +146,7 @@ impl AudioBackend {
         let play_cursor = play_cursor as usize;
 
         let bytes_per_sample = mem::size_of::<SampleData>();
-        let bytes_per_frame = bytes_per_sample * CHANNELS as usize;
+        let bytes_per_frame = bytes_per_sample * OUTPUT_CHANNELS as usize;
 
         let our_cursor = (*frame_counter as usize * bytes_per_frame) % self.buffer_size;
         let len = {
@@ -217,6 +212,9 @@ impl AudioBackend {
         let target_mid_frame   = target_start_frame + (len1 as u64 / bytes_per_frame as u64);
         let target_end_frame   = target_start_frame + (len as u64 / bytes_per_frame as u64);
 
+        assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
+        assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);
+
         for sound in sounds.iter_mut() {
             let ref buffer = buffers[sound.buffer];
             let sound_start_frame = sound.start_frame;
@@ -225,9 +223,6 @@ impl AudioBackend {
             let start_frame = max(sound_start_frame, target_start_frame);
             let end_frame   = min(sound_end_frame, target_end_frame);
             let mid_frame = max(min(target_mid_frame, end_frame), start_frame);
-
-            assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * CHANNELS);
-            assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize * CHANNELS);
 
             if end_frame < target_start_frame {
                 sound.done = true;
@@ -239,16 +234,16 @@ impl AudioBackend {
                 let read_data = &buffer.data[a..b];
 
                 let write_data_1 = if mid_frame > start_frame {
-                    let a = (start_frame - target_start_frame) as usize * CHANNELS;
-                    let b = (mid_frame - target_start_frame) as usize * CHANNELS;
+                    let a = (start_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
+                    let b = (mid_frame - target_start_frame) as usize   * OUTPUT_CHANNELS as usize;
                     &mut slice1[a..b]
                 } else {
                     &mut []
                 };
 
                 let write_data_2 = if mid_frame < end_frame {
-                    let a = (mid_frame - target_mid_frame) as usize * CHANNELS;
-                    let b = (end_frame - target_mid_frame) as usize * CHANNELS;
+                    let a = (mid_frame - target_mid_frame) as usize * OUTPUT_CHANNELS as usize;
+                    let b = (end_frame - target_mid_frame) as usize * OUTPUT_CHANNELS as usize;
                     &mut slice2[a..b]
                 } else {
                     &mut []
@@ -256,8 +251,8 @@ impl AudioBackend {
 
                 // TODO this assumes buffer is single channel
                 for frame in 0..read_data.len() {
-                    let read_frame = frame*(buffer.channels as usize);
-                    let write_frame = frame*CHANNELS;
+                    let read_frame  = frame*(buffer.channels as usize);
+                    let write_frame = frame*(OUTPUT_CHANNELS as usize);
 
                     let sample = read_data[read_frame];
 
