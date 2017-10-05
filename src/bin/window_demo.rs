@@ -7,16 +7,18 @@ use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
 use gondola::framebuffer::FramebufferProperties;
-use gondola::audio::AudioSystem;
+use gondola::audio::{AudioSystem, wav};
 use cable_math::{Vec2, Mat4};
 
 type DrawGroup = draw_group::DrawGroup<(), ()>;
 
 fn main() {
-    match ::gondola::audio::wav::load("hit.wav") {
-        Ok(()) => println!("All good"),
-        Err(err) => println!("Oh snap: {}", err),
+    let buffer = match wav::load("hit.wav") {
+        Ok(b) => b,
+        Err(err) => panic!("Oh snap: {}", err),
     };
+
+    println!("{} channel sound at {}Hz", buffer.channels, buffer.sample_rate);
 
     let mut timer = Timer::new();
     let mut input = InputManager::new();

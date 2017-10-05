@@ -6,12 +6,17 @@ use std::path::Path;
 use std::io::{self, Read};
 use std::error;
 use std::fmt;
+use std::mem;
+use std::slice;
+
+use super::*;
 
 const HEADER_SIZE: usize = 44;
 
-pub fn load<P: AsRef<Path>>(path: P) -> Result<(), WavError> {
+pub fn load<P: AsRef<Path>>(path: P) -> Result<AudioBuffer, WavError> {
     let path = path.as_ref();
     let mut file = File::open(path)?;
+    let metadata = file.metadata()?;
 
     let mut header = [0u8; HEADER_SIZE];
     match file.read_exact(&mut header) {
@@ -49,31 +54,77 @@ pub fn load<P: AsRef<Path>>(path: P) -> Result<(), WavError> {
         ((slice[1] as u16) << 0x08)
     }
 
-    let file_size        = get_u32(&header[4..]);
-    let format_length    = get_u32(&header[16..]);
-    let type_format      = get_u16(&header[20..]) as u32;
-    let channels         = get_u16(&header[22..]) as u32;
-    let sample_rate      = get_u32(&header[24..]);
-    let bytes_per_second = get_u32(&header[28..]);
-    let bytes_per_frame  = get_u16(&header[32..]) as u32;
-    let bits_per_sample  = get_u16(&header[34..]) as u32;
-    let data_size        = get_u32(&header[40..]);
+    let channels         = get_u16(&header[22..]) as usize;
+    let sample_rate      = get_u32(&header[24..]) as usize;
+    let bytes_per_second = get_u32(&header[28..]) as usize;
+    let bytes_per_frame  = get_u16(&header[32..]) as usize;
+    let bits_per_sample  = get_u16(&header[34..]) as usize;
+    let bytes_per_sample = (bits_per_sample / 8) as usize;
+    let file_size        = get_u32(&header[4..]) as usize + 8;
+    let data_bytes       = get_u32(&header[40..]) as usize;
 
     // Check if the values in the header are coherent
     let mut bad = false;
-    bad |= bits_per_sample%8 != 0;
+    bad |= bits_per_sample%8 != 0; // Ensure each sample is a whole number of bytes
+    bad |= !(bytes_per_sample == mem::size_of::<u8>() || bytes_per_sample == mem::size_of::<i16>());
     bad |= bytes_per_second != bytes_per_frame*sample_rate;
-    bad |= (bits_per_sample/8)*channels != bytes_per_frame;
+    bad |= bytes_per_sample*channels != bytes_per_frame;
+    bad |= file_size != data_bytes+HEADER_SIZE;
+    bad |= metadata.len() as usize != file_size;
+    bad |= data_bytes % (bytes_per_frame as usize) != 0;
+    bad |= get_u32(&header[16..]) != 16;
+    bad |= get_u16(&header[20..]) != 1; // PCM data
     if bad {
         return Err(WavError::InvalidHeader);
     }
 
-    println!("format_length = {}", format_length);
-    println!("type_format = {}", type_format);
-    println!("file_size = {}", file_size);
-    println!("data_size = {}", data_size);
+    // Read the data from the file
+    let sample_count = data_bytes / bytes_per_sample;
+    
+    let data = match bytes_per_sample {
+        // i16
+        2 => {
+            let mut samples = Vec::<i16>::with_capacity(sample_count);
+            unsafe { samples.set_len(sample_count) };
 
-    return Ok(());
+            {
+                let slice = &mut samples[..];
+                let ptr = slice.as_mut_ptr() as *mut u8;
+                let len = slice.len() / mem::size_of::<i16>();
+                let byte_slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
+
+                file.read_exact(byte_slice)?;
+            }
+
+            if cfg!(target_endian = "big") {
+                // This is slow, but never really happens because x86 chips are little endian
+                for sample in samples.iter_mut() {
+                    *sample = sample.swap_bytes();
+                }
+            }
+
+            AudioData::I16(samples)
+        },
+
+        // u8
+        1 => {
+            let mut samples = Vec::<u8>::with_capacity(sample_count);
+            unsafe { samples.set_len(sample_count) };
+            file.read_exact(&mut samples[..])?;
+
+            AudioData::U8(samples)
+        },
+
+        _ => unreachable!()
+    };
+
+    drop(file); // Closes the file
+
+    return Ok(AudioBuffer {
+        channels: channels as u8,
+        sample_rate: sample_rate as u32,
+        data,
+    });
 }
 
 #[derive(Debug)]

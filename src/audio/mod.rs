@@ -57,3 +57,16 @@ struct BackendSettings {
     sample_rate: u32,
     duration_in_frames: u32,
 }
+
+#[derive(Clone)]
+pub struct AudioBuffer {
+    pub channels: u8,
+    pub sample_rate: u32,
+    pub data: AudioData,
+}
+
+#[derive(Clone)]
+pub enum AudioData {
+    U8(Vec<u8>),
+    I16(Vec<i16>),
+}
