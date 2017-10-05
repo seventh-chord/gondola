@@ -90,7 +90,7 @@ pub fn load<P: AsRef<Path>>(path: P) -> Result<AudioBuffer, WavError> {
             {
                 let slice = &mut samples[..];
                 let ptr = slice.as_mut_ptr() as *mut u8;
-                let len = slice.len() / mem::size_of::<i16>();
+                let len = slice.len() * mem::size_of::<i16>();
                 let byte_slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
 
                 file.read_exact(byte_slice)?;

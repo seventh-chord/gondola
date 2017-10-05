@@ -260,12 +260,16 @@ impl AudioBackend {
                 };
 
                 // TODO this assumes buffer is single channel
-                for i in 0..read_data.len() {
-                    let sample = read_data[i];
-                    let slot = if i*2 < write_data_1.len() {
-                        &mut write_data_1[i*2]
+                for frame in 0..read_data.len() {
+                    let read_frame = frame*(buffer.channels as usize);
+                    let write_frame = frame*CHANNELS;
+
+                    let sample = read_data[read_frame];
+
+                    let slot = if write_frame < write_data_1.len() {
+                        &mut write_data_1[write_frame]
                     } else {
-                        &mut write_data_2[i*2 - write_data_1.len()]
+                        &mut write_data_2[write_frame - write_data_1.len()]
                     };
 
                     *slot = if sample > 0 {
@@ -279,35 +283,6 @@ impl AudioBackend {
             }
         }
         *frame_counter = target_end_frame;
-
-        /*
-        for frame in slice1.chunks_mut(CHANNELS) {
-            assert!(frame.len() == CHANNELS);
-            *frame_counter += 1;
-
-
-                if buffer_frame < buffer.data.len() {
-                    for i in 0..CHANNELS {
-                        frame[i] += buffer.data[buffer_frame];
-                    }
-                }
-            }
-        }
-
-        for frame in slice2.chunks_mut(CHANNELS) {
-            assert!(frame.len() == CHANNELS);
-            *frame_counter += 1;
-
-            if let Some(ref buffer) = *buffer {
-                let buffer_frame = *frame_counter as usize;
-                if buffer_frame < buffer.data.len() {
-                    for i in 0..CHANNELS {
-                        frame[i] += buffer.data[buffer_frame];
-                    }
-                }
-            }
-        }
-        */
 
         // Unlock buffer
         let result = unsafe { self.secondary_buffer.Unlock(
