@@ -22,7 +22,6 @@ mod ffi {
 }
 
 pub(super) struct AudioBackend {
-    sample_rate: u32, // Samples per second
     buffer_size: usize, // Total size of secondary buffer, in bytes
     playing: bool,
     secondary_buffer: &'static mut ffi::IDirectSoundBuffer,
@@ -31,7 +30,8 @@ pub(super) struct AudioBackend {
 impl AudioBackend {
     pub fn initialize(
         window: &Window,
-        backend_settings: BackendSettings
+        sample_rate: u32,
+        duration_in_frames: u32,
     ) -> Option<AudioBackend> 
     {
         // Load library
@@ -87,16 +87,15 @@ impl AudioBackend {
         assert!(!primary_buffer.is_null());
         let primary_buffer = unsafe { &mut *primary_buffer };
 
-        let sample_rate      = backend_settings.sample_rate;
         let bytes_per_sample = mem::size_of::<SampleData>();
         let bytes_per_frame  = bytes_per_sample * CHANNELS;
         let bytes_per_second = bytes_per_frame * sample_rate as usize;
-        let buffer_size      = bytes_per_frame * backend_settings.duration_in_frames as usize;
+        let buffer_size      = bytes_per_frame * duration_in_frames as usize;
 
         let mut wave_format = ffi::WAVEFORMATEX {
             wFormatTag:      ffi::WAVE_FORMAT_PCM,
             nChannels:       CHANNELS as u16,
-            nSamplesPerSec:  backend_settings.sample_rate,
+            nSamplesPerSec:  sample_rate,
             nAvgBytesPerSec: bytes_per_second as u32,
             nBlockAlign:     bytes_per_frame as u16,
             wBitsPerSample:  8 * bytes_per_sample as u16,
@@ -126,17 +125,18 @@ impl AudioBackend {
         let secondary_buffer = unsafe { &mut *secondary_buffer };
 
         Some(AudioBackend {
-            sample_rate, buffer_size,
+            buffer_size,
             playing: false,
             secondary_buffer,
         })
     }
 
-    pub fn write_wave(&mut self, frame_counter: &mut u64) {
-        let volume = 4000;
-        let frequency = 256;
-        let period = (self.sample_rate / frequency) as u64;
-
+    pub fn write(
+        &mut self,
+        frame_counter: &mut u64,
+        buffers: &[AudioBuffer],
+        sounds:  &mut [Sound],
+    ) {
         // Figure out where and how much to write
         let mut write_cursor = 0;
         let mut play_cursor  = 0;
@@ -199,40 +199,115 @@ impl AudioBackend {
             return;
         }
 
+        assert!(len == (len1 + len2) as usize);
+
+        // Zero out the data before we mix new sound into it
+        unsafe {
+            ptr::write_bytes(ptr1 as *mut u8, 0, len1 as usize);
+            ptr::write_bytes(ptr2 as *mut u8, 0, len2 as usize);
+        }
+
         // Convert to slices so we can do safe code again
         let (slice1, slice2) = unsafe {(
             slice::from_raw_parts_mut(ptr1 as *mut SampleData, len1 as usize / bytes_per_sample),
             slice::from_raw_parts_mut(ptr2 as *mut SampleData, len2 as usize / bytes_per_sample),
         )};
 
-        // Generate wave 
+        // Write sound data
+        let target_start_frame = *frame_counter;
+        let target_mid_frame   = target_start_frame + (len1 as u64 / bytes_per_frame as u64);
+        let target_end_frame   = target_start_frame + (len as u64 / bytes_per_frame as u64);
+
+        for sound in sounds.iter_mut() {
+            let ref buffer = buffers[sound.buffer];
+            let sound_start_frame = sound.start_frame;
+            let sound_end_frame = sound_start_frame + buffer.frames();
+
+            let start_frame = max(sound_start_frame, target_start_frame);
+            let end_frame   = min(sound_end_frame, target_end_frame);
+
+            assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * CHANNELS);
+            assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize * CHANNELS);
+
+            /*
+            println!();
+            println!("{} {} {}", target_start_frame, target_mid_frame, target_end_frame);
+            println!("{} {}", start_frame, end_frame);
+            */
+
+            if end_frame < target_start_frame {
+                sound.done = true;
+            }
+
+            if start_frame < end_frame {
+                let a = (start_frame - sound_start_frame) as usize * buffer.channels as usize;
+                let b = (end_frame - sound_start_frame) as usize * buffer.channels as usize;
+                let read_data = &buffer.data[a..b];
+
+                // Write a bit to slice1
+                let mid_frame = min(end_frame, target_mid_frame);
+                let a = (start_frame - target_start_frame) as usize * CHANNELS;
+                let b = (mid_frame - target_start_frame) as usize * CHANNELS;
+                let write_data_1 = &mut slice1[a..b];
+                
+                // Write another bit to slice2
+                let write_data_2 = if mid_frame < end_frame {
+                    let a = (mid_frame - target_mid_frame) as usize * CHANNELS;
+                    let b = (end_frame - target_mid_frame) as usize * CHANNELS;
+                    &mut slice2[a..b]
+                } else {
+                    &mut []
+                };
+
+                // TODO this assumes buffer is single channel
+                for i in 0..read_data.len() {
+                    let sample = read_data[i];
+                    let slot = if i*2 < write_data_1.len() {
+                        &mut write_data_1[i*2]
+                    } else {
+                        &mut write_data_2[i*2 - write_data_1.len()]
+                    };
+
+                    *slot = if sample > 0 {
+                        slot.saturating_add(sample)
+                    } else if sample == i16::min_value() {
+                        slot.saturating_sub(-(sample + 1)).saturating_sub(1)
+                    } else {
+                        slot.saturating_sub(-sample)
+                    };
+                }
+            }
+        }
+        *frame_counter = target_end_frame;
+
+        /*
         for frame in slice1.chunks_mut(CHANNELS) {
             assert!(frame.len() == CHANNELS);
-
-            let t = (*frame_counter%period) as f32 / period as f32;
             *frame_counter += 1;
 
-            let v = (t*2.0*PI).sin();
-            let v = (v * volume as f32) as SampleData;
 
-            for i in 0..CHANNELS {
-                frame[i] = v;
+                if buffer_frame < buffer.data.len() {
+                    for i in 0..CHANNELS {
+                        frame[i] += buffer.data[buffer_frame];
+                    }
+                }
             }
         }
 
         for frame in slice2.chunks_mut(CHANNELS) {
             assert!(frame.len() == CHANNELS);
-
-            let t = (*frame_counter%period) as f32 / period as f32;
             *frame_counter += 1;
 
-            let v = (t*2.0*PI).sin();
-            let v = (v * volume as f32) as SampleData;
-
-            for i in 0..CHANNELS {
-                frame[i] = v;
+            if let Some(ref buffer) = *buffer {
+                let buffer_frame = *frame_counter as usize;
+                if buffer_frame < buffer.data.len() {
+                    for i in 0..CHANNELS {
+                        frame[i] += buffer.data[buffer_frame];
+                    }
+                }
             }
         }
+        */
 
         // Unlock buffer
         let result = unsafe { self.secondary_buffer.Unlock(
@@ -258,4 +333,14 @@ fn encode_wide(s: &str) -> Vec<u16> {
     }
     data.push(0);
     data
+}
+
+#[inline(always)]
+fn min(a: u64, b: u64) -> u64 {
+    if a > b { b } else { a }
+}
+
+#[inline(always)]
+fn max(a: u64, b: u64) -> u64 {
+    if a > b { a } else { b }
 }

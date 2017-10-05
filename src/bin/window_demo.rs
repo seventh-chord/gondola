@@ -13,20 +13,22 @@ use cable_math::{Vec2, Mat4};
 type DrawGroup = draw_group::DrawGroup<(), ()>;
 
 fn main() {
-    let buffer = match wav::load("hit.wav") {
-        Ok(b) => b,
-        Err(err) => panic!("Oh snap: {}", err),
-    };
-
-    println!("{} channel sound at {}Hz", buffer.channels, buffer.sample_rate);
-
     let mut timer = Timer::new();
     let mut input = InputManager::new();
 
     let mut window = Window::new("This is hopefully still a window");
 
     let mut audio = AudioSystem::initialize(&window);
-    if audio.is_none() {
+    if let Some(ref mut audio) = audio {
+        let hit_buffer = match wav::load("hit.wav") {
+            Ok(b) => b,
+            Err(err) => panic!("Oh snap: {}", err),
+        };
+        println!("{} channel sound at {}Hz", hit_buffer.channels, hit_buffer.sample_rate);
+        println!("{} seconds", hit_buffer.duration().as_secs_float());
+
+        audio.buffers.push(hit_buffer);
+    } else {
         println!("Could not initialize sound system. Running without audio");
     }
 
@@ -84,6 +86,13 @@ fn main() {
             window.set_cursor(CursorType::Clickable);
         } else {
             window.set_cursor(CursorType::Normal);
+        }
+
+        if let Some(ref mut audio) = audio {
+            if input.mouse_key(0).pressed() {
+                audio.play(0);
+                audio.play(0);
+            }
         }
 
         if input.key(Key::Key2).pressed() {

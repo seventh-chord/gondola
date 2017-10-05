@@ -103,16 +103,26 @@ pub fn load<P: AsRef<Path>>(path: P) -> Result<AudioBuffer, WavError> {
                 }
             }
 
-            AudioData::I16(samples)
+            samples
         },
 
         // u8
         1 => {
-            let mut samples = Vec::<u8>::with_capacity(sample_count);
-            unsafe { samples.set_len(sample_count) };
-            file.read_exact(&mut samples[..])?;
+            let mut u8_samples = Vec::<u8>::with_capacity(sample_count);
+            unsafe { u8_samples.set_len(sample_count) };
+            file.read_exact(&mut u8_samples[..])?;
 
-            AudioData::U8(samples)
+            // Convert to i16 samples
+            let min  = i16::min_value();
+            let step = 0x0101;
+
+            let mut i16_samples = Vec::<i16>::with_capacity(sample_count);
+            for &sample in u8_samples.iter() {
+                let converted = min + (sample as i16)*step;
+                i16_samples.push(converted);
+            }
+
+            i16_samples
         },
 
         _ => unreachable!()
