@@ -20,18 +20,14 @@ fn main() {
     window.set_vsync(true);
 
     let mut audio = AudioSystem::initialize(&window);
-    if let Some(ref mut audio) = audio {
-        let hit_buffer = match wav::load("hit.wav") {
-            Ok(b) => b,
-            Err(err) => panic!("Oh snap: {}", err),
-        };
-        println!("{} channel sound at {}Hz", hit_buffer.channels, hit_buffer.sample_rate);
-        println!("{} seconds", hit_buffer.duration().as_secs_float());
+    let hit_buffer = match wav::load("hit.wav") {
+        Ok(b) => b,
+        Err(err) => panic!("Oh snap: {}", err),
+    };
+    println!("{} channel sound at {}Hz", hit_buffer.channels, hit_buffer.sample_rate);
+    println!("{} seconds", hit_buffer.duration().as_secs_float());
 
-        audio.buffers.push(hit_buffer);
-    } else {
-        println!("Could not initialize sound system. Running without audio");
-    }
+    audio.add_buffer(hit_buffer);
 
     let mut draw_group = DrawGroup::new();
 
@@ -83,15 +79,13 @@ fn main() {
             window.set_cursor(CursorType::Normal);
         }
 
-        if let Some(ref mut audio) = audio {
-            if input.mouse_key(0).pressed() {
-                audio.play(0);
-            }
+        if input.mouse_key(0).pressed() {
+            audio.play(0);
+        }
 
-            if input.mouse_key(1).pressed() {
-                audio.play(0);
-                audio.play(0);
-            }
+        if input.mouse_key(1).pressed() {
+            audio.play(0);
+            audio.play(0);
         }
 
         if input.key(Key::Key2).pressed() {
@@ -109,9 +103,7 @@ fn main() {
         draw_group.draw(ortho, screen_region.size());
         framebuffer.blit(Default::default());
 
-        if let Some(ref mut audio) = audio {
-            audio.tick();
-        }
+        audio.tick();
 
         window.swap_buffers();
         graphics::print_errors();

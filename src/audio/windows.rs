@@ -35,7 +35,7 @@ pub(super) struct AudioBackend {
 }
 
 impl AudioBackend {
-    pub fn initialize(window: &Window) -> Option<AudioBackend> {
+    pub fn initialize(window_handle: usize) -> Option<AudioBackend> {
         // Load library
         let lib_name = encode_wide("dsound.dll");
         let dsound_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
@@ -68,7 +68,7 @@ impl AudioBackend {
         assert!(!dsound.is_null());
         let dsound = unsafe { &mut *dsound };
 
-        let result = unsafe { dsound.SetCooperativeLevel(window.window_handle(), ffi::DSSCL_PRIORITY) };
+        let result = unsafe { dsound.SetCooperativeLevel(window_handle as *mut _, ffi::DSSCL_PRIORITY) };
         if result != ffi::DS_OK {
             println!("Failed to call DirectSound->SetCooperativeLevel. Error code: {}", result);
             return None;
@@ -199,6 +199,7 @@ impl AudioBackend {
                 size is {}", 
                 play_write_cursor_gap, cursor_granularity, buffer_size
             );
+            return None;
         }
 
         Some(AudioBackend {
@@ -246,7 +247,7 @@ impl AudioBackend {
         };
 
         let play_cursor_jump = {
-            if self.last_play_cursor < play_cursor {
+            if self.last_play_cursor <= play_cursor {
                 play_cursor - self.last_play_cursor
             } else {
                 play_cursor + (self.buffer_size - self.last_play_cursor)
@@ -258,6 +259,8 @@ impl AudioBackend {
         if play_cursor_jump == 0 {
             println!("Calls to `write` are to frequent");
             return;
+        } else {
+            println!("Nice");
         }
 
         // Ensure that we don't have any hiccups
@@ -270,7 +273,7 @@ impl AudioBackend {
             // all the time, we want to back out of doing audio for a while!
         }
 
-        if play_cursor_jump > self.cursor_granularity {
+        if play_cursor_jump != self.cursor_granularity {
             println!(
                 "Error in audio: `write` was not called at a high enough frequency, so we missed \
                 a write window. Expected to jump by {}, but jumped by {}",
@@ -278,6 +281,9 @@ impl AudioBackend {
             );
             // TODO Also handle this case properly
         }
+
+        // TODO we should probably be able to run even though play_cursor_jump varies between 0 and
+        // self.cursor_granularity!
 
         // Figure out where we want to write
         let write_start = (write_cursor + self.cursor_granularity) % self.buffer_size;
