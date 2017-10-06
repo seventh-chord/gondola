@@ -2,7 +2,7 @@
 extern crate gondola;
 extern crate cable_math;
 
-use gondola::{Window, WindowCommon, CursorType, Timer, InputManager, Key};
+use gondola::{Window, WindowCommon, CursorType, Timer, Time, InputManager, Key};
 use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
@@ -17,6 +17,7 @@ fn main() {
     let mut input = InputManager::new();
 
     let mut window = Window::new("This is hopefully still a window");
+    window.set_vsync(true);
 
     let mut audio = AudioSystem::initialize(&window);
     if let Some(ref mut audio) = audio {
@@ -44,7 +45,8 @@ fn main() {
     window.show();
 
     loop {
-        let (time, delta) = timer.tick();
+        let (time, _last_frame_time) = timer.tick();
+        let delta = Time(Time::NANOSECONDS_PER_SECOND / 60);
 
         window.poll_events(&mut input);
 
@@ -69,13 +71,6 @@ fn main() {
 
         if input.key(Key::A).pressed_repeat() {
             println!("{}", delta.as_secs_float()*1000.0);
-        }
-
-        if input.key(Key::B).pressed() {
-            window.set_vsync(true);
-        }
-        if input.key(Key::C).pressed() {
-            window.set_vsync(false);
         }
 
         if input.key(Key::Key1).pressed() {
@@ -114,12 +109,12 @@ fn main() {
         draw_group.draw(ortho, screen_region.size());
         framebuffer.blit(Default::default());
 
-        window.swap_buffers();
-        graphics::print_errors();
-
         if let Some(ref mut audio) = audio {
             audio.tick();
         }
+
+        window.swap_buffers();
+        graphics::print_errors();
 
         if window.close_requested() {
             return;

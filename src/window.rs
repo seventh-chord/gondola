@@ -1192,8 +1192,8 @@ mod windows {
                     if p.is_null() {
                         panic!(
                             "wglSwapIntervalEXTis not present, although the required \
-                            extensions are supported. Your drivers/the spec suck"
-                            );
+                            extensions are supported. Your drivers/the specification suck"
+                        );
                     }
                     mem::transmute::<_, ffi::wglSwapIntervalEXTType>(p)
                 })

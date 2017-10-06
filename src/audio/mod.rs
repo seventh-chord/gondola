@@ -2,8 +2,9 @@
 //! Experimental: custom audio stuff
 
 // NB (Morten, 04.10.17)
-// A sample is a single i16 (Or whatever `SampleData` is)
-// A frame is one i16 per channel
+// Regarding terminology
+// A "sample" is a single i16 (Or whatever `SampleData` is): i16
+// A "frame" is one i16 per channel:  (left, right): (i16, i16)
 
 use window::Window;
 use time::Time;
@@ -22,11 +23,12 @@ pub mod wav;
 // We don't neccesarily have to output at 44.1kHz in the end, but this would be
 // an easy way to implement and test resampling
 
-// TODO OUTPUT_BUFFER_SIZE_IN_FRAMES should be two seconds or something
+// TODO Multithreading is pretty much needed so we don't miss our write windows, at least with
+// direct sound!
 
 const OUTPUT_CHANNELS: u32 = 2;
 const OUTPUT_SAMPLE_RATE: u32 = 48000;
-const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 10000;
+const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 2*(OUTPUT_SAMPLE_RATE as usize);
 type SampleData = i16;
 
 pub struct AudioSystem {
@@ -34,7 +36,7 @@ pub struct AudioSystem {
     frame_counter: u64,
 
     pub buffers: Vec<AudioBuffer>,
-    sounds: Vec<Sound>,
+    events: Vec<Event>,
 }
 
 impl AudioSystem {
@@ -50,18 +52,18 @@ impl AudioSystem {
             backend,
             frame_counter: 0,
             buffers: Vec::with_capacity(30),
-            sounds:  Vec::with_capacity(30),
+            events:  Vec::with_capacity(30),
         })
     }
 
     pub fn tick(&mut self) {
-        self.backend.write(&mut self.frame_counter, &self.buffers, &mut self.sounds);
+        self.backend.write(&mut self.frame_counter, &self.buffers, &mut self.events);
 
-        // Remove sounds when they are done playing
+        // Remove events when they are done playing
         let mut i = 0;
-        while i < self.sounds.len() {
-            if self.sounds[i].done {
-                self.sounds.swap_remove(i);
+        while i < self.events.len() {
+            if self.events[i].done {
+                self.events.swap_remove(i);
             } else {
                 i += 1;
             }
@@ -69,8 +71,8 @@ impl AudioSystem {
     }
 
     pub fn play(&mut self, buffer: usize) {
-        self.sounds.push(Sound {
-            start_frame: self.frame_counter + (OUTPUT_SAMPLE_RATE/30) as u64, // TODO Figoure out how to actually do audio-video sync
+        self.events.push(Event {
+            start_frame: 0,
             done: false,
             buffer,
         });
@@ -98,9 +100,8 @@ impl AudioBuffer {
     }
 }
 
-// TODO `Sound` is probably a confusing name
-pub struct Sound {
-    pub start_frame: u64,
+pub struct Event {
+    pub start_frame: u64, // Set internally when the event is actually started
     pub done: bool,
     pub buffer: usize,
 }

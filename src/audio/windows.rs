@@ -7,6 +7,7 @@ use std::slice;
 use std::ptr;
 
 use super::*;
+use time::{Time, Timer};
 
 // We access all ffi stuff through `ffi::whatever` instead of through each apis specific
 // bindings. This allows us to easily add custom stuff that is missing in bindings.
@@ -21,8 +22,15 @@ mod ffi {
 }
 
 pub(super) struct AudioBackend {
-    buffer_size: usize, // Total size of secondary buffer, in bytes
-    playing: bool,
+    // Total size of secondary buffer, in bytes. This can't be a constant because we can't call 
+    // mem::size_of::<SampleData>() at compile time
+    buffer_size: usize,
+
+    // These values are in bytes
+    last_play_cursor: usize,
+    play_write_cursor_gap: usize,
+    cursor_granularity: usize,
+
     secondary_buffer: &'static mut ffi::IDirectSoundBuffer,
 }
 
@@ -107,7 +115,7 @@ impl AudioBackend {
         buffer_description.dwSize = mem::size_of::<ffi::DSBUFFERDESC>() as u32;
         buffer_description.dwBufferBytes = buffer_size as u32;
         buffer_description.lpwfxFormat = &mut wave_format;
-        buffer_description.dwFlags = ffi::DSBCAPS_GLOBALFOCUS;
+        buffer_description.dwFlags = ffi::DSBCAPS_GLOBALFOCUS | ffi::DSBCAPS_GETCURRENTPOSITION2;
 
         let mut secondary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut secondary_buffer, ptr::null_mut()) };
@@ -118,9 +126,86 @@ impl AudioBackend {
         assert!(!secondary_buffer.is_null());
         let secondary_buffer = unsafe { &mut *secondary_buffer };
 
+        // Start playing
+        unsafe { secondary_buffer.Play(0, 0, ffi::DSBPLAY_LOOPING) };
+
+        // Compute granularity
+        let mut gap_sum = 0;
+        let mut jump_sum = 0;
+        let mut check_count = 0;
+
+        let mut timer = Timer::new();
+
+        let mut last_play_cursor = 0;
+        loop {
+            let mut write_cursor = 0;
+            let mut play_cursor  = 0;
+            let result = unsafe { secondary_buffer.GetCurrentPosition(
+                &mut play_cursor,
+                &mut write_cursor,
+            )};
+            if result != ffi::DS_OK {
+                println!("Failed to get current buffer position. Error code: {}", result);
+                return None;
+            }
+            let play_cursor = play_cursor as usize;
+            let write_cursor = write_cursor as usize;
+
+            let play_cursor_jump = {
+                if last_play_cursor > play_cursor {
+                    play_cursor + (buffer_size - last_play_cursor)
+                } else {
+                    play_cursor - last_play_cursor
+                }
+            };
+            last_play_cursor = play_cursor;
+
+            let block_gap = {
+                if write_cursor < play_cursor { 
+                    write_cursor + (buffer_size - play_cursor)
+                } else {
+                    write_cursor - play_cursor
+                }
+            };
+
+            if play_cursor_jump != 0 {
+                gap_sum += block_gap;
+                jump_sum += play_cursor_jump;
+                check_count += 1;
+            }
+
+            let (time, _) = timer.tick();
+
+            if check_count > 10 || time > Time::from_ms(500) {
+                break;
+            }
+        }
+
+        if check_count == 0 {
+            println!("Unable to determine sound card latency, can not output audio");
+            return None;
+        }
+
+        let play_write_cursor_gap = gap_sum / check_count;
+        let cursor_granularity = jump_sum / check_count;
+
+        println!("{} {} ", cursor_granularity, play_write_cursor_gap);
+        println!("{} checks, {} seconds", check_count, timer.tick().0.as_secs_float());
+
+        // TODO if we use 2*cursor_granularity later we have to change this
+        if play_write_cursor_gap + cursor_granularity > buffer_size {
+            println!(
+                "Internal audio buffer is to small, given latency. Min. size is {} + {}, current \
+                size is {}", 
+                play_write_cursor_gap, cursor_granularity, buffer_size
+            );
+        }
+
         Some(AudioBackend {
             buffer_size,
-            playing: false,
+            last_play_cursor,
+            play_write_cursor_gap,
+            cursor_granularity,
             secondary_buffer,
         })
     }
@@ -129,9 +214,13 @@ impl AudioBackend {
         &mut self,
         frame_counter: &mut u64,
         buffers: &[AudioBuffer],
-        sounds:  &mut [Sound],
+        events:  &mut [Event],
     ) {
-        // Figure out where and how much to write
+        // The play cursor advances in chunks of ´cursor_granularity´. We can start writing
+        // at `write_cursor + cursor_granularity` (to acount for uncertainty). We allways write
+        // `cursor_granularity` bytes of data.
+
+        // Get current state of playback
         let mut write_cursor = 0;
         let mut play_cursor  = 0;
         let result = unsafe { self.secondary_buffer.GetCurrentPosition(
@@ -142,29 +231,57 @@ impl AudioBackend {
             println!("Failed to get current buffer position. Error code: {}", result);
             return;
         }
-
         let play_cursor = play_cursor as usize;
+        let write_cursor = write_cursor as usize;
 
         let bytes_per_sample = mem::size_of::<SampleData>();
         let bytes_per_frame = bytes_per_sample * OUTPUT_CHANNELS as usize;
 
-        let our_cursor = (*frame_counter as usize * bytes_per_frame) % self.buffer_size;
-        let len = {
-            if play_cursor == 0 && write_cursor == 0 {
-                self.buffer_size
-            } else if our_cursor > play_cursor {
-                (self.buffer_size - our_cursor) + play_cursor
+        let current_play_write_cursor_gap = {
+            if write_cursor < play_cursor { 
+                write_cursor + (self.buffer_size - play_cursor)
             } else {
-                play_cursor - our_cursor
+                write_cursor - play_cursor
             }
         };
 
-        if len == 0 {
+        let play_cursor_jump = {
+            if self.last_play_cursor < play_cursor {
+                play_cursor - self.last_play_cursor
+            } else {
+                play_cursor + (self.buffer_size - self.last_play_cursor)
+            }
+        };
+        self.last_play_cursor = play_cursor;
+
+        // We did not actually jump, don't update now
+        if play_cursor_jump == 0 {
+            println!("Calls to `write` are to frequent");
             return;
         }
 
-        assert!(our_cursor < self.buffer_size);
-        assert!(len <= self.buffer_size);
+        // Ensure that we don't have any hiccups
+        if current_play_write_cursor_gap != self.play_write_cursor_gap {
+            println!(
+                "Error in audio: Gap between play/write cursor changed from default {} to {}",
+                self.play_write_cursor_gap, current_play_write_cursor_gap
+            );
+            // TODO properly handle this case, if it happens once/twice we are fine. If it happens
+            // all the time, we want to back out of doing audio for a while!
+        }
+
+        if play_cursor_jump > self.cursor_granularity {
+            println!(
+                "Error in audio: `write` was not called at a high enough frequency, so we missed \
+                a write window. Expected to jump by {}, but jumped by {}",
+                self.cursor_granularity, play_cursor_jump,
+            );
+            // TODO Also handle this case properly
+        }
+
+        // Figure out where we want to write
+        let write_start = (write_cursor + self.cursor_granularity) % self.buffer_size;
+        let len = self.cursor_granularity;
 
         // Lock secondary buffer, get write region
         let mut len1 = 0;
@@ -173,7 +290,7 @@ impl AudioBackend {
         let mut ptr2 = ptr::null_mut();
 
         let result = unsafe { self.secondary_buffer.Lock(
-            our_cursor as u32, len as u32,
+            write_start as u32, len as u32,
             &mut ptr1, &mut len1,
             &mut ptr2, &mut len2,
             0,
@@ -193,7 +310,7 @@ impl AudioBackend {
             return;
         }
 
-        assert!(len == (len1 + len2) as usize);
+        assert!(len == (len1 + len2) as usize); // Make sure we got the promissed amount of data
 
         // Zero out the data before we mix new sound into it
         unsafe {
@@ -215,22 +332,27 @@ impl AudioBackend {
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
         assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);
 
-        for sound in sounds.iter_mut() {
-            let ref buffer = buffers[sound.buffer];
-            let sound_start_frame = sound.start_frame;
-            let sound_end_frame = sound_start_frame + buffer.frames();
+        for event in events.iter_mut() {
+            let ref buffer = buffers[event.buffer];
 
-            let start_frame = max(sound_start_frame, target_start_frame);
-            let end_frame   = min(sound_end_frame, target_end_frame);
-            let mid_frame = max(min(target_mid_frame, end_frame), start_frame);
+            if event.start_frame == 0 {
+                event.start_frame = target_start_frame;
+            }
+
+            let event_start_frame = event.start_frame;
+            let event_end_frame   = event_start_frame + buffer.frames();
+
+            let start_frame = max(event_start_frame, target_start_frame);
+            let end_frame   = min(event_end_frame, target_end_frame);
+            let mid_frame   = max(min(target_mid_frame, end_frame), start_frame);
 
             if end_frame < target_start_frame {
-                sound.done = true;
+                event.done = true;
             }
 
             if start_frame < end_frame {
-                let a = (start_frame - sound_start_frame) as usize * buffer.channels as usize;
-                let b = (end_frame - sound_start_frame) as usize * buffer.channels as usize;
+                let a = (start_frame - event_start_frame) as usize * buffer.channels as usize;
+                let b = (end_frame - event_start_frame) as usize   * buffer.channels as usize;
                 let read_data = &buffer.data[a..b];
 
                 let write_data_1 = if mid_frame > start_frame {
@@ -249,7 +371,7 @@ impl AudioBackend {
                     &mut []
                 };
 
-                // TODO this assumes buffer is single channel
+                // TODO properly mix into channels
                 for frame in 0..read_data.len() {
                     let read_frame  = frame*(buffer.channels as usize);
                     let write_frame = frame*(OUTPUT_CHANNELS as usize);
@@ -282,12 +404,6 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             println!("Failed to unlock secondary buffer. Error code: {}", result);
         } 
-
-        // Ensure we are playing
-        if !self.playing {
-            self.playing = true;
-            unsafe { self.secondary_buffer.Play(0, 0, ffi::DSBPLAY_LOOPING) };
-        }
     }
 }
 
