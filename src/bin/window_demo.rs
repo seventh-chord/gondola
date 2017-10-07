@@ -24,8 +24,6 @@ fn main() {
         Ok(b) => b,
         Err(err) => panic!("Oh snap: {}", err),
     };
-    println!("{} channel sound at {}Hz", hit_buffer.channels, hit_buffer.sample_rate);
-    println!("{} seconds", hit_buffer.duration().as_secs_float());
 
     let hit_buffer_handle = audio.add_buffer(hit_buffer);
 

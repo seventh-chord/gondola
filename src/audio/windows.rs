@@ -21,6 +21,11 @@ mod ffi {
     pub(super) type DirectSoundCreate = extern "system" fn(LPGUID, *mut LPDIRECTSOUND, LPUNKNOWN) -> HRESULT;
 }
 
+// TODO microsoft docs say to zero out the secondary buffer after creating it!
+// TODO DirectSoundEnumerate to figure out if we support the proper version of direct sound (?)
+
+const MIN_WRITE_CHUNK_FRAMES: usize = 400;
+
 pub(super) struct AudioBackend {
     // Total size of secondary buffer, in bytes. This can't be a constant because we can't call 
     // mem::size_of::<SampleData>() at compile time
@@ -28,8 +33,9 @@ pub(super) struct AudioBackend {
 
     // These values are in bytes
     last_play_cursor: usize,
-    play_write_cursor_gap: usize,
-    cursor_granularity: usize,
+    write_chunk_size: usize,
+    last_write_start: Option<usize>,
+    cumulative_play_cursor_jump: usize,
 
     secondary_buffer: &'static mut ffi::IDirectSoundBuffer,
 }
@@ -117,6 +123,12 @@ impl AudioBackend {
         buffer_description.lpwfxFormat = &mut wave_format;
         buffer_description.dwFlags = ffi::DSBCAPS_GLOBALFOCUS | ffi::DSBCAPS_GETCURRENTPOSITION2;
 
+        // TODO how do we check if this flag is supported?
+        let dynamic_play_cursor_interval = true;
+        if dynamic_play_cursor_interval {
+            buffer_description.dwFlags |= ffi::DSBCAPS_TRUEPLAYPOSITION;
+        }
+
         let mut secondary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut secondary_buffer, ptr::null_mut()) };
         if result != ffi::DS_OK {
@@ -126,17 +138,18 @@ impl AudioBackend {
         assert!(!secondary_buffer.is_null());
         let secondary_buffer = unsafe { &mut *secondary_buffer };
 
-        // Start playing
         unsafe { secondary_buffer.Play(0, 0, ffi::DSBPLAY_LOOPING) };
 
-        // Compute granularity
-        let mut gap_sum = 0;
+        // If DSBCAPS_TRUEPLAYPOSITION is set, GetCursorPosition will report the frame-by-frame
+        // position of the play cursor. Otherwise, the play cursor will jump in discrete chunks.
+        // Regardless, the write cursor will allways jump in discrete chunks. We usually want to
+        // write exactly the size between two chunks, as this will give us the lowest latency.
         let mut jump_sum = 0;
         let mut check_count = 0;
-
         let mut timer = Timer::new();
 
-        let mut last_play_cursor = 0;
+        let mut last_play_cursor;
+        let mut last_write_cursor = 0;
         loop {
             let mut write_cursor = 0;
             let mut play_cursor  = 0;
@@ -151,32 +164,24 @@ impl AudioBackend {
             let play_cursor = play_cursor as usize;
             let write_cursor = write_cursor as usize;
 
-            let play_cursor_jump = {
-                if last_play_cursor > play_cursor {
-                    play_cursor + (buffer_size - last_play_cursor)
+            let jump = {
+                if last_write_cursor > write_cursor {
+                    write_cursor + (buffer_size - last_write_cursor)
                 } else {
-                    play_cursor - last_play_cursor
+                    write_cursor - last_write_cursor
                 }
             };
+
+            last_write_cursor = write_cursor;
             last_play_cursor = play_cursor;
 
-            let block_gap = {
-                if write_cursor < play_cursor { 
-                    write_cursor + (buffer_size - play_cursor)
-                } else {
-                    write_cursor - play_cursor
-                }
-            };
-
-            if play_cursor_jump != 0 {
-                gap_sum += block_gap;
-                jump_sum += play_cursor_jump;
+            if jump > 0 {
+                jump_sum += jump;
                 check_count += 1;
             }
 
             let (time, _) = timer.tick();
-
-            if check_count > 10 || time > Time::from_ms(500) {
+            if check_count > 20 || time > Time::from_ms(500) {
                 break;
             }
         }
@@ -186,27 +191,18 @@ impl AudioBackend {
             return Err(());
         }
 
-        let play_write_cursor_gap = gap_sum / check_count;
         let cursor_granularity = jump_sum / check_count;
-
-        println!("{} {} ", cursor_granularity, play_write_cursor_gap);
-        println!("{} checks, {} seconds", check_count, timer.tick().0.as_secs_float());
-
-        // TODO if we use 2*cursor_granularity later we have to change this
-        if play_write_cursor_gap + cursor_granularity > buffer_size {
-            println!(
-                "Internal audio buffer is to small, given latency. Min. size is {} + {}, current \
-                size is {}", 
-                play_write_cursor_gap, cursor_granularity, buffer_size
-                );
-            return Err(());
-        }
+        let write_chunk_size = max(
+            MIN_WRITE_CHUNK_FRAMES * (OUTPUT_CHANNELS as usize) * mem::size_of::<SampleData>(),
+            cursor_granularity,
+        );
 
         Ok(AudioBackend {
             buffer_size,
             last_play_cursor,
-            play_write_cursor_gap,
-            cursor_granularity,
+            write_chunk_size,
+            last_write_start: None,
+            cumulative_play_cursor_jump: 0,
             secondary_buffer,
         })
     }
@@ -217,9 +213,9 @@ impl AudioBackend {
         buffers: &[AudioBuffer],
         events:  &mut [Event],
     ) -> Result<bool, ()> {
-        // The play cursor advances in chunks of ´cursor_granularity´. We can start writing
-        // at `write_cursor + cursor_granularity` (to acount for uncertainty). We allways write
-        // `cursor_granularity` bytes of data.
+        // The play cursor advances in chunks of ´write_chunk_size´. We can start writing
+        // at `write_cursor + write_chunk_size` (to acount for uncertainty). We allways write
+        // `write_chunk_size` bytes of data.
 
         // Get current state of playback
         let mut write_cursor = 0;
@@ -238,14 +234,6 @@ impl AudioBackend {
         let bytes_per_sample = mem::size_of::<SampleData>();
         let bytes_per_frame = bytes_per_sample * OUTPUT_CHANNELS as usize;
 
-        let current_play_write_cursor_gap = {
-            if write_cursor < play_cursor { 
-                write_cursor + (self.buffer_size - play_cursor)
-            } else {
-                write_cursor - play_cursor
-            }
-        };
-
         let play_cursor_jump = {
             if self.last_play_cursor <= play_cursor {
                 play_cursor - self.last_play_cursor
@@ -255,36 +243,44 @@ impl AudioBackend {
         };
         self.last_play_cursor = play_cursor;
 
-        // We did not actually jump, don't update now
-        if play_cursor_jump == 0 {
+        // Play cursor has not moved yet, so we need to wait with writing. Maybe more events are
+        // registered before we need to write.
+        if play_cursor_jump <= 0 {
             return Ok(false);
         }
-
-        // Ensure that we don't have any hiccups
-        if current_play_write_cursor_gap != self.play_write_cursor_gap {
-            println!(
-                "Error in audio: Gap between play/write cursor changed from default {} to {}",
-                self.play_write_cursor_gap, current_play_write_cursor_gap
-            );
-            // TODO properly handle this case, if it happens once/twice we are fine. If it happens
-            // all the time, we want to back out of doing audio for a while!
-        }
-
-        if play_cursor_jump != self.cursor_granularity {
-            println!(
-                "Error in audio: `write` was not called at a high enough frequency, so we missed \
-                a write window. Expected to jump by {}, but jumped by {}",
-                self.cursor_granularity, play_cursor_jump,
-            );
-            // TODO Also handle this case properly
-        }
-
-        // TODO we should probably be able to run even though play_cursor_jump varies between 0 and
-        // self.cursor_granularity!
+        self.cumulative_play_cursor_jump += play_cursor_jump;
 
         // Figure out where we want to write
-        let write_start = (write_cursor + self.cursor_granularity) % self.buffer_size;
-        let len = self.cursor_granularity;
+        let write_start;
+        let len = self.write_chunk_size;
+
+        if let Some(last_write_start) = self.last_write_start {
+            if self.cumulative_play_cursor_jump < self.write_chunk_size {
+                return Ok(false);
+            }
+
+            let jumps = self.cumulative_play_cursor_jump / self.write_chunk_size;
+            if jumps > 1 {
+                println!(
+                    "Calls to `backend::write` were to infrequent, the write cursor has overrun a \
+                    region we have not yet written to. It has jumped {} write chunks, but should \
+                    at most ever jump 1 chunk. In total, it has jumped {} bytes",
+                    jumps,
+                    self.cumulative_play_cursor_jump,
+                );
+
+                // TODO if this happens repeatedly, we really just have to give up playing sound!
+                // We probably should track how often this happens, and let the audio system
+                // decide to give up playing based on what we track!
+            }
+            self.cumulative_play_cursor_jump -= jumps*self.write_chunk_size;
+            write_start = (last_write_start + jumps*self.write_chunk_size) % self.buffer_size;
+        } else {
+            write_start = (write_cursor + self.write_chunk_size) % self.buffer_size;
+            self.cumulative_play_cursor_jump = 0;
+        }
+
+        self.last_write_start = Some(write_start);
 
         // Lock secondary buffer, get write region
         let mut len1 = 0;
@@ -332,6 +328,7 @@ impl AudioBackend {
         let target_mid_frame   = target_start_frame + (len1 as u64 / bytes_per_frame as u64);
         let target_end_frame   = target_start_frame + (len as u64 / bytes_per_frame as u64);
 
+        // TODO This thing trips at startup sometimes :/
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
         assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);
 
@@ -411,10 +408,13 @@ impl AudioBackend {
         return Ok(true);
     }
 
-    pub fn estimated_write_interval(&self) -> Time {
+    /// The time between each consecutive write. If one write occured at t0, the next call to write
+    /// must be somewhere between `t0 + interval` and `t0 + 2*interval`. The data must be written by
+    /// `t0 + 2*interval`
+    pub fn write_interval(&self) -> Time {
         let bytes_per_sample = mem::size_of::<SampleData>();
         let bytes_per_frame = bytes_per_sample * OUTPUT_CHANNELS as usize;
-        let frames_per_write = (self.cursor_granularity / bytes_per_frame) as u64;
+        let frames_per_write = (self.write_chunk_size / bytes_per_frame) as u64;
 
         Time(frames_per_write*Time::NANOSECONDS_PER_SECOND/(OUTPUT_SAMPLE_RATE as u64))
     }
@@ -430,11 +430,11 @@ fn encode_wide(s: &str) -> Vec<u16> {
 }
 
 #[inline(always)]
-fn min(a: u64, b: u64) -> u64 {
+fn min<T: Ord + Copy>(a: T, b: T) -> T {
     if a > b { b } else { a }
 }
 
 #[inline(always)]
-fn max(a: u64, b: u64) -> u64 {
+fn max<T: Ord + Copy>(a: T, b: T) -> T {
     if a > b { a } else { b }
 }

@@ -135,7 +135,7 @@ impl AudioSystem {
                 }
 
                 // Sleep for a bit, so this loop does not run constantly
-                let write_interval = backend.estimated_write_interval();
+                let write_interval = backend.write_interval();
                 let before_sleep = timer.tick().0;
                 let next_write = last_write + write_interval;
                 let sleep_margin = Time::from_ms(2);
