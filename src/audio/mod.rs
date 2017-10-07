@@ -80,13 +80,21 @@ impl AudioSystem {
             let mut events  = Vec::with_capacity(100);
 
             let mut last_write = Time::ZERO;
+            let mut average_write_time = Time::ZERO;
+            let mut total_write_time = Time::ZERO;
+            let mut write_count = 0;
 
             loop {
+                let mut did_write = false;
+
+                let start = timer.tick().0;
+
                 // Actually update audio output
                 let write_result = backend.write(&mut frame_counter, &buffers, &mut events);
                 match write_result {
                     Ok(wrote) => {
                         if wrote {
+                            did_write = true;
                             last_write = timer.tick().0;
                         }
                     },
@@ -119,37 +127,36 @@ impl AudioSystem {
                     }
                 }
 
+                let end = timer.tick().0;
+                if did_write {
+                    total_write_time += end - start;
+                    write_count += 1;
+                    average_write_time = Time(total_write_time.0 / write_count);
+                }
+
                 // Sleep for a bit, so this loop does not run constantly
                 let write_interval = backend.estimated_write_interval();
                 let before_sleep = timer.tick().0;
                 let next_write = last_write + write_interval;
-                let sleep_margin = Time::from_ms(1);
+                let sleep_margin = Time::from_ms(2);
 
-                if next_write > before_sleep {
-                    // TODO this should also trigger a hard error!
-                    // NB (Morten, 07.10.17)
-                    // In the case of this, and the next todo we probably want to stop playing
-                    // audio for a couple of seconds, and then try again. Maybe there was just a
-                    // temporary issue which prevented us from playing audio at a reasonable rate.
-                    // If we have a couple of consecutive fails, we can just back out entirely of
-                    // playing audio. 
-                    // We should probably find some completly fucked sound-card to test error cases
-                    // first though
-                    println!("We took more time than allocated to write audio");
-                } else {
-                    let sleep_time = next_write - before_sleep;
+                if average_write_time > write_interval {
+                    // TODO This means the computer we are running on is to slow to mix audio!
+                    println!("Average write time is {} ns, but write interval is {} ns", average_write_time.0, write_interval.0);
+                    return;
+                }
 
-                    if sleep_time > sleep_margin {
-                        thread::sleep((sleep_time - sleep_margin).into());
-                        let after_sleep = timer.tick().0;
+                if next_write > before_sleep + sleep_margin {
+                    let sleep_time = next_write - (before_sleep + sleep_margin);
+                    thread::sleep(sleep_time.into());
+                    let after_sleep = timer.tick().0;
 
-                        if next_write > after_sleep {
-                            // TODO properly handle this case
-                            println!(
-                                "thread::sleep took to long! Should sleep to {} s, but slept until {} s",
-                                next_write.as_secs_float(), after_sleep.as_secs_float(),
-                            );
-                        }
+                    if next_write + (write_interval - average_write_time) < after_sleep {
+                        // TODO properly handle this case
+                        println!(
+                            "thread::sleep took to long! Should sleep to {} s, but slept until {} s",
+                            next_write.as_secs_float(), after_sleep.as_secs_float(),
+                        );
                     }
                 }
             }
