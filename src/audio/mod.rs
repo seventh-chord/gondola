@@ -13,7 +13,7 @@
 // an easy way to implement and test resampling
 
 use std::thread;
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
 
 use window::Window;
 use time::{Time, Timer};
@@ -31,31 +31,32 @@ const OUTPUT_SAMPLE_RATE: u32 = 48000;
 const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 2*(OUTPUT_SAMPLE_RATE as usize);
 type SampleData = i16;
 
+type BufferHandle = usize;
+
 pub struct AudioSystem {
-    new_buffers: Vec<AudioBuffer>,
-    new_events:  Vec<Event>,
-    internal_data: Arc<Mutex<InternalData>>,
+    next_buffer_handle: BufferHandle,
+    broken:   bool,
+    receiver: mpsc::Receiver<MessageFromAudioThread>,
+    sender:   mpsc::Sender<MessageToAudioThread>,
 }
 
-// Has to be shared between threads!
-struct InternalData {
-    buffers: Vec<AudioBuffer>,
-    events:  Vec<Event>,
+enum MessageToAudioThread {
+    NewEvent { event: Event },
+    AddBuffer { buffer: AudioBuffer },
+}
+
+enum MessageFromAudioThread {
+    CriticalError,
 }
 
 impl AudioSystem {
     pub fn initialize(window: &Window) -> AudioSystem {
-        let internal_data = InternalData {
-            buffers: Vec::with_capacity(100),
-            events:  Vec::with_capacity(100),
-        };
-
-        let mutex = Mutex::new(internal_data);
-        let arc = Arc::new(mutex);
-        let weak = Arc::downgrade(&arc);
-
+        // TODO Remove the stupid hack!
         #[cfg(target_os = "windows")]
         let window_handle = window.window_handle() as usize; // Stupid hack
+
+        let (thread_sender, receiver) = mpsc::channel();
+        let (sender, thread_receiver) = mpsc::channel();
 
         thread::spawn(move || {
             // Initialize backend
@@ -65,9 +66,9 @@ impl AudioSystem {
             let backend = AudioBackend::initialize();
 
             let mut backend = match backend {
-                Some(b) => b,
-                None => {
-                    // TODO handle errors!
+                Ok(b) => b,
+                Err(()) => {
+                    let _ = thread_sender.send(MessageFromAudioThread::CriticalError);
                     return;
                 },
             };
@@ -75,76 +76,136 @@ impl AudioSystem {
             let mut frame_counter = 0;
             let mut timer = Timer::new();
 
+            let mut buffers = Vec::with_capacity(100);
+            let mut events  = Vec::with_capacity(100);
+
+            let mut last_write = Time::ZERO;
+
             loop {
-                let mutex = match weak.upgrade() {
-                    Some(m) => m,
-                    None => {
-                        // This means `AudioSystem`, which has the strong `Arc` was dropped
-                        return;
+                // Actually update audio output
+                let write_result = backend.write(&mut frame_counter, &buffers, &mut events);
+                match write_result {
+                    Ok(wrote) => {
+                        if wrote {
+                            last_write = timer.tick().0;
+                        }
                     },
-                };
+                    Err(()) => {
+                        // TODO proper error handling, should we stop the loop?
+                        println!("backend.write failed!");
+                    },
+                }
 
-                let start_time = timer.tick().0;
-                {
-                    let internal_data = &mut *mutex.lock().unwrap();
+                // Remove events when they are done playing
+                let mut i = 0;
+                while i < events.len() {
+                    if events[i].done {
+                        events.swap_remove(i);
+                    } else {
+                        i += 1;
+                    }
+                }
 
-                    backend.write(&mut frame_counter, &internal_data.buffers, &mut internal_data.events);
+                // Add new buffers/events
+                for message in thread_receiver.try_recv() {
+                    use self::MessageToAudioThread::*;
+                    match message {
+                        NewEvent { event } => {
+                            events.push(event);
+                        },
+                        AddBuffer { buffer } => {
+                            buffers.push(buffer);
+                        },
+                    }
+                }
 
-                    println!("{} events", internal_data.events.len());
+                // Sleep for a bit, so this loop does not run constantly
+                let write_interval = backend.estimated_write_interval();
+                let before_sleep = timer.tick().0;
+                let next_write = last_write + write_interval;
+                let sleep_margin = Time::from_ms(1);
 
-                    // Remove events when they are done playing
-                    let mut i = 0;
-                    while i < internal_data.events.len() {
-                        if internal_data.events[i].done {
-                            internal_data.events.swap_remove(i);
-                        } else {
-                            i += 1;
+                if next_write > before_sleep {
+                    // TODO this should also trigger a hard error!
+                    // NB (Morten, 07.10.17)
+                    // In the case of this, and the next todo we probably want to stop playing
+                    // audio for a couple of seconds, and then try again. Maybe there was just a
+                    // temporary issue which prevented us from playing audio at a reasonable rate.
+                    // If we have a couple of consecutive fails, we can just back out entirely of
+                    // playing audio. 
+                    // We should probably find some completly fucked sound-card to test error cases
+                    // first though
+                    println!("We took more time than allocated to write audio");
+                } else {
+                    let sleep_time = next_write - before_sleep;
+
+                    if sleep_time > sleep_margin {
+                        thread::sleep((sleep_time - sleep_margin).into());
+                        let after_sleep = timer.tick().0;
+
+                        if next_write > after_sleep {
+                            // TODO properly handle this case
+                            println!(
+                                "thread::sleep took to long! Should sleep to {} s, but slept until {} s",
+                                next_write.as_secs_float(), after_sleep.as_secs_float(),
+                            );
                         }
                     }
                 }
-                let end_time = timer.tick().0;
-
-                println!("Write took {}ms", (end_time - start_time).as_ms());
-
-                // TODO do we actually need to sleep? For how long?
-//                thread::sleep(Time::from_ms(1).into()); 
             }
         });
 
         AudioSystem {
-            new_buffers: Vec::with_capacity(30),
-            new_events:  Vec::with_capacity(30),
-            internal_data: arc,
+            broken: false,
+            next_buffer_handle: 0,
+            sender,
+            receiver,
         }
     }
 
     pub fn tick(&mut self) {
-        if self.new_events.is_empty() && self.new_buffers.is_empty() {
+        use self::MessageFromAudioThread::*;
+        for message in self.receiver.try_recv() {
+            match message {
+                CriticalError => {
+                    self.broken = true;
+                },
+            }
+        }
+    }
+
+    pub fn play(&mut self, buffer: BufferHandle) {
+        if self.broken {
             return;
         }
 
-        let internal_data = &mut *self.internal_data.lock().unwrap();
-
-        // Add new events and buffers
-        for new_event in self.new_events.drain(..) {
-            internal_data.events.push(new_event);
-        }
-
-        for new_buffer in self.new_buffers.drain(..) {
-            internal_data.buffers.push(new_buffer);
-        }
-    }
-
-    pub fn play(&mut self, buffer: usize) {
-        self.new_events.push(Event {
+        let event = Event {
             start_frame: 0,
             done: false,
             buffer,
-        });
+        };
+
+        let message = MessageToAudioThread::NewEvent { event };
+        let broken = self.sender.send(message).is_err();
+        if broken {
+            self.broken = true;
+        }
     }
 
-    pub fn add_buffer(&mut self, buffer: AudioBuffer) {
-        self.new_buffers.push(buffer);
+    pub fn add_buffer(&mut self, buffer: AudioBuffer) -> BufferHandle {
+        if self.broken {
+            return 0;
+        }
+
+        let message = MessageToAudioThread::AddBuffer { buffer };
+        let broken = self.sender.send(message).is_err();
+        if broken {
+            self.broken = true;
+        }
+
+        let handle = self.next_buffer_handle;
+        self.next_buffer_handle += 1;
+        return handle;
     }
 }
 
@@ -152,7 +213,7 @@ impl AudioSystem {
 pub struct AudioBuffer {
     pub channels: u32,
     pub sample_rate: u32,
-    pub data: Vec<i16>,
+    pub data: Vec<SampleData>,
 }
 
 impl AudioBuffer {
@@ -172,5 +233,5 @@ impl AudioBuffer {
 pub struct Event {
     pub start_frame: u64, // Set internally when the event is actually started
     pub done: bool,
-    pub buffer: usize,
+    pub buffer: BufferHandle,
 }

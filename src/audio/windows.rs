@@ -35,7 +35,7 @@ pub(super) struct AudioBackend {
 }
 
 impl AudioBackend {
-    pub fn initialize(window_handle: usize) -> Option<AudioBackend> {
+    pub fn initialize(window_handle: usize) -> Result<AudioBackend, ()> {
         // Load library
         let lib_name = encode_wide("dsound.dll");
         let dsound_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
@@ -43,7 +43,7 @@ impl AudioBackend {
         if dsound_lib.is_null() {
             println!("Could not load \"dsound.dll\"");
             // Don't panic, just run without sound
-            return None;
+            return Err(());
         }
 
         // Create DirectSound object
@@ -53,7 +53,7 @@ impl AudioBackend {
 
             if address.is_null() {
                 println!("Could not load DirectSoundCreate from dsound.dll");
-                return None;
+                return Err(());
             } else {
                 unsafe { mem::transmute::<_, ffi::DirectSoundCreate>(address) }
             }
@@ -63,7 +63,7 @@ impl AudioBackend {
         let result = direct_sound_create(ptr::null_mut(), &mut dsound, ptr::null_mut());
         if result != ffi::DS_OK {
             println!("Failed to create a direct sound object: {}", result);
-            return None;
+            return Err(());
         }
         assert!(!dsound.is_null());
         let dsound = unsafe { &mut *dsound };
@@ -71,7 +71,7 @@ impl AudioBackend {
         let result = unsafe { dsound.SetCooperativeLevel(window_handle as *mut _, ffi::DSSCL_PRIORITY) };
         if result != ffi::DS_OK {
             println!("Failed to call DirectSound->SetCooperativeLevel. Error code: {}", result);
-            return None;
+            return Err(());
         }
 
         // Create primary buffer (I think this is only used as a configuration object. This is
@@ -84,7 +84,7 @@ impl AudioBackend {
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut primary_buffer, ptr::null_mut()) };
         if result != ffi::DS_OK {
             println!("Failed to call DirectSound->CreateSoundBuffer. Error code: {}", result);
-            return None;
+            return Err(());
         }
         assert!(!primary_buffer.is_null());
         let primary_buffer = unsafe { &mut *primary_buffer };
@@ -107,7 +107,7 @@ impl AudioBackend {
         let result = unsafe { primary_buffer.SetFormat(&wave_format) };
         if result != ffi::DS_OK {
             println!("Failed call to SoundBuffer->SetFormat. Error code: {}", result);
-            return None;
+            return Err(());
         }
 
         // Create secondary buffer (which is the buffer we actually want)
@@ -121,7 +121,7 @@ impl AudioBackend {
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut secondary_buffer, ptr::null_mut()) };
         if result != ffi::DS_OK {
             println!("Failed call to SoundBuffer->SetFormat. Error code: {}", result);
-            return None;
+            return Err(());
         }
         assert!(!secondary_buffer.is_null());
         let secondary_buffer = unsafe { &mut *secondary_buffer };
@@ -146,7 +146,7 @@ impl AudioBackend {
             )};
             if result != ffi::DS_OK {
                 println!("Failed to get current buffer position. Error code: {}", result);
-                return None;
+                return Err(());
             }
             let play_cursor = play_cursor as usize;
             let write_cursor = write_cursor as usize;
@@ -183,7 +183,7 @@ impl AudioBackend {
 
         if check_count == 0 {
             println!("Unable to determine sound card latency, can not output audio");
-            return None;
+            return Err(());
         }
 
         let play_write_cursor_gap = gap_sum / check_count;
@@ -198,11 +198,11 @@ impl AudioBackend {
                 "Internal audio buffer is to small, given latency. Min. size is {} + {}, current \
                 size is {}", 
                 play_write_cursor_gap, cursor_granularity, buffer_size
-            );
-            return None;
+                );
+            return Err(());
         }
 
-        Some(AudioBackend {
+        Ok(AudioBackend {
             buffer_size,
             last_play_cursor,
             play_write_cursor_gap,
@@ -216,7 +216,7 @@ impl AudioBackend {
         frame_counter: &mut u64,
         buffers: &[AudioBuffer],
         events:  &mut [Event],
-    ) {
+    ) -> Result<bool, ()> {
         // The play cursor advances in chunks of ´cursor_granularity´. We can start writing
         // at `write_cursor + cursor_granularity` (to acount for uncertainty). We allways write
         // `cursor_granularity` bytes of data.
@@ -230,7 +230,7 @@ impl AudioBackend {
         )};
         if result != ffi::DS_OK {
             println!("Failed to get current buffer position. Error code: {}", result);
-            return;
+            return Err(());
         }
         let play_cursor = play_cursor as usize;
         let write_cursor = write_cursor as usize;
@@ -257,10 +257,7 @@ impl AudioBackend {
 
         // We did not actually jump, don't update now
         if play_cursor_jump == 0 {
-            println!("Calls to `write` are to frequent");
-            return;
-        } else {
-            println!("Nice");
+            return Ok(false);
         }
 
         // Ensure that we don't have any hiccups
@@ -313,7 +310,7 @@ impl AudioBackend {
             };
 
             println!("Failed to lock secondary buffer. Error code: 0x{:x} ({})", result, msg);
-            return;
+            return Err(());
         }
 
         assert!(len == (len1 + len2) as usize); // Make sure we got the promissed amount of data
@@ -410,6 +407,16 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             println!("Failed to unlock secondary buffer. Error code: {}", result);
         } 
+
+        return Ok(true);
+    }
+
+    pub fn estimated_write_interval(&self) -> Time {
+        let bytes_per_sample = mem::size_of::<SampleData>();
+        let bytes_per_frame = bytes_per_sample * OUTPUT_CHANNELS as usize;
+        let frames_per_write = (self.cursor_granularity / bytes_per_frame) as u64;
+
+        Time(frames_per_write*Time::NANOSECONDS_PER_SECOND/(OUTPUT_SAMPLE_RATE as u64))
     }
 }
 

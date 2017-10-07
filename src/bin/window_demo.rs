@@ -20,14 +20,14 @@ fn main() {
     window.set_vsync(true);
 
     let mut audio = AudioSystem::initialize(&window);
-    let hit_buffer = match wav::load("hit.wav") {
+    let hit_buffer = match wav::load("dudu.wav") {
         Ok(b) => b,
         Err(err) => panic!("Oh snap: {}", err),
     };
     println!("{} channel sound at {}Hz", hit_buffer.channels, hit_buffer.sample_rate);
     println!("{} seconds", hit_buffer.duration().as_secs_float());
 
-    audio.add_buffer(hit_buffer);
+    let hit_buffer_handle = audio.add_buffer(hit_buffer);
 
     let mut draw_group = DrawGroup::new();
 
@@ -80,12 +80,12 @@ fn main() {
         }
 
         if input.mouse_key(0).pressed() {
-            audio.play(0);
+            audio.play(hit_buffer_handle);
         }
 
         if input.mouse_key(1).pressed() {
-            audio.play(0);
-            audio.play(0);
+            audio.play(hit_buffer_handle);
+            audio.play(hit_buffer_handle);
         }
 
         if input.key(Key::Key2).pressed() {
