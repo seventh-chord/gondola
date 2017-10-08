@@ -93,4 +93,21 @@ impl Region {
     pub fn bottom_right(self) -> Vec2<f32> {
         self.max
     }
+
+    /// Clips the given position to inside this region
+    pub fn clip(self, mut pos: Vec2<f32>) -> Vec2<f32> {
+        if pos.x < self.min.x {
+            pos.x = self.min.x;
+        } else if pos.x > self.max.x {
+            pos.x = self.max.x;
+        }
+
+        if pos.y < self.min.y {
+            pos.y = self.min.y;
+        } else if pos.y > self.max.y {
+            pos.y = self.max.y;
+        }
+
+        return pos;
+    }
 }

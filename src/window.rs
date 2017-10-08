@@ -78,8 +78,8 @@ pub trait WindowCommon: Drop {
 
     /// Sets the visual apperance of the cursor when it is inside this window
     fn set_cursor(&mut self, cursor: CursorType);
-    /// Clips the cursor so it can not leave the given region. The region should be in screen
-    /// space. If `None` is passed, this unclips the cursor.
+    /// Clips the cursor so it can not leave the given region. The region should be in window
+    /// space. That is, the region is relative to the top-left of this windows screen region.
     fn clip_cursor(&mut self, region: Option<Region>);
     /// Constrains the cursor to the center of the screen. This takes precedence over `clip_cursor`
     fn grab_cursor(&mut self, grabbed: bool);
@@ -132,10 +132,11 @@ mod linux {
         resized: bool,
         moved: bool,
         cursor_grabbed: bool,
+        cursor_clip_region: Option<Region>,
         cursor: CursorType,
         focused: bool,
 
-        region: Region,
+        screen_region: Region,
     }
 
     impl WindowCommon for Window {
@@ -230,15 +231,15 @@ mod linux {
 
             let center = Vec2::new(500.0, 400.0);
             let size = Vec2::new(1024.0, 576.0);
-            let region = Region {
+            let screen_region = Region {
                 min: center/2.0 - size/2.0,
                 max: center/2.0 + size/2.0,
             };
 
             let window = unsafe { (xlib.XCreateWindow)(
                 display, root,
-                region.min.x as i32, region.min.y as i32,
-                region.width() as u32, region.height() as u32,
+                screen_region.min.x as i32, screen_region.min.y as i32,
+                screen_region.width() as u32, screen_region.height() as u32,
                 0, // Border
 
                 (*visual).depth, // Depth
@@ -414,7 +415,7 @@ mod linux {
                 ic
             };
 
-            graphics::viewport(region.unpositioned());
+            graphics::viewport(screen_region.unpositioned());
 
             // Listen for close events
             let wm_delete_window = unsafe {
@@ -436,13 +437,14 @@ mod linux {
                 wm_delete_window,
                 cursors,
                 swap_function,
-                region,
+                screen_region,
 
                 close_requested: false,
                 resized: false,
                 moved: false,
                 cursor_grabbed: false,
                 cursor: CursorType::Normal,
+                cursor_clip_region: None,
                 focused: false,
             }
         }
@@ -581,6 +583,24 @@ mod linux {
 
                             input.mouse_pos = new_pos;
                         }
+
+                        if self.focused && !self.cursor_grabbed {
+                            if let Some(region) = self.cursor_clip_region {
+                                let pos = input.mouse_pos;
+                                let new_pos = region.clip(pos);
+
+                                if pos != new_pos {
+                                    input.mouse_pos = new_pos;
+
+                                    (self.xlib.XWarpPointer)(
+                                        self.display, 0, self.window,
+                                        0, 0, 0, 0,
+                                        new_pos.x as i32, new_pos.y as i32,
+                                    );
+                                    (self.xlib.XFlush)(self.display);
+                                }
+                            }
+                        }
                     },
 
                     ffi::MappingNotify => {
@@ -598,16 +618,16 @@ mod linux {
                             max: pos + size,
                         };
 
-                        if new_region.min != self.region.min {
+                        if new_region.min != self.screen_region.min {
                             self.moved = true;
                         }
 
-                        if new_region.size() != self.region.size() {
+                        if new_region.size() != self.screen_region.size() {
                             self.resized = true;
                         }
 
-                        self.region = new_region;
-                        graphics::viewport(self.region.unpositioned());
+                        self.screen_region = new_region;
+                        graphics::viewport(self.screen_region.unpositioned());
                     },
                     ffi::ReparentNotify => {},
                     ffi::MapNotify => {},
@@ -626,18 +646,36 @@ mod linux {
                 }
             } }
 
-            // Constrain cursor if it is grabbed
-            if self.cursor_grabbed && self.focused {
-                let center = self.region.unpositioned().center().as_i32();
-                input.mouse_pos = center.as_f32();
+            // Constrain cursor if it is grabbed or clipped
+            if self.focused {
+                if self.cursor_grabbed {
+                    let center = self.screen_region.unpositioned().center().as_i32();
+                    input.mouse_pos = center.as_f32();
 
-                unsafe {
-                    (self.xlib.XWarpPointer)(
-                        self.display, 0, self.window,
-                        0, 0, 0, 0,
-                        center.x, center.y,
-                    );
-                    (self.xlib.XFlush)(self.display);
+                    unsafe {
+                        (self.xlib.XWarpPointer)(
+                            self.display, 0, self.window,
+                            0, 0, 0, 0,
+                            center.x, center.y,
+                        );
+                        (self.xlib.XFlush)(self.display);
+                    }
+                } else if let Some(region) = self.cursor_clip_region {
+                    let pos = input.mouse_pos;
+                    let new_pos = region.clip(pos);
+
+                    if pos != new_pos {
+                        input.mouse_pos = new_pos;
+
+                        unsafe {
+                            (self.xlib.XWarpPointer)(
+                                self.display, 0, self.window,
+                                0, 0, 0, 0,
+                                new_pos.x as i32, new_pos.y as i32,
+                            );
+                            (self.xlib.XFlush)(self.display);
+                        }
+                    }
                 }
             }
         }
@@ -654,7 +692,7 @@ mod linux {
         fn resized(&self) -> bool           { self.resized }
         fn moved(&self) -> bool             { self.resized }
         fn focused(&self) -> bool           { self.focused }
-        fn screen_region(&self) -> Region   { self.region }
+        fn screen_region(&self) -> Region   { self.screen_region }
 
         fn change_title(&mut self, title: &str) {
             let title = CString::new(title).unwrap();
@@ -671,6 +709,10 @@ mod linux {
             }
             self.cursor = cursor;
             self.internal_set_cursor(cursor);
+        }
+
+        fn clip_cursor(&mut self, region: Option<Region>) {
+            self.cursor_clip_region = region;
         }
 
         fn grab_cursor(&mut self, grabbed: bool) {
