@@ -5,6 +5,7 @@ extern crate kernel32;
 use std::mem;
 use std::slice;
 use std::ptr;
+use std::ffi::CStr;
 
 use super::*;
 use time::{Time, Timer};
@@ -17,11 +18,12 @@ mod ffi {
     pub(super) use super::winapi::*;
     pub(super) use super::kernel32::*;
 
+//    pub(super) type LPDSENUMCALLBACK = Option<unsafe extern "system" fn(LPGUID, LPCSTR, LPCSTR, LPVOID) -> BOOL>;
+
     // Direct-sound functions
     pub(super) type DirectSoundCreate = extern "system" fn(LPGUID, *mut LPDIRECTSOUND, LPUNKNOWN) -> HRESULT;
+//    pub(super) type DirectSoundEnumerate = extern "system" fn(LPDSENUMCALLBACK, LPVOID) -> HRESULT;
 }
-
-// TODO DirectSoundEnumerate to figure out if we support the proper version of direct sound (?)
 
 const MIN_WRITE_CHUNK_FRAMES: usize = 400;
 
@@ -50,6 +52,38 @@ impl AudioBackend {
             // Don't panic, just run without sound
             return Err(());
         }
+
+        /*
+        let direct_sound_enumerate = {
+            let name = b"DirectSoundEnumerateA\0";
+            let address = unsafe { ffi::GetProcAddress(dsound_lib, name.as_ptr() as *const _) };
+
+            if address.is_null() {
+                println!("Could not load DirectSoundEnumerateA from dsound.dll");
+                return Err(());
+            } else {
+                unsafe { mem::transmute::<_, ffi::DirectSoundEnumerate>(address) }
+            }
+        };
+
+        unsafe extern "system" 
+        fn callback(
+            guid: ffi::LPGUID,
+            description: ffi::LPCSTR,
+            module: ffi::LPCSTR,
+            context: ffi::LPVOID
+        ) -> ffi::BOOL 
+        {
+            let description = CStr::from_ptr(description).to_string_lossy();
+            let module      = CStr::from_ptr(module).to_string_lossy();
+
+            println!("{:x}: \"{}\", \"{}\"", guid as usize, description, module);
+
+            return ffi::TRUE;
+        }
+
+        direct_sound_enumerate(Some(callback), ptr::null_mut());
+        */
 
         // Create DirectSound object
         let direct_sound_create = {
@@ -363,6 +397,13 @@ impl AudioBackend {
             println!("frame positions {} {} {}", target_start_frame, target_mid_frame, target_end_frame);
             println!("write pos {} {}", write_start, len);
             println!("lengths {}, {}", len1, len2);
+
+            // Sample output from crash
+            /*
+            frame positions 0 502 502
+            write pos 44251 2011
+            lengths 2011, 0
+            */
         }
 
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
