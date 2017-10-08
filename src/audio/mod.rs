@@ -6,11 +6,11 @@
 // A "sample" is a single i16 (Or whatever `SampleData` is): i16
 // A "frame" is one i16 per channel:  (left, right): (i16, i16)
 
-// TODO fix error handling, custom error types!
+// NB (Morten, 8.10.17)
+// We currently only output the first channel of a sound file in the mixer. If a stereo sound is
+// submitted, we just ignore the second channel.
 
-// TODO Change sample rate back to 44100, implement resampling for sound buffers
-// We don't neccesarily have to output at 44.1kHz in the end, but this would be
-// an easy way to implement and test resampling
+// TODO fix error handling, custom error types!
 
 use std::ptr;
 use std::thread;
@@ -60,6 +60,7 @@ pub struct Event {
     pub done: bool,
     pub buffer: BufferHandle,
     pub balance: Balance,
+    pub speed: f32,
 }
 
 
@@ -223,7 +224,7 @@ impl AudioSystem {
         }
     }
 
-    pub fn play(&mut self, buffer: BufferHandle, balance: Balance) {
+    pub fn play(&mut self, buffer: BufferHandle, balance: Balance, speed: f32) {
         if self.broken {
             return;
         }
@@ -233,6 +234,7 @@ impl AudioSystem {
             done: false,
             buffer,
             balance,
+            speed,
         };
 
         let message = MessageToAudioThread::NewEvent { event };
@@ -287,12 +289,20 @@ fn mix(
             event.start_frame = target_start_frame;
         }
 
-        let buffer_rate = buffer.sample_rate as u64;
-        let play_rate   = OUTPUT_SAMPLE_RATE as u64;
-        let buffer_frames = (buffer.frames()*play_rate) / buffer_rate;
+
+        let buffer_rate = (buffer.sample_rate as f32 / event.speed) as u32;
+        let output_rate = OUTPUT_SAMPLE_RATE;
+        
+        #[inline(always)]
+        fn convert_frames(frames: u64, from_rate: u32, to_rate: u32) -> u64 {
+            (frames * (to_rate as u64)) / (from_rate as u64)
+        }
+
+        // How many frames the buffer would have if it was at the output sample rate
+        let output_buffer_frames = convert_frames(buffer.frames(), buffer_rate, output_rate);
 
         let event_start_frame = event.start_frame;
-        let event_end_frame = event_start_frame + buffer_frames;
+        let event_end_frame = event_start_frame + output_buffer_frames;
 
         if event_end_frame < target_start_frame {
             event.done = true;
@@ -309,11 +319,12 @@ fn mix(
         // Actually mix the event into the scratch buffer
         let read_data = {
             let buffer_frame_range = (
-                ((start_frame - event_start_frame)*buffer_rate) / play_rate,
-                ((end_frame - event_start_frame)*buffer_rate) / play_rate,
+                convert_frames(start_frame - event_start_frame, output_rate, buffer_rate),
+                convert_frames(end_frame - event_start_frame,   output_rate, buffer_rate),
             );
             let a = buffer_frame_range.0 as usize * buffer.channels as usize;
             let b = buffer_frame_range.1 as usize * buffer.channels as usize;
+            let b = min(b, buffer.data.len() - 1); // Sometimes happens due to rounding or smth
             &buffer.data[a..b]
         };
 
@@ -325,14 +336,14 @@ fn mix(
 
         for frame in 0..(end_frame - start_frame) {
             for output_channel in 0..(OUTPUT_CHANNELS as usize) {
-                // We only play the first channel from the buffer at the moment
-                let read_frame = (frame*buffer_rate) / play_rate;
-                let read_pos  = (read_frame as usize)*(buffer.channels as usize);
-                let write_pos = (frame as usize)*(OUTPUT_CHANNELS as usize) + output_channel;
+                let read_frame = convert_frames(frame, output_rate, buffer_rate);
+                let read_pos = (read_frame as usize)*(buffer.channels as usize);
+                let read_pos = min(read_pos, read_data.len() - 1); // Sometimes happens due to rounding
 
                 let volume = event.balance[output_channel];
                 let sample = read_data[read_pos] as f32;
 
+                let write_pos = (frame as usize)*(OUTPUT_CHANNELS as usize) + output_channel;
                 write_data[write_pos] += sample*volume;
             }
         }
