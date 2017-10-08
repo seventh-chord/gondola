@@ -275,12 +275,13 @@ impl AudioBackend {
         })
     }
 
-    pub fn write(
+    pub fn write<F>(
         &mut self,
         frame_counter: &mut u64,
-        buffers: &[AudioBuffer],
-        events:  &mut [Event],
-    ) -> Result<bool, ()> {
+        mut mix_callback: F,
+    ) -> Result<bool, ()> 
+      where F: FnMut(u64, &mut [SampleData]),
+    {
         // The play cursor advances in chunks of ´write_chunk_size´. We can start writing
         // at `write_cursor + write_chunk_size` (to acount for uncertainty). We allways write
         // `write_chunk_size` bytes of data.
@@ -400,74 +401,13 @@ impl AudioBackend {
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
         assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);
 
-        for event in events.iter_mut() {
-            let ref buffer = buffers[event.buffer];
-
-            if event.start_frame == 0 {
-                event.start_frame = target_start_frame;
-            }
-
-            let event_start_frame = event.start_frame;
-            let event_end_frame   = event_start_frame + buffer.frames();
-
-            let start_frame = max(event_start_frame, target_start_frame);
-            let end_frame   = min(event_end_frame, target_end_frame);
-            let mid_frame   = max(min(target_mid_frame, end_frame), start_frame);
-
-            if end_frame < target_start_frame {
-                event.done = true;
-            }
-
-            if start_frame < end_frame {
-                let a = (start_frame - event_start_frame) as usize * buffer.channels as usize;
-                let b = (end_frame - event_start_frame) as usize   * buffer.channels as usize;
-                let read_data = &buffer.data[a..b];
-
-                let write_data_1 = if mid_frame > start_frame {
-                    let a = (start_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
-                    let b = (mid_frame - target_start_frame) as usize   * OUTPUT_CHANNELS as usize;
-                    &mut slice1[a..b]
-                } else {
-                    &mut []
-                };
-
-                let write_data_2 = if mid_frame < end_frame {
-                    let a = (mid_frame - target_mid_frame) as usize * OUTPUT_CHANNELS as usize;
-                    let b = (end_frame - target_mid_frame) as usize * OUTPUT_CHANNELS as usize;
-                    &mut slice2[a..b]
-                } else {
-                    &mut []
-                };
-
-                for frame in 0..read_data.len() {
-                    for output_channel in 0..(OUTPUT_CHANNELS as usize) {
-                        // We only play the first channel from the buffer for now
-                        let read_pos  = frame*(buffer.channels as usize);
-                        let write_pos = frame*(OUTPUT_CHANNELS as usize) + output_channel;
-
-                        let slot = if write_pos < write_data_1.len() {
-                            &mut write_data_1[write_pos]
-                        } else {
-                            &mut write_data_2[write_pos - write_data_1.len()]
-                        };
-
-                        let sample = read_data[read_pos];
-                        let sample = clamp(
-                            sample as f32 * event.balance[output_channel],
-                            (i16::min_value() as f32, i16::max_value() as f32)
-                        ) as i16;
-
-                        *slot = if sample > 0 {
-                            slot.saturating_add(sample)
-                        } else if sample == i16::min_value() {
-                            slot.saturating_sub(-(sample + 1)).saturating_sub(1)
-                        } else {
-                            slot.saturating_sub(-sample)
-                        };
-                    }
-                }
-            }
+        if !slice1.is_empty() {
+            mix_callback(target_start_frame, slice1);
+        } 
+        if !slice2.is_empty() {
+            mix_callback(target_mid_frame, slice2);
         }
+
         *frame_counter = target_end_frame;
 
         // Unlock buffer
@@ -501,25 +441,4 @@ fn encode_wide(s: &str) -> Vec<u16> {
     }
     data.push(0);
     data
-}
-
-#[inline(always)]
-fn min<T: PartialOrd + Copy>(a: T, b: T) -> T {
-    if a > b { b } else { a }
-}
-
-#[inline(always)]
-fn max<T: PartialOrd + Copy>(a: T, b: T) -> T {
-    if a > b { a } else { b }
-}
-
-#[inline(always)]
-fn clamp<T: PartialOrd + Copy>(v: T, range: (T, T)) -> T {
-    if v < range.0 { 
-        range.0 
-    } else if v > range.1 {
-        range.1 
-    } else {
-        v 
-    }
 }

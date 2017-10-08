@@ -12,6 +12,7 @@
 // We don't neccesarily have to output at 44.1kHz in the end, but this would be
 // an easy way to implement and test resampling
 
+use std::ptr;
 use std::thread;
 use std::sync::mpsc;
 
@@ -30,10 +31,38 @@ const OUTPUT_CHANNELS: u32 = 2;
 const OUTPUT_SAMPLE_RATE: u32 = 48000;
 const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 2*(OUTPUT_SAMPLE_RATE as usize);
 type SampleData = i16;
-
 type Balance = [f32; OUTPUT_CHANNELS as usize];
-
 type BufferHandle = usize;
+
+#[derive(Clone)]
+pub struct AudioBuffer {
+    pub channels: u32,
+    pub sample_rate: u32,
+    pub data: Vec<SampleData>,
+}
+
+impl AudioBuffer {
+    pub fn duration(&self) -> Time {
+        let frames = self.frames();
+        let frequency = self.sample_rate as u64;
+
+        Time((frames*Time::NANOSECONDS_PER_SECOND) / frequency)
+    }
+
+    #[inline(always)]
+    pub fn frames(&self) -> u64 {
+        self.data.len() as u64 / self.channels as u64
+    }
+}
+
+pub struct Event {
+    pub start_frame: u64, // Set internally when the event is actually started
+    pub done: bool,
+    pub buffer: BufferHandle,
+    pub balance: Balance,
+}
+
+
 
 pub struct AudioSystem {
     next_buffer_handle: BufferHandle,
@@ -80,6 +109,7 @@ impl AudioSystem {
 
             let mut buffers = Vec::with_capacity(100);
             let mut events  = Vec::with_capacity(100);
+            let mut mix_scratch_buffer = Vec::new();
 
             let mut last_write = Time::ZERO;
             let mut average_write_time = Time::ZERO;
@@ -92,7 +122,17 @@ impl AudioSystem {
                 let start = timer.tick().0;
 
                 // Actually update audio output
-                let write_result = backend.write(&mut frame_counter, &buffers, &mut events);
+                let write_result = backend.write(
+                    &mut frame_counter,
+                    |frame, samples| {
+                        self::mix(
+                            &buffers, &mut events,
+                            &mut mix_scratch_buffer,
+                            frame, samples
+                        );
+                    },
+                );
+
                 match write_result {
                     Ok(wrote) => {
                         if wrote {
@@ -219,30 +259,108 @@ impl AudioSystem {
     }
 }
 
-#[derive(Clone)]
-pub struct AudioBuffer {
-    pub channels: u32,
-    pub sample_rate: u32,
-    pub data: Vec<SampleData>,
-}
+// This is called through a callback from ´backend::write´
+fn mix(
+    buffers: &[AudioBuffer], 
+    events: &mut [Event],
+    scratch_buffer: &mut Vec<f32>,
 
-impl AudioBuffer {
-    pub fn duration(&self) -> Time {
-        let frames = self.frames();
-        let frequency = self.sample_rate as u64;
+    target_start_frame: u64,
+    samples: &mut [SampleData],
+) {
+    assert!(samples.len() % (OUTPUT_CHANNELS as usize) == 0);
+    let frame_count = (samples.len() / (OUTPUT_CHANNELS as usize)) as u64;
+    let target_end_frame = target_start_frame + frame_count;
 
-        Time((frames*Time::NANOSECONDS_PER_SECOND) / frequency)
+    scratch_buffer.clear();
+    scratch_buffer.reserve(samples.len());
+    unsafe {
+        scratch_buffer.set_len(samples.len());
+        ptr::write_bytes(scratch_buffer.as_mut_ptr(), 0, samples.len());
     }
 
-    #[inline(always)]
-    pub fn frames(&self) -> u64 {
-        self.data.len() as u64 / self.channels as u64
+    for event in events.iter_mut() {
+        let ref buffer = buffers[event.buffer];
+
+        if event.start_frame == 0 {
+            // Start the sound playing now
+            event.start_frame = target_start_frame;
+        }
+
+        let event_start_frame = event.start_frame;
+        let event_end_frame   = event_start_frame + buffer.frames();
+
+        if event_end_frame < target_start_frame {
+            event.done = true;
+        }
+
+        let start_frame = max(event_start_frame, target_start_frame);
+        let end_frame   = min(event_end_frame, target_end_frame);
+
+        if start_frame >= end_frame {
+            // No part of this event fit into the frame window of the given samples
+            continue;
+        }
+
+        // Actually mix the event into the scratch buffer
+        // TODO
+        let a = (start_frame - event_start_frame) as usize * buffer.channels as usize;
+        let b = (end_frame - event_start_frame) as usize   * buffer.channels as usize;
+        let read_data = &buffer.data[a..b];
+
+        let a = (start_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
+        let b = (end_frame - target_start_frame) as usize   * OUTPUT_CHANNELS as usize;
+        let write_data = &mut scratch_buffer[a..b];
+
+        for frame in 0..read_data.len() {
+            for output_channel in 0..(OUTPUT_CHANNELS as usize) {
+                // We only play the first channel from the buffer at the moment
+                let read_pos  = frame*(buffer.channels as usize);
+                let write_pos = frame*(OUTPUT_CHANNELS as usize) + output_channel;
+
+                let volume = event.balance[output_channel];
+                let sample = read_data[read_pos] as f32;
+
+                write_data[write_pos] += sample*volume;
+            }
+        }
+    }
+
+    // Write the scratchbuffer back into the provided sample buffer
+    let min = SampleData::min_value() as f32;
+    let max = SampleData::max_value() as f32;
+
+    for (index, &sample) in scratch_buffer.iter().enumerate() {
+        let clipped = clamp(sample, (min, max));
+        samples[index] = clipped as i16;
     }
 }
 
-pub struct Event {
-    pub start_frame: u64, // Set internally when the event is actually started
-    pub done: bool,
-    pub buffer: BufferHandle,
-    pub balance: Balance,
+#[inline(always)]
+fn min<T: PartialOrd + Copy>(a: T, b: T) -> T {
+    if a > b { 
+        b 
+    } else {
+        a 
+    }
+}
+
+#[inline(always)]
+fn max<T: PartialOrd + Copy>(a: T, b: T) -> T {
+    if a > b { 
+        a 
+    } else {
+        b 
+    }
+}
+
+#[inline(always)]
+fn clamp<T: PartialOrd + Copy>(v: T, range: (T, T)) -> T {
+    if v > range.1 {
+        range.1
+    } else if v < range.0 {
+        range.0
+    } else {
+        v
+    }
 }
