@@ -21,7 +21,6 @@ mod ffi {
     pub(super) type DirectSoundCreate = extern "system" fn(LPGUID, *mut LPDIRECTSOUND, LPUNKNOWN) -> HRESULT;
 }
 
-// TODO microsoft docs say to zero out the secondary buffer after creating it!
 // TODO DirectSoundEnumerate to figure out if we support the proper version of direct sound (?)
 
 const MIN_WRITE_CHUNK_FRAMES: usize = 400;
@@ -137,6 +136,35 @@ impl AudioBackend {
         }
         assert!(!secondary_buffer.is_null());
         let secondary_buffer = unsafe { &mut *secondary_buffer };
+
+        // Zero out secondary buffer before using it
+        {
+            let mut len1 = 0;
+            let mut ptr1 = ptr::null_mut();
+            let mut len2 = 0;
+            let mut ptr2 = ptr::null_mut();
+            let result = unsafe { secondary_buffer.Lock(
+                0, buffer_size as u32,
+                &mut ptr1, &mut len1,
+                &mut ptr2, &mut len2,
+                0,
+            )};
+            if result != ffi::DS_OK {
+                println!("Failed to lock secondary buffer. Error code: {}", result);
+                return Err(());
+            }
+
+            assert_eq!(len1, buffer_size as u32);
+            assert_eq!(len2, 0);
+
+            unsafe { ptr::write_bytes(ptr1 as *mut u8, 0, buffer_size) };
+
+            let result = unsafe { secondary_buffer.Unlock(ptr1, len1, ptr2, len2)};
+            if result != ffi::DS_OK {
+                println!("Failed to unlock secondary buffer. Error code: {}", result);
+                return Err(());
+            } 
+        }
 
         unsafe { secondary_buffer.Play(0, 0, ffi::DSBPLAY_LOOPING) };
 
@@ -273,6 +301,7 @@ impl AudioBackend {
                 // We probably should track how often this happens, and let the audio system
                 // decide to give up playing based on what we track!
             }
+
             self.cumulative_play_cursor_jump -= jumps*self.write_chunk_size;
             write_start = (last_write_start + jumps*self.write_chunk_size) % self.buffer_size;
         } else {
@@ -328,7 +357,14 @@ impl AudioBackend {
         let target_mid_frame   = target_start_frame + (len1 as u64 / bytes_per_frame as u64);
         let target_end_frame   = target_start_frame + (len as u64 / bytes_per_frame as u64);
 
-        // TODO This thing trips at startup sometimes :/
+        // TODO temp, used to figure out why the assertion trips
+        let slice1_samples = (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
+        if slice1.len() != slice1_samples {
+            println!("frame positions {} {} {}", target_start_frame, target_mid_frame, target_end_frame);
+            println!("write pos {} {}", write_start, len);
+            println!("lengths {}, {}", len1, len2);
+        }
+
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
         assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);
 
