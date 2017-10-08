@@ -287,8 +287,12 @@ fn mix(
             event.start_frame = target_start_frame;
         }
 
+        let buffer_rate = buffer.sample_rate as u64;
+        let play_rate   = OUTPUT_SAMPLE_RATE as u64;
+        let buffer_frames = (buffer.frames()*play_rate) / buffer_rate;
+
         let event_start_frame = event.start_frame;
-        let event_end_frame   = event_start_frame + buffer.frames();
+        let event_end_frame = event_start_frame + buffer_frames;
 
         if event_end_frame < target_start_frame {
             event.done = true;
@@ -303,20 +307,28 @@ fn mix(
         }
 
         // Actually mix the event into the scratch buffer
-        // TODO
-        let a = (start_frame - event_start_frame) as usize * buffer.channels as usize;
-        let b = (end_frame - event_start_frame) as usize   * buffer.channels as usize;
-        let read_data = &buffer.data[a..b];
+        let read_data = {
+            let buffer_frame_range = (
+                ((start_frame - event_start_frame)*buffer_rate) / play_rate,
+                ((end_frame - event_start_frame)*buffer_rate) / play_rate,
+            );
+            let a = buffer_frame_range.0 as usize * buffer.channels as usize;
+            let b = buffer_frame_range.1 as usize * buffer.channels as usize;
+            &buffer.data[a..b]
+        };
 
-        let a = (start_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
-        let b = (end_frame - target_start_frame) as usize   * OUTPUT_CHANNELS as usize;
-        let write_data = &mut scratch_buffer[a..b];
+        let write_data = {
+            let a = (start_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
+            let b = (end_frame - target_start_frame) as usize   * OUTPUT_CHANNELS as usize;
+            &mut scratch_buffer[a..b]
+        };
 
-        for frame in 0..read_data.len() {
+        for frame in 0..(end_frame - start_frame) {
             for output_channel in 0..(OUTPUT_CHANNELS as usize) {
                 // We only play the first channel from the buffer at the moment
-                let read_pos  = frame*(buffer.channels as usize);
-                let write_pos = frame*(OUTPUT_CHANNELS as usize) + output_channel;
+                let read_frame = (frame*buffer_rate) / play_rate;
+                let read_pos  = (read_frame as usize)*(buffer.channels as usize);
+                let write_pos = (frame as usize)*(OUTPUT_CHANNELS as usize) + output_channel;
 
                 let volume = event.balance[output_channel];
                 let sample = read_data[read_pos] as f32;
