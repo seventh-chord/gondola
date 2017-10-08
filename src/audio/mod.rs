@@ -337,11 +337,23 @@ fn mix(
         for frame in 0..(end_frame - start_frame) {
             for output_channel in 0..(OUTPUT_CHANNELS as usize) {
                 let read_frame = convert_frames(frame, output_rate, buffer_rate);
-                let read_pos = (read_frame as usize)*(buffer.channels as usize);
-                let read_pos = min(read_pos, read_data.len() - 1); // Sometimes happens due to rounding
+
+                // Compute the fractional part of ´read_frame´
+                let t = (10000*frame * (buffer_rate as u64)) / (output_rate as u64);
+                let t = (t - read_frame*10000) as f32 / 10000.0;
+
+                let prev_read_pos = (read_frame as usize)*(buffer.channels as usize);
+                let last = read_data.len() - 1;
+                let prev_read_pos = min(prev_read_pos, last); // Sometimes happens due to rounding
+                let next_read_pos = min(prev_read_pos + buffer.channels as usize, last);
+
+                // Linearly interpolate to find the proper sample value. In theory, this gives us a
+                // better result, but in practice it doesn't matter: I can't hear the difference.
+                let prev_sample = read_data[prev_read_pos] as f32;
+                let next_sample = read_data[next_read_pos] as f32;
+                let sample = prev_sample*(1.0 - t) + next_sample*t;
 
                 let volume = event.balance[output_channel];
-                let sample = read_data[read_pos] as f32;
 
                 let write_pos = (frame as usize)*(OUTPUT_CHANNELS as usize) + output_channel;
                 write_data[write_pos] += sample*volume;
