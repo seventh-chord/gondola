@@ -439,26 +439,32 @@ impl AudioBackend {
                     &mut []
                 };
 
-                // TODO properly mix into channels
                 for frame in 0..read_data.len() {
-                    let read_frame  = frame*(buffer.channels as usize);
-                    let write_frame = frame*(OUTPUT_CHANNELS as usize);
+                    for output_channel in 0..(OUTPUT_CHANNELS as usize) {
+                        // We only play the first channel from the buffer for now
+                        let read_pos  = frame*(buffer.channels as usize);
+                        let write_pos = frame*(OUTPUT_CHANNELS as usize) + output_channel;
 
-                    let sample = read_data[read_frame];
+                        let slot = if write_pos < write_data_1.len() {
+                            &mut write_data_1[write_pos]
+                        } else {
+                            &mut write_data_2[write_pos - write_data_1.len()]
+                        };
 
-                    let slot = if write_frame < write_data_1.len() {
-                        &mut write_data_1[write_frame]
-                    } else {
-                        &mut write_data_2[write_frame - write_data_1.len()]
-                    };
+                        let sample = read_data[read_pos];
+                        let sample = clamp(
+                            sample as f32 * event.balance[output_channel],
+                            (i16::min_value() as f32, i16::max_value() as f32)
+                        ) as i16;
 
-                    *slot = if sample > 0 {
-                        slot.saturating_add(sample)
-                    } else if sample == i16::min_value() {
-                        slot.saturating_sub(-(sample + 1)).saturating_sub(1)
-                    } else {
-                        slot.saturating_sub(-sample)
-                    };
+                        *slot = if sample > 0 {
+                            slot.saturating_add(sample)
+                        } else if sample == i16::min_value() {
+                            slot.saturating_sub(-(sample + 1)).saturating_sub(1)
+                        } else {
+                            slot.saturating_sub(-sample)
+                        };
+                    }
                 }
             }
         }
@@ -498,11 +504,22 @@ fn encode_wide(s: &str) -> Vec<u16> {
 }
 
 #[inline(always)]
-fn min<T: Ord + Copy>(a: T, b: T) -> T {
+fn min<T: PartialOrd + Copy>(a: T, b: T) -> T {
     if a > b { b } else { a }
 }
 
 #[inline(always)]
-fn max<T: Ord + Copy>(a: T, b: T) -> T {
+fn max<T: PartialOrd + Copy>(a: T, b: T) -> T {
     if a > b { a } else { b }
+}
+
+#[inline(always)]
+fn clamp<T: PartialOrd + Copy>(v: T, range: (T, T)) -> T {
+    if v < range.0 { 
+        range.0 
+    } else if v > range.1 {
+        range.1 
+    } else {
+        v 
+    }
 }

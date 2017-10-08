@@ -31,6 +31,8 @@ const OUTPUT_SAMPLE_RATE: u32 = 48000;
 const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 2*(OUTPUT_SAMPLE_RATE as usize);
 type SampleData = i16;
 
+type Balance = [f32; OUTPUT_CHANNELS as usize];
+
 type BufferHandle = usize;
 
 pub struct AudioSystem {
@@ -181,7 +183,7 @@ impl AudioSystem {
         }
     }
 
-    pub fn play(&mut self, buffer: BufferHandle) {
+    pub fn play(&mut self, buffer: BufferHandle, balance: Balance) {
         if self.broken {
             return;
         }
@@ -190,6 +192,7 @@ impl AudioSystem {
             start_frame: 0,
             done: false,
             buffer,
+            balance,
         };
 
         let message = MessageToAudioThread::NewEvent { event };
@@ -241,4 +244,5 @@ pub struct Event {
     pub start_frame: u64, // Set internally when the event is actually started
     pub done: bool,
     pub buffer: BufferHandle,
+    pub balance: Balance,
 }

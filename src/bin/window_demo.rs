@@ -78,12 +78,14 @@ fn main() {
         }
 
         if input.mouse_key(0).pressed() {
-            audio.play(hit_buffer_handle);
+            let t = input.mouse_pos().x / window.screen_region().width();
+            audio.play(hit_buffer_handle, [1.0 - t, t]);
         }
 
         if input.mouse_key(1).pressed() {
-            audio.play(hit_buffer_handle);
-            audio.play(hit_buffer_handle);
+            let t = input.mouse_pos().x / window.screen_region().width();
+            audio.play(hit_buffer_handle, [1.0 - t, t]);
+            audio.play(hit_buffer_handle, [t, 1.0 - t]);
         }
 
         if input.key(Key::Key2).pressed() {
