@@ -5,7 +5,7 @@ extern crate kernel32;
 use std::mem;
 use std::slice;
 use std::ptr;
-use std::ffi::CStr;
+//use std::ffi::CStr;
 
 use super::*;
 use time::{Time, Timer};
@@ -157,10 +157,7 @@ impl AudioBackend {
         buffer_description.dwFlags = ffi::DSBCAPS_GLOBALFOCUS | ffi::DSBCAPS_GETCURRENTPOSITION2;
 
         // TODO how do we check if this flag is supported?
-        let dynamic_play_cursor_interval = true;
-        if dynamic_play_cursor_interval {
-            buffer_description.dwFlags |= ffi::DSBCAPS_TRUEPLAYPOSITION;
-        }
+        buffer_description.dwFlags |= ffi::DSBCAPS_TRUEPLAYPOSITION;
 
         let mut secondary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut secondary_buffer, ptr::null_mut()) };
@@ -206,7 +203,7 @@ impl AudioBackend {
         // position of the play cursor. Otherwise, the play cursor will jump in discrete chunks.
         // Regardless, the write cursor will allways jump in discrete chunks. We usually want to
         // write exactly the size between two chunks, as this will give us the lowest latency.
-        let mut jump_sum = 0;
+        let mut min_jump = usize::max_value();
         let mut check_count = 0;
         let mut timer = Timer::new();
 
@@ -238,7 +235,9 @@ impl AudioBackend {
             last_play_cursor = play_cursor;
 
             if jump > 0 {
-                jump_sum += jump;
+                if jump < min_jump {
+                    min_jump = jump;
+                }
                 check_count += 1;
             }
 
@@ -253,7 +252,14 @@ impl AudioBackend {
             return Err(());
         }
 
-        let cursor_granularity = jump_sum / check_count;
+        let cursor_granularity = {
+            if (min_jump % bytes_per_frame) != 0 {
+                ((min_jump / bytes_per_frame) + 1) * bytes_per_frame
+            } else {
+                min_jump
+            }
+        };
+
         let write_chunk_size = max(
             MIN_WRITE_CHUNK_FRAMES * (OUTPUT_CHANNELS as usize) * mem::size_of::<SampleData>(),
             cursor_granularity,
@@ -390,21 +396,6 @@ impl AudioBackend {
         let target_start_frame = *frame_counter;
         let target_mid_frame   = target_start_frame + (len1 as u64 / bytes_per_frame as u64);
         let target_end_frame   = target_start_frame + (len as u64 / bytes_per_frame as u64);
-
-        // TODO temp, used to figure out why the assertion trips
-        let slice1_samples = (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize;
-        if slice1.len() != slice1_samples {
-            println!("frame positions {} {} {}", target_start_frame, target_mid_frame, target_end_frame);
-            println!("write pos {} {}", write_start, len);
-            println!("lengths {}, {}", len1, len2);
-
-            // Sample output from crash
-            /*
-            frame positions 0 502 502
-            write pos 44251 2011
-            lengths 2011, 0
-            */
-        }
 
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
         assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);
