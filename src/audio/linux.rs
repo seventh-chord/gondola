@@ -148,13 +148,26 @@ impl AudioBackend {
 
         unsafe {
             let result = alsa::snd_pcm_avail_update(self.pcm_handle);
-            if result < 0 {
-                if result == -32 {
-                    // underrun, we did not provide data quickly enough. What do we do now?
-                    // TODO in debug mode this happens when mix_callback has many sounds. We
-                    // probably want to "gracefully" handle that case, by stuttering
+            if result == -32 {
+                // We did not provide data fast enough, recover
+                let recover_result = alsa::snd_pcm_recover(self.pcm_handle, -32, 1);
+                if recover_result < 0 {
+                    println!("Underrun detected, could not recover");
+                    return Err(()); // We are probably fucked
+                } else {
+
+                    // Try again
+                    let retry_result = alsa::snd_pcm_avail_update(self.pcm_handle);
+                    if retry_result < 0 {
+                        println!("Underrun detected, recovered but it did not help");
+                        return Err(());
+                    } else {
+                        println!("Underrun detected and fixed");
+                        available_frames = retry_result as u64;
+                    }
                 }
 
+            } else if result < 0 {
                 println!("snd_pcm_avail_delay failed: {}", result);
                 return Err(());
             } else {
@@ -190,6 +203,7 @@ impl AudioBackend {
         *frame_counter += write_frames;
 
         unsafe {
+            // TODO we might also get a underrun here, we probably can recover from that as well!
             let result = alsa::snd_pcm_writei(
                 self.pcm_handle,
                 self.write_buffer.as_ptr() as *const _,
