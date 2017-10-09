@@ -35,7 +35,7 @@ pub(super) struct AudioBackend {
     // These values are in bytes
     last_play_cursor: usize,
     write_chunk_size: usize,
-    last_write_start: Option<usize>,
+    last_write: Option<(usize, usize)>, // Start and length
     cumulative_play_cursor_jump: usize,
 
     secondary_buffer: &'static mut ffi::IDirectSoundBuffer,
@@ -269,7 +269,7 @@ impl AudioBackend {
             buffer_size,
             last_play_cursor,
             write_chunk_size,
-            last_write_start: None,
+            last_write: None,
             cumulative_play_cursor_jump: 0,
             secondary_buffer,
         })
@@ -320,37 +320,65 @@ impl AudioBackend {
         self.cumulative_play_cursor_jump += play_cursor_jump;
 
         // Figure out where we want to write
-        let write_start;
-        let len = self.write_chunk_size;
+        let mut write_start;
+        let write_len;
 
-        if let Some(last_write_start) = self.last_write_start {
-            if self.cumulative_play_cursor_jump < self.write_chunk_size {
+        if let Some((last_write_start, last_write_chunks)) = self.last_write {
+            // Number of whole chunks we have advanced
+            let jumps = self.cumulative_play_cursor_jump / self.write_chunk_size;
+            if jumps < 1 {
                 return Ok(false);
             }
 
-            let jumps = self.cumulative_play_cursor_jump / self.write_chunk_size;
-            if jumps > 1 {
-                println!(
-                    "Calls to `backend::write` were to infrequent, the write cursor has overrun a \
-                    region we have not yet written to. It has jumped {} write chunks, but should \
-                    at most ever jump 1 chunk. In total, it has jumped {} bytes",
-                    jumps,
-                    self.cumulative_play_cursor_jump,
-                );
-
-                // TODO if this happens repeatedly, we really just have to give up playing sound!
-                // We probably should track how often this happens, and let the audio system
-                // decide to give up playing based on what we track!
-            }
-
             self.cumulative_play_cursor_jump -= jumps*self.write_chunk_size;
-            write_start = (last_write_start + jumps*self.write_chunk_size) % self.buffer_size;
+
+            write_start = (last_write_start + last_write_chunks) % self.buffer_size;
+            write_len   = jumps*self.write_chunk_size;
         } else {
-            write_start = (write_cursor + self.write_chunk_size) % self.buffer_size;
             self.cumulative_play_cursor_jump = 0;
+
+            write_start = (write_cursor + self.write_chunk_size) % self.buffer_size;
+            write_len   = self.write_chunk_size;
         }
 
-        self.last_write_start = Some(write_start);
+        // NB (Morten, 09.10.17)
+        // This relys on write_start not falling so far behind that it looks like its ahead
+        // again, which is a real issue with ring buffers. Currently, the ring buffer is two
+        // seconds long, so it is unlikely that this happens, as it would mean we have essentially
+        // stalled for 1 second somewhere in the audio thread. 
+        let write_start_to_write_cursor: isize = {
+            let distance = write_start as isize - write_cursor as isize;
+            let size = self.buffer_size as isize;
+
+            if distance < -size/2 {
+                size + distance
+            } else if distance > size/2 {
+                distance - size
+            } else {
+                distance
+            }
+        };
+
+        if write_start_to_write_cursor < 0 {
+            let write_cursor_to_write_start = (-write_start_to_write_cursor) as usize;
+            // The `-1` `+1` stuff rounds integer division up instead of down
+            let chunks_behind = (write_cursor_to_write_start - 1)/self.write_chunk_size + 1;
+
+            println!(
+                "Calls to `backend::write` were to infrequent, the write cursor has overrun 
+                a region we were going to write to. We are {} chunks behind!.",
+                chunks_behind,
+            );
+
+            write_start = (write_start + chunks_behind*self.write_chunk_size) % self.buffer_size;
+            // Maybe modify write_len?
+
+            // TODO if this happens repeatedly, we really just have to give up playing sound!
+            // We probably should track how often this happens, and let the audio system
+            // decide to give up playing based on what we track!
+        }
+
+        self.last_write = Some((write_start, write_len));
 
         // Lock secondary buffer, get write region
         let mut len1 = 0;
@@ -359,7 +387,7 @@ impl AudioBackend {
         let mut ptr2 = ptr::null_mut();
 
         let result = unsafe { self.secondary_buffer.Lock(
-            write_start as u32, len as u32,
+            write_start as u32, write_len as u32,
             &mut ptr1, &mut len1,
             &mut ptr2, &mut len2,
             0,
@@ -379,7 +407,7 @@ impl AudioBackend {
             return Err(());
         }
 
-        assert!(len == (len1 + len2) as usize); // Make sure we got the promissed amount of data
+        assert!(write_len == (len1 + len2) as usize); // Make sure we got the promissed amount of data
 
         // Zero out the data before we mix new sound into it
         unsafe {
@@ -396,7 +424,7 @@ impl AudioBackend {
         // Write sound data
         let target_start_frame = *frame_counter;
         let target_mid_frame   = target_start_frame + (len1 as u64 / bytes_per_frame as u64);
-        let target_end_frame   = target_start_frame + (len as u64 / bytes_per_frame as u64);
+        let target_end_frame   = target_start_frame + (write_len as u64 / bytes_per_frame as u64);
 
         assert_eq!(slice1.len(), (target_mid_frame - target_start_frame) as usize * OUTPUT_CHANNELS as usize);
         assert_eq!(slice2.len(), (target_end_frame - target_mid_frame) as usize   * OUTPUT_CHANNELS as usize);

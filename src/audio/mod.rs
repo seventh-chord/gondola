@@ -12,6 +12,9 @@
 
 // TODO fix error handling, custom error types!
 
+// TODO `OUTPUT_BUFFER_SIZE_IN_FRAMES` is currently only used on windows. I guess its just a
+// implementation detail, so we should move it to the windows platform layer code.
+
 use std::ptr;
 use std::thread;
 use std::sync::mpsc;
@@ -143,7 +146,7 @@ impl AudioSystem {
                     Ok(wrote) => {
                         if wrote {
                             did_write = true;
-                            last_write = timer.tick().0;
+                            last_write = start;
                         }
                     },
                     Err(()) => {
@@ -191,7 +194,7 @@ impl AudioSystem {
                 if average_write_time > write_interval {
                     // TODO This means the computer we are running on is to slow to mix audio!
                     println!("Average write time is {} ns, but write interval is {} ns", average_write_time.0, write_interval.0);
-                    continue;
+                    return;
                 }
 
                 if next_write > before_sleep + sleep_margin {
@@ -201,6 +204,8 @@ impl AudioSystem {
 
                     if next_write + (write_interval - average_write_time) < after_sleep {
                         // TODO properly handle this case
+                        // Eh: this triggered a couple of times without any audio discontinuities,
+                        // so somethign is afoot
                         println!(
                             "thread::sleep took to long! Should sleep to {} s, but slept until {} s",
                             next_write.as_secs_float(), after_sleep.as_secs_float(),
