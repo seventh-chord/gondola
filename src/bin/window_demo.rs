@@ -20,7 +20,7 @@ fn main() {
     window.set_vsync(true);
 
     let mut audio = AudioSystem::initialize(&window);
-    let hit_buffer = match wav::load("dudu44.wav") {
+    let hit_buffer = match wav::load("hit.wav") {
         Ok(b) => b,
         Err(err) => panic!("Oh snap: {}", err),
     };

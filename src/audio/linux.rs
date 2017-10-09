@@ -1,18 +1,29 @@
 
+// NB (Morten, 09.10.17)
+// Currently, we assume SampleData to be i16!
+// See SND_PCM_FORMAT_S16_LE
+
 extern crate alsa_sys as alsa;
 
+use std::mem;
 use std::ffi::CStr;
 
 use super::*;
 use time::Time;
 
+const MAX_WRITE_FRAMES: u64 = 1024;
+
 pub(super) struct AudioBackend {
+    pcm_handle: *mut alsa::snd_pcm_t,
+    write_buffer: Vec<i16>,
+    total_frames: u64,
 }
 
 impl AudioBackend {
     pub fn initialize() -> Result<AudioBackend, ()> {
         let mut pcm_handle = ptr::null_mut();
-        let mut hardware_parameters = ptr::null_mut();
+        let mut write_buffer = Vec::new();
+        let total_frames;
 
         unsafe {
             let device_name = b"default\0";
@@ -28,14 +39,16 @@ impl AudioBackend {
                 return Err(());
             }
 
-            let result = alsa::snd_pcm_hw_params_malloc(&mut hardware_parameters);
+            // Configure "hardware" stuff
+            let mut hardware = ptr::null_mut();
+            let result = alsa::snd_pcm_hw_params_malloc(&mut hardware);
             if result < 0 {
                 println!("snd_pcm_hw_params_malloc failed: {}", result);
                 return Err(());
             }
+            assert!(!hardware.is_null());
 
-            // Configure "hardware" stuff
-            let result = alsa::snd_pcm_hw_params_any(pcm_handle, hardware_parameters);
+            let result = alsa::snd_pcm_hw_params_any(pcm_handle, hardware);
             if result < 0 {
                 println!("snd_pcm_hw_params_any failed: {}", result);
                 return Err(());
@@ -50,64 +63,74 @@ impl AudioBackend {
             let channels = OUTPUT_CHANNELS;
             let mut sample_rate = OUTPUT_SAMPLE_RATE;
 
-            alsa::snd_pcm_hw_params_set_access(pcm_handle, hardware_parameters, access);
-            alsa::snd_pcm_hw_params_set_format(pcm_handle, hardware_parameters, format);
-            alsa::snd_pcm_hw_params_set_channels(pcm_handle, hardware_parameters, channels);
-            alsa::snd_pcm_hw_params_set_rate_near(pcm_handle, hardware_parameters, &mut sample_rate, ptr::null_mut());
+            alsa::snd_pcm_hw_params_set_access(pcm_handle, hardware, access);
+            alsa::snd_pcm_hw_params_set_format(pcm_handle, hardware, format);
+            alsa::snd_pcm_hw_params_set_channels(pcm_handle, hardware, channels);
+            alsa::snd_pcm_hw_params_set_rate_near(pcm_handle, hardware, &mut sample_rate, ptr::null_mut());
 
-            let result = alsa::snd_pcm_hw_params(pcm_handle, hardware_parameters);
+            let result = alsa::snd_pcm_hw_params(pcm_handle, hardware);
             if result < 0 {
                 println!("snd_pcm_hw_params failed: {}", result);
                 return Err(());
             }
 
-            alsa::snd_pcm_hw_params_free(hardware_parameters);
+            alsa::snd_pcm_hw_params_free(hardware);
 
-            // Play I guess
+            // Configure "software" stuff
+            let mut software = ptr::null_mut();
+            let result = alsa::snd_pcm_sw_params_malloc(&mut software);
+            if result < 0 {
+                println!("snd_pcm_sw_params_malloc failed: {}", result);
+                return Err(());
+            }
+            assert!(!software.is_null());
+
+            let result = alsa::snd_pcm_sw_params_current(pcm_handle, software);
+            if result < 0 {
+                println!("snd_pcm_sw_params_current failed: {}", result);
+                return Err(());
+            }
+
+            alsa::snd_pcm_sw_params_set_avail_min(pcm_handle, software, MAX_WRITE_FRAMES);
+            alsa::snd_pcm_sw_params_set_start_threshold(pcm_handle, software, 0);
+
+            let result = alsa::snd_pcm_sw_params(pcm_handle, software);
+            if result < 0 {
+                println!("snd_pcm_sw_params failed: {}", result);
+                return Err(());
+            }
+
+            alsa::snd_pcm_sw_params_free(software);
+
+            total_frames = alsa::snd_pcm_avail(pcm_handle) as u64;
+
+            // Prepare for playing
             let result = alsa::snd_pcm_prepare(pcm_handle);
             if result < 0 {
                 println!("snd_pcm_prepare failed: {}", result);
                 return Err(());
+            } 
+
+            // Write some bytes at the start to prevent buffer underruns
+            let samples = MAX_WRITE_FRAMES as usize * OUTPUT_CHANNELS as usize;
+            write_buffer.reserve(samples);
+            ptr::write_bytes(write_buffer.as_mut_ptr(), 0, samples);
+
+            let result = alsa::snd_pcm_writei(
+                pcm_handle,
+                write_buffer.as_ptr() as *const _,
+                MAX_WRITE_FRAMES,
+            );
+            if result < 0 {
+                println!("snd_pcm_writei failed: {}", result);
+                return Err(());
             }
-
-            let mut data = Vec::with_capacity(48000 * 2);
-            for i in 0..48000 {
-                let t = (i as f32 / 48000.0) * 110.0;
-                let v = (t * 2.0 * 3.1415).sin() * (i16::max_value() as f32);
-
-                data.push(v as i16);
-                data.push(v as i16);
-            }
-
-            for _ in 0..3 {
-                println!("write");
-                let result = alsa::snd_pcm_writei(
-                    pcm_handle,
-                    data.as_ptr() as *const _,
-                    data.len() as u64
-                );
-                if result < 0 {
-                    println!("snd_pcm_writei failed: {}", result);
-                    break;
-                }
-            }
-
-            ::std::thread::sleep(Time::from_secs(3).into());
-
-            println!("Heyo");
-            alsa::snd_pcm_close(pcm_handle);
         }
 
-        /*
-        snd_smixer_xx();
-        snd_pcm_delay(); // Synchronization
-        snd_pcm_update_avail(); // Playback/capture fill level
-        snd_pcm_recover(); // Recover from errors (what?)
-        // use largest possible buffer size! (We want this anyways)
-        snd_pcm_rewind(); // If we need to react to user input quickly (what?)
-        */
-
         Ok(AudioBackend {
+            pcm_handle,
+            write_buffer,
+            total_frames,
         })
     }
 
@@ -118,10 +141,78 @@ impl AudioBackend {
     ) -> Result<bool, ()> 
       where F: FnMut(u64, &mut [SampleData]),
     {
-        return Ok(true); // Write was succesfull
+        // ALSA will request enough frames to fill up the entire ring buffer,
+        // we only want to write a few frames ahead to keep latency low.
+
+        let available_frames;
+
+        unsafe {
+            let result = alsa::snd_pcm_avail_update(self.pcm_handle);
+            if result < 0 {
+                if result == -32 {
+                    // underrun, we did not provide data quickly enough. What do we do now?
+                    // TODO in debug mode this happens when mix_callback has many sounds. We
+                    // probably want to "gracefully" handle that case, by stuttering
+                }
+
+                println!("snd_pcm_avail_delay failed: {}", result);
+                return Err(());
+            } else {
+                available_frames = result as u64;
+            }
+        }
+
+        if available_frames <= 0 {
+            // We somehow managed to fill up the entire ring buffer, this is sort of bad
+            return Ok(false);
+        }
+
+        let unplayed_frames = self.total_frames - available_frames;
+        if unplayed_frames > 2*MAX_WRITE_FRAMES {
+            return Ok(false);
+        }
+
+        let write_frames = if unplayed_frames < MAX_WRITE_FRAMES {
+            2*MAX_WRITE_FRAMES - unplayed_frames
+        } else {
+            MAX_WRITE_FRAMES
+        };
+        let samples = write_frames as usize * OUTPUT_CHANNELS as usize;
+
+        self.write_buffer.clear();
+        self.write_buffer.reserve(samples);
+        unsafe {
+            self.write_buffer.set_len(samples);
+            ptr::write_bytes(self.write_buffer.as_mut_ptr(), 0, samples);
+        }
+
+        mix_callback(*frame_counter, &mut self.write_buffer);
+        *frame_counter += write_frames;
+
+        unsafe {
+            let result = alsa::snd_pcm_writei(
+                self.pcm_handle,
+                self.write_buffer.as_ptr() as *const _,
+                write_frames,
+            );
+            if result < 0 {
+                println!("snd_pcm_writei failed: {}", result);
+                return Err(());
+            }
+        }
+
+        return Ok(true); // We wrote some data
     }
 
     pub fn write_interval(&self) -> Time {
-        Time::from_ms(5) // TODO
+        Time((MAX_WRITE_FRAMES as u64 * Time::NANOSECONDS_PER_SECOND) / OUTPUT_SAMPLE_RATE as u64)
+    }
+}
+
+impl Drop for AudioBackend {
+    fn drop(&mut self) {
+        unsafe {
+            alsa::snd_pcm_close(self.pcm_handle);
+        }
     }
 }

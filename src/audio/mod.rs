@@ -191,7 +191,7 @@ impl AudioSystem {
                 if average_write_time > write_interval {
                     // TODO This means the computer we are running on is to slow to mix audio!
                     println!("Average write time is {} ns, but write interval is {} ns", average_write_time.0, write_interval.0);
-                    return;
+                    continue;
                 }
 
                 if next_write > before_sleep + sleep_margin {
