@@ -1083,8 +1083,8 @@ mod windows {
             };
 
             // We have to load opengl32 to get the proc address for old gl functions (e.g GetString)
-            let lib_name = encode_wide("opengl32.dll");
-            let gl32_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
+            let library_name = b"opengl32.dll\0";
+            let gl32_lib = unsafe { ffi::LoadLibraryA(library_name.as_ptr() as *const i8) };
             if gl32_lib.is_null() {
                 panic!("Could not load opengl32.dll: {}", last_win_error());
             }

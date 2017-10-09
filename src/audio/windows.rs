@@ -44,9 +44,8 @@ pub(super) struct AudioBackend {
 impl AudioBackend {
     pub fn initialize(window_handle: usize) -> Result<AudioBackend, ()> {
         // Load library
-        // TODO swap to `LoadLibraryA`, then we don't need encode_wide
-        let lib_name = encode_wide("dsound.dll"); 
-        let dsound_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
+        let library_name = b"dsound.dll\0";
+        let dsound_lib = unsafe { ffi::LoadLibraryA(library_name.as_ptr() as *const i8) };
 
         if dsound_lib.is_null() {
             println!("Could not load \"dsound.dll\"");
@@ -433,13 +432,4 @@ impl AudioBackend {
 
         Time(frames_per_write*Time::NANOSECONDS_PER_SECOND/(OUTPUT_SAMPLE_RATE as u64))
     }
-}
-
-fn encode_wide(s: &str) -> Vec<u16> {
-    let mut data = Vec::with_capacity(s.len() + 1);
-    for wchar in s.encode_utf16() {
-        data.push(wchar);
-    }
-    data.push(0);
-    data
 }
