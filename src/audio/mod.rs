@@ -25,6 +25,11 @@ mod windows;
 #[cfg(target_os = "windows")]
 use self::windows::*;
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use self::linux::*;
+
 pub mod wav;
 
 const OUTPUT_CHANNELS: u32 = 2;

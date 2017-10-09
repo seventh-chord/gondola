@@ -44,7 +44,8 @@ pub(super) struct AudioBackend {
 impl AudioBackend {
     pub fn initialize(window_handle: usize) -> Result<AudioBackend, ()> {
         // Load library
-        let lib_name = encode_wide("dsound.dll");
+        // TODO swap to `LoadLibraryA`, then we don't need encode_wide
+        let lib_name = encode_wide("dsound.dll"); 
         let dsound_lib = unsafe { ffi::LoadLibraryW(lib_name.as_ptr()) };
 
         if dsound_lib.is_null() {
