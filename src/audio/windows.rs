@@ -140,7 +140,8 @@ impl AudioBackend {
         buffer_description.lpwfxFormat = &mut wave_format;
         buffer_description.dwFlags = ffi::DSBCAPS_GLOBALFOCUS | ffi::DSBCAPS_GETCURRENTPOSITION2;
 
-        // TODO how do we check if this flag is supported?
+        // NB this will only work on vista. I don't know if this causes an error, or is just
+        // ignored on XP. The sound system currently works without this flag though!
         buffer_description.dwFlags |= ffi::DSBCAPS_TRUEPLAYPOSITION;
 
         let mut secondary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
