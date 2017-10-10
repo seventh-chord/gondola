@@ -10,8 +10,6 @@
 // We currently only output the first channel of a sound file in the mixer. If a stereo sound is
 // submitted, we just ignore the second channel.
 
-// TODO return error on `write` failure!
-
 use std::ptr;
 use std::thread;
 use std::sync::mpsc;
@@ -159,9 +157,12 @@ impl AudioSystem {
                             last_write = start;
                         }
                     },
-                    Err(()) => {
-                        // TODO proper error handling, should we stop the loop?
-                        println!("backend.write failed!");
+
+                    Err(error) => {
+                        // The audio backends should handle non-critical errors themselves. If we
+                        // get an error here, we just report it and abort.
+                        let _ = thread_sender.send(error);
+                        return;
                     },
                 }
 
@@ -239,8 +240,8 @@ impl AudioSystem {
             return;
         }
 
-        if let Ok(err) = self.receiver.try_recv() {
-            self.state = AudioSystemState::CriticalError(err);
+        if let Ok(error) = self.receiver.try_recv() {
+            self.state = AudioSystemState::CriticalError(error);
         }
     }
 

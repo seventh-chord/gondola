@@ -278,7 +278,7 @@ impl AudioBackend {
         &mut self,
         frame_counter: &mut u64,
         mut mix_callback: F,
-    ) -> Result<bool, ()> 
+    ) -> Result<bool, AudioError> 
       where F: FnMut(u64, &mut [SampleData]),
     {
         // The play cursor advances in chunks of ´write_chunk_size´. We can start writing
@@ -293,8 +293,12 @@ impl AudioBackend {
             &mut write_cursor,
         )};
         if result != ffi::DS_OK {
-            println!("Failed to get current buffer position. Error code: {}", result);
-            return Err(());
+            return Err(AudioError::BadReturn {
+                function_name: "DirectSoundBuffer->GetCurrentPosition".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
         let play_cursor = play_cursor as usize;
         let write_cursor = write_cursor as usize;
@@ -391,19 +395,13 @@ impl AudioBackend {
             &mut ptr2, &mut len2,
             0,
         )};
-
         if result != ffi::DS_OK {
-            let result = unsafe { mem::transmute::<i32, u32>(result) };
-            let msg = match result {
-                0x88780096 => "Buffer lost",
-                0x88780032 => "Invalid call",
-                0x80070057 => "Invalid parameter",
-                0x88780046 => "Priority level needed",
-                _ => "Unkown error",
-            };
-
-            println!("Failed to lock secondary buffer. Error code: 0x{:x} ({})", result, msg);
-            return Err(());
+            return Err(AudioError::BadReturn {
+                function_name: "DirectSoundBuffer->Lock".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
 
         assert!(write_len == (len1 + len2) as usize); // Make sure we got the promissed amount of data
@@ -443,7 +441,12 @@ impl AudioBackend {
             ptr2, len2,
         )};
         if result != ffi::DS_OK {
-            println!("Failed to unlock secondary buffer. Error code: {}", result);
+            return Err(AudioError::BadReturn {
+                function_name: "DirectSoundBuffer->Unlock".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         } 
 
         return Ok(true);
