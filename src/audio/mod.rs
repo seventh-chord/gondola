@@ -12,9 +12,6 @@
 
 // TODO fix error handling, custom error types!
 
-// TODO `OUTPUT_BUFFER_SIZE_IN_FRAMES` is currently only used on windows. I guess its just a
-// implementation detail, so we should move it to the windows platform layer code.
-
 use std::ptr;
 use std::thread;
 use std::sync::mpsc;
@@ -37,7 +34,6 @@ pub mod wav;
 
 const OUTPUT_CHANNELS: u32 = 2;
 const OUTPUT_SAMPLE_RATE: u32 = 48000;
-const OUTPUT_BUFFER_SIZE_IN_FRAMES: usize = 2*(OUTPUT_SAMPLE_RATE as usize);
 type SampleData = i16;
 type Balance = [f32; OUTPUT_CHANNELS as usize];
 type BufferHandle = usize;

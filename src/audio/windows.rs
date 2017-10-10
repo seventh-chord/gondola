@@ -25,7 +25,8 @@ mod ffi {
 //    pub(super) type DirectSoundEnumerate = extern "system" fn(LPDSENUMCALLBACK, LPVOID) -> HRESULT;
 }
 
-const MIN_WRITE_CHUNK_FRAMES: usize = 400;
+const BUFFER_SIZE_IN_FRAMES: usize = 2 * (OUTPUT_SAMPLE_RATE as usize);
+const MIN_WRITE_CHUNK_SIZE_IN_FRAMES: usize = 240;
 
 pub(super) struct AudioBackend {
     // Total size of secondary buffer, in bytes. This can't be a constant because we can't call 
@@ -131,7 +132,7 @@ impl AudioBackend {
         let bytes_per_sample = mem::size_of::<SampleData>();
         let bytes_per_frame  = bytes_per_sample * OUTPUT_CHANNELS as usize;
         let bytes_per_second = bytes_per_frame * OUTPUT_SAMPLE_RATE as usize;
-        let buffer_size      = bytes_per_frame * OUTPUT_BUFFER_SIZE_IN_FRAMES;
+        let buffer_size      = bytes_per_frame * BUFFER_SIZE_IN_FRAMES;
 
         let mut wave_format = ffi::WAVEFORMATEX {
             wFormatTag:      ffi::WAVE_FORMAT_PCM,
@@ -260,10 +261,8 @@ impl AudioBackend {
             }
         };
 
-        let write_chunk_size = max(
-            MIN_WRITE_CHUNK_FRAMES * (OUTPUT_CHANNELS as usize) * mem::size_of::<SampleData>(),
-            cursor_granularity,
-        );
+        let min_write_chunk_size = MIN_WRITE_CHUNK_SIZE_IN_FRAMES * bytes_per_frame;
+        let write_chunk_size = max(min_write_chunk_size, cursor_granularity);
 
         Ok(AudioBackend {
             buffer_size,
