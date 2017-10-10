@@ -108,6 +108,7 @@ fn main() {
         framebuffer.blit(Default::default());
 
         audio.tick();
+        audio.print_potential_error();
 
         window.swap_buffers();
         graphics::print_errors();

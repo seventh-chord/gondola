@@ -43,48 +43,15 @@ pub(super) struct AudioBackend {
 }
 
 impl AudioBackend {
-    pub fn initialize(window_handle: usize) -> Result<AudioBackend, ()> {
+    pub fn initialize(window_handle: usize) -> Result<AudioBackend, AudioError> {
         // Load library
         let library_name = b"dsound.dll\0";
         let dsound_lib = unsafe { ffi::LoadLibraryA(library_name.as_ptr() as *const i8) };
 
         if dsound_lib.is_null() {
-            println!("Could not load \"dsound.dll\"");
-            // Don't panic, just run without sound
-            return Err(());
+            let message = "Could not load library \"dsound.dll\"".to_owned();
+            return Err(AudioError::Other { message });
         }
-
-        /*
-        let direct_sound_enumerate = {
-            let name = b"DirectSoundEnumerateA\0";
-            let address = unsafe { ffi::GetProcAddress(dsound_lib, name.as_ptr() as *const _) };
-
-            if address.is_null() {
-                println!("Could not load DirectSoundEnumerateA from dsound.dll");
-                return Err(());
-            } else {
-                unsafe { mem::transmute::<_, ffi::DirectSoundEnumerate>(address) }
-            }
-        };
-
-        unsafe extern "system" 
-        fn callback(
-            guid: ffi::LPGUID,
-            description: ffi::LPCSTR,
-            module: ffi::LPCSTR,
-            context: ffi::LPVOID
-        ) -> ffi::BOOL 
-        {
-            let description = CStr::from_ptr(description).to_string_lossy();
-            let module      = CStr::from_ptr(module).to_string_lossy();
-
-            println!("{:x}: \"{}\", \"{}\"", guid as usize, description, module);
-
-            return ffi::TRUE;
-        }
-
-        direct_sound_enumerate(Some(callback), ptr::null_mut());
-        */
 
         // Create DirectSound object
         let direct_sound_create = {
@@ -92,8 +59,8 @@ impl AudioBackend {
             let address = unsafe { ffi::GetProcAddress(dsound_lib, name.as_ptr() as *const _) };
 
             if address.is_null() {
-                println!("Could not load DirectSoundCreate from dsound.dll");
-                return Err(());
+                let message = "No `DirectSoundCreate` in \"dsound.dll\"".to_owned();
+                return Err(AudioError::Other { message });
             } else {
                 unsafe { mem::transmute::<_, ffi::DirectSoundCreate>(address) }
             }
@@ -102,16 +69,24 @@ impl AudioBackend {
         let mut dsound: ffi::LPDIRECTSOUND = ptr::null_mut();
         let result = direct_sound_create(ptr::null_mut(), &mut dsound, ptr::null_mut());
         if result != ffi::DS_OK {
-            println!("Failed to create a direct sound object: {}", result);
-            return Err(());
+            return Err(AudioError::BadReturn {
+                function_name: "DirectSoundCreate".to_owned().to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
         assert!(!dsound.is_null());
         let dsound = unsafe { &mut *dsound };
 
         let result = unsafe { dsound.SetCooperativeLevel(window_handle as *mut _, ffi::DSSCL_PRIORITY) };
         if result != ffi::DS_OK {
-            println!("Failed to call DirectSound->SetCooperativeLevel. Error code: {}", result);
-            return Err(());
+            return Err(AudioError::BadReturn { 
+                function_name: "DirectSound->SetCooperativeLevel".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
 
         // Create primary buffer (I think this is only used as a configuration object. This is
@@ -123,8 +98,12 @@ impl AudioBackend {
         let mut primary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut primary_buffer, ptr::null_mut()) };
         if result != ffi::DS_OK {
-            println!("Failed to call DirectSound->CreateSoundBuffer. Error code: {}", result);
-            return Err(());
+            return Err(AudioError::BadReturn { 
+                function_name: "DirectSound->CreateSoundBuffer".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
         assert!(!primary_buffer.is_null());
         let primary_buffer = unsafe { &mut *primary_buffer };
@@ -146,8 +125,12 @@ impl AudioBackend {
         };
         let result = unsafe { primary_buffer.SetFormat(&wave_format) };
         if result != ffi::DS_OK {
-            println!("Failed call to SoundBuffer->SetFormat. Error code: {}", result);
-            return Err(());
+            return Err(AudioError::BadReturn { 
+                function_name: "DirectSoundBuffer->SetFormat".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
 
         // Create secondary buffer (which is the buffer we actually want)
@@ -163,8 +146,12 @@ impl AudioBackend {
         let mut secondary_buffer: ffi::LPDIRECTSOUNDBUFFER = ptr::null_mut();
         let result = unsafe { dsound.CreateSoundBuffer(&buffer_description, &mut secondary_buffer, ptr::null_mut()) };
         if result != ffi::DS_OK {
-            println!("Failed call to SoundBuffer->SetFormat. Error code: {}", result);
-            return Err(());
+            return Err(AudioError::BadReturn {
+                function_name: "DirectSound->CreateSoundBuffer".to_owned(),
+                error_code: result,
+                line: line!(),
+                file: file!(), 
+            });
         }
         assert!(!secondary_buffer.is_null());
         let secondary_buffer = unsafe { &mut *secondary_buffer };
@@ -182,8 +169,12 @@ impl AudioBackend {
                 0,
             )};
             if result != ffi::DS_OK {
-                println!("Failed to lock secondary buffer. Error code: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "DirectSoundBuffer->Lock".to_owned(),
+                    error_code: result,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
 
             assert_eq!(len1, buffer_size as u32);
@@ -193,8 +184,12 @@ impl AudioBackend {
 
             let result = unsafe { secondary_buffer.Unlock(ptr1, len1, ptr2, len2)};
             if result != ffi::DS_OK {
-                println!("Failed to unlock secondary buffer. Error code: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "DirectSoundBuffer->Unlock".to_owned(),
+                    error_code: result,
+                    line: line!(),
+                    file: file!(), 
+                });
             } 
         }
 
@@ -218,8 +213,12 @@ impl AudioBackend {
                 &mut write_cursor,
             )};
             if result != ffi::DS_OK {
-                println!("Failed to get current buffer position. Error code: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "DirectSoundBuffer->GetCurrentPosition".to_owned(),
+                    error_code: result,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
             let play_cursor = play_cursor as usize;
             let write_cursor = write_cursor as usize;
@@ -249,8 +248,8 @@ impl AudioBackend {
         }
 
         if check_count == 0 {
-            println!("Unable to determine sound card latency, can not output audio");
-            return Err(());
+            let message = "Unable to determine sound card commit chunk size".to_owned();
+            return Err(AudioError::Other { message });
         }
 
         let cursor_granularity = {

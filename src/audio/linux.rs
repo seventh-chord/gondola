@@ -20,7 +20,7 @@ pub(super) struct AudioBackend {
 }
 
 impl AudioBackend {
-    pub fn initialize() -> Result<AudioBackend, ()> {
+    pub fn initialize() -> Result<AudioBackend, InitializationError> {
         let mut pcm_handle = ptr::null_mut();
         let mut write_buffer = Vec::new();
         let total_frames;

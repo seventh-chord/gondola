@@ -10,7 +10,7 @@
 // We currently only output the first channel of a sound file in the mixer. If a stereo sound is
 // submitted, we just ignore the second channel.
 
-// TODO fix error handling, custom error types!
+// TODO return error on `write` failure!
 
 use std::ptr;
 use std::thread;
@@ -71,18 +71,32 @@ pub struct Event {
 
 pub struct AudioSystem {
     next_buffer_handle: BufferHandle,
-    broken:   bool,
-    receiver: mpsc::Receiver<MessageFromAudioThread>,
-    sender:   mpsc::Sender<MessageToAudioThread>,
+
+    pub state: AudioSystemState,
+    has_printed_error: bool,
+
+    receiver: mpsc::Receiver<AudioError>,
+    sender: mpsc::Sender<MessageToAudioThread>,
+}
+
+pub enum AudioSystemState {
+    Ok,
+    AudioThreadDown,
+    CriticalError(AudioError),
+}
+
+impl AudioSystemState {
+    pub fn is_ok(&self) -> bool {
+        match *self {
+            AudioSystemState::Ok => true,
+            _ => false,
+        }
+    }
 }
 
 enum MessageToAudioThread {
     NewEvent { event: Event },
     AddBuffer { buffer: AudioBuffer },
-}
-
-enum MessageFromAudioThread {
-    CriticalError,
 }
 
 impl AudioSystem {
@@ -103,8 +117,8 @@ impl AudioSystem {
 
             let mut backend = match backend {
                 Ok(b) => b,
-                Err(()) => {
-                    let _ = thread_sender.send(MessageFromAudioThread::CriticalError);
+                Err(error) => {
+                    let _ = thread_sender.send(error);
                     return;
                 },
             };
@@ -162,7 +176,7 @@ impl AudioSystem {
                 }
 
                 // Add new buffers/events
-                for message in thread_receiver.try_recv() {
+                for message in thread_receiver.try_iter() {
                     use self::MessageToAudioThread::*;
                     match message {
                         NewEvent { event } => {
@@ -212,26 +226,26 @@ impl AudioSystem {
         });
 
         AudioSystem {
-            broken: false,
             next_buffer_handle: 0,
+            state: AudioSystemState::Ok,
+            has_printed_error: false,
             sender,
             receiver,
         }
     }
 
     pub fn tick(&mut self) {
-        use self::MessageFromAudioThread::*;
-        for message in self.receiver.try_recv() {
-            match message {
-                CriticalError => {
-                    self.broken = true;
-                },
-            }
+        if !self.state.is_ok() {
+            return;
+        }
+
+        if let Ok(err) = self.receiver.try_recv() {
+            self.state = AudioSystemState::CriticalError(err);
         }
     }
 
     pub fn play(&mut self, buffer: BufferHandle, balance: Balance, speed: f32) {
-        if self.broken {
+        if !self.state.is_ok() {
             return;
         }
 
@@ -244,26 +258,60 @@ impl AudioSystem {
         };
 
         let message = MessageToAudioThread::NewEvent { event };
-        let broken = self.sender.send(message).is_err();
-        if broken {
-            self.broken = true;
+        let send_result = self.sender.send(message);
+        if send_result.is_err() {
+            self.state = AudioSystemState::AudioThreadDown;
         }
     }
 
     pub fn add_buffer(&mut self, buffer: AudioBuffer) -> BufferHandle {
-        if self.broken {
+        if !self.state.is_ok() {
             return 0;
         }
 
         let message = MessageToAudioThread::AddBuffer { buffer };
-        let broken = self.sender.send(message).is_err();
-        if broken {
-            self.broken = true;
+        let send_result = self.sender.send(message);
+        if send_result.is_err() {
+            self.state = AudioSystemState::AudioThreadDown;
         }
 
         let handle = self.next_buffer_handle;
         self.next_buffer_handle += 1;
         return handle;
+    }
+
+    /// If `state` is not `Ok` this prints a detailed error message for the current `state`. If
+    /// this function is called multiple times, it will only print once.
+    pub fn print_potential_error(&mut self) {
+        use self::AudioSystemState::*;
+        use self::AudioError::*;
+
+        if self.has_printed_error {
+            return;
+        }
+
+        match self.state {
+            AudioThreadDown => {
+                println!("Audio thread stopped unexpectedly")
+            },
+
+            CriticalError(Other { ref message }) => {
+                println!("Critical error in audio system: {}", message);
+            },
+
+            CriticalError(BadReturn { ref function_name, error_code, line, file }) => {
+                println!(
+                    "Critical error in audio system at {}:{}: `{}` returned {} unexpectedly",
+                    file, line,
+                    function_name,
+                    error_code,
+                );
+            },
+
+            Ok => return,
+        }
+
+        self.has_printed_error = true;
     }
 }
 
@@ -404,4 +452,19 @@ fn clamp<T: PartialOrd + Copy>(v: T, range: (T, T)) -> T {
     } else {
         v
     }
+}
+
+
+/// Most of these errors are critical, we are not expecting to recover from them. If they happen, we
+/// just give up on sound completly. Because of that, we favour human-readable error formats (strings).
+pub enum AudioError {
+    Other { message: String }, 
+    
+    // Some function returned a bad value
+    BadReturn { 
+        function_name: String,
+        error_code: i32,
+        line: u32,
+        file: &'static str,
+    },
 }
