@@ -363,8 +363,8 @@ fn mix(
             event.done = true;
         }
 
-        let start_frame = max(event_start_frame, target_start_frame);
-        let end_frame   = min(event_end_frame, target_end_frame);
+        let start_frame = Ord::max(event_start_frame, target_start_frame);
+        let end_frame   = Ord::min(event_end_frame, target_end_frame);
 
         if start_frame >= end_frame {
             // No part of this event fit into the frame window of the given samples
@@ -379,7 +379,7 @@ fn mix(
             );
             let a = buffer_frame_range.0 as usize * buffer.channels as usize;
             let b = buffer_frame_range.1 as usize * buffer.channels as usize;
-            let b = min(b, buffer.data.len() - 1); // Sometimes happens due to rounding or smth
+            let b = Ord::min(b, buffer.data.len() - 1); // Sometimes happens due to rounding or smth
             &buffer.data[a..b]
         };
 
@@ -399,8 +399,8 @@ fn mix(
 
                 let prev_read_pos = (read_frame as usize)*(buffer.channels as usize);
                 let last = read_data.len() - 1;
-                let prev_read_pos = min(prev_read_pos, last); // Sometimes happens due to rounding
-                let next_read_pos = min(prev_read_pos + buffer.channels as usize, last);
+                let prev_read_pos = Ord::min(prev_read_pos, last); // Sometimes happens due to rounding
+                let next_read_pos = Ord::min(prev_read_pos + buffer.channels as usize, last);
 
                 // Linearly interpolate to find the proper sample value. In theory, this gives us a
                 // better result, but in practice it doesn't matter: I can't hear the difference.
@@ -423,24 +423,6 @@ fn mix(
     for (index, &sample) in scratch_buffer.iter().enumerate() {
         let clipped = clamp(sample, (min, max));
         samples[index] = clipped as i16;
-    }
-}
-
-#[inline(always)]
-fn min<T: PartialOrd + Copy>(a: T, b: T) -> T {
-    if a > b { 
-        b 
-    } else {
-        a 
-    }
-}
-
-#[inline(always)]
-fn max<T: PartialOrd + Copy>(a: T, b: T) -> T {
-    if a > b { 
-        a 
-    } else {
-        b 
     }
 }
 

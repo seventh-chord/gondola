@@ -262,7 +262,7 @@ impl AudioBackend {
         };
 
         let min_write_chunk_size = MIN_WRITE_CHUNK_SIZE_IN_FRAMES * bytes_per_frame;
-        let write_chunk_size = max(min_write_chunk_size, cursor_granularity);
+        let write_chunk_size = Ord::max(min_write_chunk_size, cursor_granularity);
 
         Ok(AudioBackend {
             buffer_size,
