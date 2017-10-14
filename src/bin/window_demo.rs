@@ -60,11 +60,11 @@ fn main() {
 
         draw_group.aabb((10.0, 10.0).into(), (100.0, 100.0).into(), Color::hex_int(0xff0000));
 
-        let pos = Vec2::new(200.0, 200.0) + Vec2::polar(100.0, time.as_secs_float());
+        let pos = Vec2::new(200.0, 200.0) + Vec2::polar(100.0, time.to_secs_f32());
         draw_group.circle(pos, 10.0, Color::hex_int(0x00ff00));
 
         if input.key(Key::A).pressed_repeat() {
-            println!("{}", delta.as_secs_float()*1000.0);
+            println!("{}", delta.to_secs_f32()*1000.0);
         }
 
         if input.key(Key::Key1).pressed() {

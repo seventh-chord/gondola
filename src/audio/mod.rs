@@ -219,7 +219,7 @@ impl AudioSystem {
                         // so somethign is afoot
                         println!(
                             "thread::sleep took to long! Should sleep to {} s, but slept until {} s",
-                            next_write.as_secs_float(), after_sleep.as_secs_float(),
+                            next_write.to_secs_f32(), after_sleep.to_secs_f32(),
                         );
                     }
                 }

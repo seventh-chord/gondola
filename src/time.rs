@@ -49,22 +49,26 @@ impl Time {
         Time(s * Time::NANOSECONDS_PER_SECOND) 
     }
 
-    pub fn from_secs_float(s: f32) -> Time {
+    pub fn from_secs_f32(s: f32) -> Time {
         Time((s * Time::NANOSECONDS_PER_SECOND as f32) as u64) 
     }
 
-    /// Converts this timing to seconds, truncating any overflow. 1.999 ms will be converted to 1 ms.
-    pub fn as_ms(self) -> u64 {
+    /// Converts this timing to milliseconds, truncating any overflow. 1.999 ms will be converted to 1 ms.
+    pub fn to_ms(self) -> u64 {
         self.0 / Time::NANOSECONDS_PER_MILISECOND 
+    }
+    
+    pub fn to_ms_f32(self) -> f32 {
+        self.0 as f32 / Time::NANOSECONDS_PER_MILISECOND as f32 
     }
 
     /// Converts this timing to seconds, truncating any overflow. 1.999 seconds will be converted to 1.
-    pub fn as_secs(self) -> u64 {
+    pub fn to_secs(self) -> u64 {
         self.0 / Time::NANOSECONDS_PER_SECOND 
     }
 
-    pub fn as_secs_float(self) -> f32 {
-        self.0 as f32 / (Time::NANOSECONDS_PER_SECOND as f32) 
+    pub fn to_secs_f32(self) -> f32 {
+        self.0 as f32 / Time::NANOSECONDS_PER_SECOND as f32
     }
 
     pub fn max(self, other: Time) -> Time {
