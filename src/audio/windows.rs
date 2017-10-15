@@ -71,7 +71,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn {
                 function_name: "DirectSoundCreate".to_owned().to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -83,7 +83,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn { 
                 function_name: "DirectSound->SetCooperativeLevel".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -100,7 +100,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn { 
                 function_name: "DirectSound->CreateSoundBuffer".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -127,7 +127,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn { 
                 function_name: "DirectSoundBuffer->SetFormat".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -149,7 +149,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn {
                 function_name: "DirectSound->CreateSoundBuffer".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -172,7 +172,7 @@ impl AudioBackend {
             if result != ffi::DS_OK {
                 return Err(AudioError::BadReturn {
                     function_name: "DirectSoundBuffer->Lock".to_owned(),
-                    error_code: result,
+                    error_code: result as i64,
                     line: line!(),
                     file: file!(), 
                 });
@@ -187,7 +187,7 @@ impl AudioBackend {
             if result != ffi::DS_OK {
                 return Err(AudioError::BadReturn {
                     function_name: "DirectSoundBuffer->Unlock".to_owned(),
-                    error_code: result,
+                    error_code: result as i64,
                     line: line!(),
                     file: file!(), 
                 });
@@ -216,7 +216,7 @@ impl AudioBackend {
             if result != ffi::DS_OK {
                 return Err(AudioError::BadReturn {
                     function_name: "DirectSoundBuffer->GetCurrentPosition".to_owned(),
-                    error_code: result,
+                    error_code: result as i64,
                     line: line!(),
                     file: file!(), 
                 });
@@ -295,7 +295,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn {
                 function_name: "DirectSoundBuffer->GetCurrentPosition".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -398,7 +398,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn {
                 function_name: "DirectSoundBuffer->Lock".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });
@@ -443,7 +443,7 @@ impl AudioBackend {
         if result != ffi::DS_OK {
             return Err(AudioError::BadReturn {
                 function_name: "DirectSoundBuffer->Unlock".to_owned(),
-                error_code: result,
+                error_code: result as i64,
                 line: line!(),
                 file: file!(), 
             });

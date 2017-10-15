@@ -5,9 +5,6 @@
 
 extern crate alsa_sys as alsa;
 
-use std::mem;
-use std::ffi::CStr;
-
 use super::*;
 use time::Time;
 
@@ -20,7 +17,7 @@ pub(super) struct AudioBackend {
 }
 
 impl AudioBackend {
-    pub fn initialize() -> Result<AudioBackend, InitializationError> {
+    pub fn initialize() -> Result<AudioBackend, AudioError> {
         let mut pcm_handle = ptr::null_mut();
         let mut write_buffer = Vec::new();
         let total_frames;
@@ -35,23 +32,35 @@ impl AudioBackend {
                 0
             );
             if result < 0 {
-                println!("snd_pcm_open failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_open".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
 
             // Configure "hardware" stuff
             let mut hardware = ptr::null_mut();
             let result = alsa::snd_pcm_hw_params_malloc(&mut hardware);
             if result < 0 {
-                println!("snd_pcm_hw_params_malloc failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_hw_params_malloc".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
             assert!(!hardware.is_null());
 
             let result = alsa::snd_pcm_hw_params_any(pcm_handle, hardware);
             if result < 0 {
-                println!("snd_pcm_hw_params_any failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_hw_params_any".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
 
             let access = alsa::SND_PCM_ACCESS_RW_INTERLEAVED;
@@ -70,8 +79,12 @@ impl AudioBackend {
 
             let result = alsa::snd_pcm_hw_params(pcm_handle, hardware);
             if result < 0 {
-                println!("snd_pcm_hw_params failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_hw_params".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
 
             alsa::snd_pcm_hw_params_free(hardware);
@@ -80,15 +93,23 @@ impl AudioBackend {
             let mut software = ptr::null_mut();
             let result = alsa::snd_pcm_sw_params_malloc(&mut software);
             if result < 0 {
-                println!("snd_pcm_sw_params_malloc failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_sw_params_malloc".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
             assert!(!software.is_null());
 
             let result = alsa::snd_pcm_sw_params_current(pcm_handle, software);
             if result < 0 {
-                println!("snd_pcm_sw_params_current failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_sw_params_current".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
 
             alsa::snd_pcm_sw_params_set_avail_min(pcm_handle, software, MAX_WRITE_FRAMES);
@@ -96,8 +117,12 @@ impl AudioBackend {
 
             let result = alsa::snd_pcm_sw_params(pcm_handle, software);
             if result < 0 {
-                println!("snd_pcm_sw_params failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_sw_params".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
 
             alsa::snd_pcm_sw_params_free(software);
@@ -107,8 +132,12 @@ impl AudioBackend {
             // Prepare for playing
             let result = alsa::snd_pcm_prepare(pcm_handle);
             if result < 0 {
-                println!("snd_pcm_prepare failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_prepare".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             } 
 
             // Write some bytes at the start to prevent buffer underruns
@@ -122,8 +151,12 @@ impl AudioBackend {
                 MAX_WRITE_FRAMES,
             );
             if result < 0 {
-                println!("snd_pcm_writei failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_writei".to_owned().to_owned(),
+                    error_code: result as i64,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
         }
 
@@ -138,7 +171,7 @@ impl AudioBackend {
         &mut self,
         frame_counter: &mut u64,
         mut mix_callback: F,
-    ) -> Result<bool, ()> 
+    ) -> Result<bool, AudioError> 
       where F: FnMut(u64, &mut [SampleData]),
     {
         // ALSA will request enough frames to fill up the entire ring buffer,
@@ -152,24 +185,37 @@ impl AudioBackend {
                 // We did not provide data fast enough, recover
                 let recover_result = alsa::snd_pcm_recover(self.pcm_handle, -32, 1);
                 if recover_result < 0 {
-                    println!("Underrun detected, could not recover");
-                    return Err(()); // We are probably fucked
+                    return Err(AudioError::BadReturn {
+                        function_name: "snd_pcm_recover".to_owned().to_owned(),
+                        error_code: recover_result as i64,
+                        line: line!(),
+                        file: file!(), 
+                    });
                 } else {
 
                     // Try again
                     let retry_result = alsa::snd_pcm_avail_update(self.pcm_handle);
                     if retry_result < 0 {
-                        println!("Underrun detected, recovered but it did not help");
-                        return Err(());
+                        // Recovery did not help, we are screwed
+                        return Err(AudioError::BadReturn {
+                            function_name: "snd_pcm_avail_update".to_owned().to_owned(),
+                            error_code: retry_result,
+                            line: line!(),
+                            file: file!(), 
+                        });
                     } else {
-                        println!("Underrun detected and fixed");
+                        println!("Underrun detected and fixed"); // TODO remove
                         available_frames = retry_result as u64;
                     }
                 }
 
             } else if result < 0 {
-                println!("snd_pcm_avail_delay failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_avail_update".to_owned().to_owned(),
+                    error_code: result,
+                    line: line!(),
+                    file: file!(), 
+                });
             } else {
                 available_frames = result as u64;
             }
@@ -203,15 +249,22 @@ impl AudioBackend {
         *frame_counter += write_frames;
 
         unsafe {
-            // TODO we might also get a underrun here, we probably can recover from that as well!
             let result = alsa::snd_pcm_writei(
                 self.pcm_handle,
                 self.write_buffer.as_ptr() as *const _,
                 write_frames,
             );
-            if result < 0 {
+
+            if result == -32 {
+                println!("Underrun again :/"); // TODO also handle this properly
+            } else if result < 0 {
                 println!("snd_pcm_writei failed: {}", result);
-                return Err(());
+                return Err(AudioError::BadReturn {
+                    function_name: "snd_pcm_writei".to_owned().to_owned(),
+                    error_code: result,
+                    line: line!(),
+                    file: file!(), 
+                });
             }
         }
 

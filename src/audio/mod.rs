@@ -99,9 +99,10 @@ enum MessageToAudioThread {
 
 impl AudioSystem {
     pub fn initialize(window: &Window) -> AudioSystem {
-        // TODO Remove the stupid hack!
         #[cfg(target_os = "windows")]
         let window_handle = window.window_handle() as usize; // Stupid hack
+        #[cfg(not(target_os = "windows"))]
+        let _ = window; // To ignore the warning
 
         let (thread_sender, receiver) = mpsc::channel();
         let (sender, thread_receiver) = mpsc::channel();
@@ -446,7 +447,7 @@ pub enum AudioError {
     // Some function returned a bad value
     BadReturn { 
         function_name: String,
-        error_code: i32,
+        error_code: i64,
         line: u32,
         file: &'static str,
     },
