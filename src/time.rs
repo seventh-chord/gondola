@@ -78,6 +78,25 @@ impl Time {
     pub fn min(self, other: Time) -> Time {
         ::std::cmp::min(self, other)
     }
+
+    /// Interpolates between the two given times. `t = 0` is `self`, and `t = 1` is `other`. Note
+    /// that unlike other lerp functions I commonly use, this one clamps `t` to avoid overflows
+    /// with unsigned integers.
+    pub fn lerp(self, other: Time, t: f32) -> Time {
+        if t <= 0.0 {
+            return self;
+        } else if t >= 1.0 {
+            return other;
+        }
+
+        if self.0 > other.0 {
+            let d = self.0 - other.0;
+            Time(other.0 + (d as f32 * (1.0 - t)) as u64)
+        } else {
+            let d = other.0 - self.0;
+            Time(self.0 + (d as f32 * t) as u64)
+        }
+    }
 }
 
 impl Add for Time {
