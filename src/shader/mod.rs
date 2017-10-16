@@ -92,9 +92,9 @@ impl ShaderPrototype {
         }
 
         Ok(ShaderPrototype {
-            vert_src: vert_src,
-            geom_src: geom_src,
-            frag_src: frag_src,
+            vert_src,
+            geom_src,
+            frag_src,
             transform_feedback_outputs: None,
         })
     }
@@ -102,9 +102,9 @@ impl ShaderPrototype {
     /// Creates a new shader prototype from the given string code literals.
     pub fn new_prototype(vert_src: &str, geom_src: &str, frag_src: &str) -> ShaderPrototype {
         ShaderPrototype {
-            vert_src: String::from(vert_src),
-            geom_src: String::from(geom_src),
-            frag_src: String::from(frag_src),
+            vert_src: vert_src.to_owned(),
+            geom_src: geom_src.to_owned(),
+            frag_src: frag_src.to_owned(),
             transform_feedback_outputs: None,
         }
     }
@@ -164,9 +164,6 @@ impl ShaderPrototype {
 #[derive(Debug)]
 pub struct Shader {
     program: GLuint,
-    vert_shader: GLuint,
-    geom_shader: Option<GLuint>,
-    frag_shader: Option<GLuint>,
     uniforms: RefCell<Vec<(String, Option<GLint>)>>,
 }
 
@@ -179,9 +176,6 @@ impl Shader {
     ) -> Result<Shader, ShaderError> 
     {
         let program;
-        let vert_shader = 0;
-        let frag_shader;
-        let geom_shader;
 
         unsafe {
             program = gl::CreateProgram();
@@ -189,20 +183,22 @@ impl Shader {
             let vert_shader = compile(vert_src, gl::VERTEX_SHADER)?;
             gl::AttachShader(program, vert_shader);
 
-            geom_shader = {
+            let geom_shader = {
                 if let Some(geom_src) = geom_src {
                     let geom_shader = compile(geom_src, gl::GEOMETRY_SHADER)?;
                     gl::AttachShader(program, geom_shader);
+
                     Some(geom_shader)
                 } else {
                     None
                 }
             };
 
-            frag_shader = {
+            let frag_shader = {
                 if let Some(frag_src) = frag_src {
                     let frag_shader = compile(frag_src, gl::FRAGMENT_SHADER)?;
                     gl::AttachShader(program, frag_shader);
+
                     Some(frag_shader)
                 } else {
                     None
@@ -222,6 +218,16 @@ impl Shader {
 
             gl::LinkProgram(program);
 
+            // The specification says that DeleteShader marks the shader as disposable, but does
+            // not delete it until the program is deleted.
+            gl::DeleteShader(vert_shader);
+            if let Some(geom_shader) = geom_shader {
+                gl::DeleteShader(geom_shader);
+            }
+            if let Some(frag_shader) = frag_shader {
+                gl::DeleteShader(frag_shader);
+            }
+
             // Handle errors
             let mut status = gl::FALSE as GLint;
             gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
@@ -234,13 +240,6 @@ impl Shader {
                 gl::GetProgramInfoLog(program, log_len, ptr::null_mut(), buffer.as_mut_ptr() as *mut GLchar);
 
                 gl::DeleteProgram(program);
-                gl::DeleteShader(vert_shader);
-                if let Some(geom_shader) = geom_shader {
-                    gl::DeleteShader(geom_shader);
-                }
-                if let Some(frag_shader) = frag_shader {
-                    gl::DeleteShader(frag_shader);
-                }
 
                 let message = str::from_utf8(&buffer).expect("Shader log was not valid UTF-8").to_string();
                 let message = format!(
@@ -251,14 +250,11 @@ impl Shader {
                     frag_src.unwrap_or(""),
                 );
                 return Err(ShaderError::Link(message));
-            }
+            } 
         }
 
         Ok(Shader {
             program,
-            vert_shader,
-            geom_shader,
-            frag_shader,
             uniforms: RefCell::new(Vec::with_capacity(20)),
         })
     }
@@ -401,13 +397,6 @@ impl Drop for Shader {
     fn drop(&mut self) {
         unsafe {
             gl::DeleteProgram(self.program);
-            gl::DeleteShader(self.vert_shader);
-            if let Some(geom_shader) = self.geom_shader {
-                gl::DeleteShader(geom_shader);
-            }
-            if let Some(frag_shader) = self.frag_shader {
-                gl::DeleteShader(frag_shader);
-            }
         }
     }
 }
