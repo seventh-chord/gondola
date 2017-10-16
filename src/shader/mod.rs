@@ -10,6 +10,7 @@ use std::fs::File;
 use std::path::Path;
 use std::io::{BufRead, BufReader};
 use std::ffi::CString;
+use std::cell::RefCell;
 use std::borrow::Borrow;
 
 use gl;
@@ -160,20 +161,23 @@ impl ShaderPrototype {
 }
 
 /// A OpenGL shader that is ready for use
-#[derive(Debug, Hash)]
+#[derive(Debug)]
 pub struct Shader {
     program: GLuint,
     vert_shader: GLuint,
     geom_shader: Option<GLuint>,
-    frag_shader: Option<GLuint>
+    frag_shader: Option<GLuint>,
+    uniforms: RefCell<Vec<(String, Option<GLint>)>>,
 }
 
 impl Shader {
-    fn new(vert_src: &str,
-           geom_src: Option<&str>,
-           frag_src: Option<&str>,
-           transform_feedback_outputs: Option<Vec<String>>
-           ) -> Result<Shader, ShaderError> {
+    fn new(
+        vert_src: &str,
+        geom_src: Option<&str>,
+        frag_src: Option<&str>,
+        transform_feedback_outputs: Option<Vec<String>>
+    ) -> Result<Shader, ShaderError> 
+    {
         let program;
         let vert_shader = 0;
         let frag_shader;
@@ -251,10 +255,11 @@ impl Shader {
         }
 
         Ok(Shader {
-            program: program,
-            vert_shader: vert_shader,
-            geom_shader: geom_shader,
-            frag_shader: frag_shader,
+            program,
+            vert_shader,
+            geom_shader,
+            frag_shader,
+            uniforms: RefCell::new(Vec::with_capacity(20)),
         })
     }
 
@@ -269,29 +274,39 @@ impl Shader {
 
     /// Note: Shader needs to be bound before call to this! 
     fn get_uniform_location(&self, uniform_name: &str) -> Option<GLint> {
-        unsafe {
+        for &(ref name, location) in self.uniforms.borrow_mut().iter() {
+            if name == uniform_name {
+                return location;
+            }
+        }
+
+        let location = unsafe {
             let c_str = CString::new(uniform_name.as_bytes()).unwrap();
-            let location = gl::GetUniformLocation(self.program, c_str.as_ptr()); 
+            let location = gl::GetUniformLocation(self.program, c_str.as_ptr());
+
             if location == -1 {
                 None
             } else {
                 Some(location)
             }
-        }
+        };
+
+        self.uniforms.borrow_mut().push((uniform_name.to_owned(), location));
+        return location;
     }
 
     /// Sets the uniform with the given name to the given value. This prints a warning if no
     /// uniform with the given name exists.
     pub fn set_uniform<T, U>(&self, uniform_name: &str, value: U) 
-        where T: UniformValue,
-              U: Borrow<T>,
+      where T: UniformValue,
+            U: Borrow<T>,
     {
+        self.bind();
         if let Some(location) = self.get_uniform_location(uniform_name) {
-            self.bind();
             unsafe { T::set_uniform(value.borrow(), location); }
         } else {
             // The reason we simply print a error here is because it sometimes is convenient to
-            // ignore a uniform while refactoring a shader. panicing or returning some result would
+            // ignore a uniform while refactoring a shader. panicking or returning some result would
             // force changing rust code when glsl code is changed, which slows down the development
             // process.
             println!("Invalid uniform name: {}", uniform_name); 
@@ -302,10 +317,10 @@ impl Shader {
     /// the uniform with the given name to be a array. This prints a warning if no uniform with the 
     /// given name exists.
     pub fn set_uniform_slice<T>(&self, uniform_name: &str, slice: &[T]) 
-        where T: UniformValue,
+      where T: UniformValue,
     {
+        self.bind();
         if let Some(location) = self.get_uniform_location(uniform_name) {
-            self.bind();
             unsafe { T::set_uniform_slice(slice, location); }
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
@@ -318,11 +333,11 @@ impl Shader {
     /// will modify the second elment of the positions array.  This prints a warning if no uniform 
     /// with the given name exists.
     pub fn set_uniform_with_offset<T, U>(&self, offset: usize, uniform_name: &str, value: U) 
-        where T: UniformValue,
-              U: Borrow<T>,
+      where T: UniformValue,
+            U: Borrow<T>,
     {
+        self.bind();
         if let Some(location) = self.get_uniform_location(uniform_name) {
-            self.bind();
             unsafe { T::set_uniform(value.borrow(), location + offset as GLint); }
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
