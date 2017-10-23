@@ -30,6 +30,12 @@ impl Timer {
 
         (age, delta)
     }
+
+    /// Finds `time_since_start` but does not affect `time_since_last_tick` which is computed by
+    /// `Timer::tick`.
+    pub fn time(&self) -> Time {
+        (Instant::now() - self.start).into()
+    }
 }
 
 /// Time, stored as nanoseconds
