@@ -1,4 +1,9 @@
 
+// TODO buch of improvements:
+// new() should not allocate, just create a blank buffer. We figure out allocation later
+// ensure_allocated() should avoid copies if we overwrite all the data! (e.g. if we clear first)
+// Don't do Deref polymorphism for `IndexedVertexBuffer`! That is just asking for a bad time!
+
 use super::*;
 use gl;
 use gl::types::*;
@@ -450,4 +455,3 @@ impl<T: Vertex, E: VertexData> DerefMut for IndexedVertexBuffer<T, E>
         &mut self.data
     }
 }
-
