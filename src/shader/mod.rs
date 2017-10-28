@@ -5,7 +5,7 @@
 //! modify the source of a shader. It can then be converted to an actual
 //! [`Shader`](struct.Shader.html) which can be used for rendering.
 
-use std::{ptr, str, fmt, error, io};
+use std::{mem, ptr, str, fmt, error, io};
 use std::fs::File;
 use std::path::Path;
 use std::io::{BufRead, BufReader};
@@ -19,7 +19,7 @@ use util;
 use buffer::Vertex;
 
 mod uniform;
-pub use self::uniform::{UniformValue, UniformBinding};
+pub use self::uniform::{UniformValue, UniformKind, UniformBinding};
 
 /// A shader that has not yet been fully compiled
 pub struct ShaderPrototype {
@@ -283,6 +283,8 @@ impl Shader {
                 // As far as i can tell, glsl identifiers are only allowed to contain a..z, A..Z,
                 // 0..9 and underscores. Therefore, this conversion is just fine
                 let name = util::ascii_to_string(&name_buffer[.. (name_length as usize)]);
+
+                let kind: UniformKind = mem::transmute(kind);
 
                 uniforms.push(UniformBinding { name, location, kind });
             }

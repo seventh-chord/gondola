@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use gl;
 use gl::types::*;
-use shader::UniformValue;
+use shader::{UniformValue, UniformKind};
 use buffer::VertexData;
 
 /// A color with red, green, blue and alpha components. All components are expected to be
@@ -190,7 +190,7 @@ impl VertexData for Color {
 }
 
 impl UniformValue for Color {
-    const KIND: GLenum = gl::FLOAT_VEC4;
+    const KIND: UniformKind = UniformKind::VEC4_F32;
 
     unsafe fn set_uniform(color: &Color, location: GLint) {
         gl::Uniform4f(location, color.r, color.g, color.b, color.a);
