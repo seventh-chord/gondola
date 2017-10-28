@@ -11,12 +11,16 @@ pub struct UniformBinding {
 
 /// Everything which implements this trait can be stured into the uniform value of a shader.
 pub trait UniformValue: Sized {
+    const KIND: GLenum;
+
     unsafe fn set_uniform(data: &Self, location: GLint); 
     unsafe fn set_uniform_slice(slice: &[Self], location: GLint);
 }
 
 // Implementations for vectors and matricies
 impl UniformValue for Vec2<f32> { 
+    const KIND: GLenum = gl::FLOAT_VEC2;
+
     unsafe fn set_uniform(vec: &Vec2<f32>, location: GLint) {
         gl::Uniform2f(location, vec.x, vec.y); 
     }
@@ -27,6 +31,8 @@ impl UniformValue for Vec2<f32> {
 }
 
 impl UniformValue for Vec2<i32> { 
+    const KIND: GLenum = gl::INT_VEC2;
+
     unsafe fn set_uniform(vec: &Vec2<i32>, location: GLint) {
         gl::Uniform2i(location, vec.x, vec.y); 
     }
@@ -37,6 +43,8 @@ impl UniformValue for Vec2<i32> {
 }
 
 impl UniformValue for Vec2<u32> {
+    const KIND: GLenum = gl::UNSIGNED_INT_VEC2;
+
     unsafe fn set_uniform(vec: &Vec2<u32>, location: GLint) {
         gl::Uniform2ui(location, vec.x, vec.y); 
     }
@@ -47,6 +55,8 @@ impl UniformValue for Vec2<u32> {
 }
 
 impl UniformValue for Vec3<f32> { 
+    const KIND: GLenum = gl::FLOAT_VEC3;
+
     unsafe fn set_uniform(vec: &Vec3<f32>, location: GLint) {
         gl::Uniform3f(location, vec.x, vec.y, vec.z); 
     }
@@ -57,6 +67,8 @@ impl UniformValue for Vec3<f32> {
 }
 
 impl UniformValue for Vec3<i32> { 
+    const KIND: GLenum = gl::INT_VEC3;
+
     unsafe fn set_uniform(vec: &Vec3<i32>, location: GLint) {
         gl::Uniform3i(location, vec.x, vec.y, vec.z); 
     }
@@ -67,6 +79,8 @@ impl UniformValue for Vec3<i32> {
 }
 
 impl UniformValue for Vec3<u32> {
+    const KIND: GLenum = gl::UNSIGNED_INT_VEC3;
+
     unsafe fn set_uniform(vec: &Vec3<u32>, location: GLint) {
         gl::Uniform3ui(location, vec.x, vec.y, vec.z); 
     }
@@ -77,6 +91,8 @@ impl UniformValue for Vec3<u32> {
 }
 
 impl UniformValue for Vec4<f32> { 
+    const KIND: GLenum = gl::FLOAT_VEC4;
+
     unsafe fn set_uniform(vec: &Vec4<f32>, location: GLint) {
         gl::Uniform4f(location, vec.x, vec.y, vec.z, vec.w); 
     }
@@ -87,6 +103,8 @@ impl UniformValue for Vec4<f32> {
 }
 
 impl UniformValue for Vec4<i32> { 
+    const KIND: GLenum = gl::INT_VEC4;
+
     unsafe fn set_uniform(vec: &Vec4<i32>, location: GLint) {
         gl::Uniform4i(location, vec.x, vec.y, vec.z, vec.w); 
     }
@@ -97,6 +115,8 @@ impl UniformValue for Vec4<i32> {
 }
 
 impl UniformValue for Vec4<u32> {
+    const KIND: GLenum = gl::UNSIGNED_INT_VEC4;
+
     unsafe fn set_uniform(vec: &Vec4<u32>, location: GLint) {
         gl::Uniform4ui(location, vec.x, vec.y, vec.z, vec.w); 
     }
@@ -107,6 +127,8 @@ impl UniformValue for Vec4<u32> {
 }
 
 impl UniformValue for Mat4<f32> {
+    const KIND: GLenum = gl::FLOAT_MAT4;
+
     unsafe fn set_uniform(mat: &Mat4<f32>, location: GLint) {
         gl::UniformMatrix4fv(location, 1, false as GLboolean, &(mat.a11) as *const GLfloat); 
     }
@@ -118,6 +140,8 @@ impl UniformValue for Mat4<f32> {
 
 // Implementations for f32, i32 and u32 single values and tuples.
 impl UniformValue for f32 {
+    const KIND: GLenum = gl::FLOAT;
+
     unsafe fn set_uniform(value: &f32, location: GLint) {
         gl::Uniform1f(location, *value); 
     }
@@ -128,6 +152,8 @@ impl UniformValue for f32 {
 }
 
 impl UniformValue for (f32, f32) {
+    const KIND: GLenum = gl::FLOAT_VEC2;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform2f(location, value.0, value.1); 
     }
@@ -138,6 +164,8 @@ impl UniformValue for (f32, f32) {
 }
 
 impl UniformValue for (f32, f32, f32) {
+    const KIND: GLenum = gl::FLOAT_VEC3;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform3f(location, value.0, value.1, value.2); 
     }
@@ -148,6 +176,8 @@ impl UniformValue for (f32, f32, f32) {
 }
 
 impl UniformValue for (f32, f32, f32, f32) {
+    const KIND: GLenum = gl::FLOAT_VEC4;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform4f(location, value.0, value.1, value.2, value.3); 
     }
@@ -158,6 +188,8 @@ impl UniformValue for (f32, f32, f32, f32) {
 }
 
 impl UniformValue for i32 {
+    const KIND: GLenum = gl::INT;
+
     unsafe fn set_uniform(value: &i32, location: GLint) {
         gl::Uniform1i(location, *value); 
     }
@@ -168,6 +200,8 @@ impl UniformValue for i32 {
 }
 
 impl UniformValue for (i32, i32) {
+    const KIND: GLenum = gl::INT_VEC2;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform2i(location, value.0, value.1); 
     }
@@ -178,6 +212,8 @@ impl UniformValue for (i32, i32) {
 }
 
 impl UniformValue for (i32, i32, i32) {
+    const KIND: GLenum = gl::INT_VEC3;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform3i(location, value.0, value.1, value.2); 
     }
@@ -188,6 +224,8 @@ impl UniformValue for (i32, i32, i32) {
 }
 
 impl UniformValue for (i32, i32, i32, i32) {
+    const KIND: GLenum = gl::INT_VEC4;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform4i(location, value.0, value.1, value.2, value.3); 
     }
@@ -198,6 +236,8 @@ impl UniformValue for (i32, i32, i32, i32) {
 }
 
 impl UniformValue for u32 {
+    const KIND: GLenum = gl::UNSIGNED_INT;
+
     unsafe fn set_uniform(value: &u32, location: GLint) {
         gl::Uniform1ui(location, *value); 
     }
@@ -208,6 +248,8 @@ impl UniformValue for u32 {
 }
 
 impl UniformValue for (u32, u32) {
+    const KIND: GLenum = gl::UNSIGNED_INT_VEC2;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform2ui(location, value.0, value.1); 
     }
@@ -218,6 +260,8 @@ impl UniformValue for (u32, u32) {
 }
 
 impl UniformValue for (u32, u32, u32) {
+    const KIND: GLenum = gl::UNSIGNED_INT_VEC3;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform3ui(location, value.0, value.1, value.2); 
     }
@@ -228,6 +272,8 @@ impl UniformValue for (u32, u32, u32) {
 }
 
 impl UniformValue for (u32, u32, u32, u32) {
+    const KIND: GLenum = gl::UNSIGNED_INT_VEC4;
+
     unsafe fn set_uniform(value: &Self, location: GLint) {
         gl::Uniform4ui(location, value.0, value.1, value.2, value.3); 
     }

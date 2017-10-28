@@ -190,6 +190,8 @@ impl VertexData for Color {
 }
 
 impl UniformValue for Color {
+    const KIND: GLenum = gl::FLOAT_VEC4;
+
     unsafe fn set_uniform(color: &Color, location: GLint) {
         gl::Uniform4f(location, color.r, color.g, color.b, color.a);
     }

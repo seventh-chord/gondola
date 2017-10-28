@@ -303,10 +303,10 @@ impl Shader {
         }
     }
 
-    fn get_uniform_location(&self, name: &str) -> Option<GLint> {
+    fn get_uniform_binding(&self, name: &str) -> Option<&UniformBinding> {
         for binding in self.uniforms.iter() {
             if binding.name == name {
-                return Some(binding.location);
+                return Some(binding);
             }
         }
 
@@ -321,9 +321,31 @@ impl Shader {
       where T: UniformValue,
             U: Borrow<T>,
     {
-        if let Some(location) = self.get_uniform_location(uniform_name) {
-            self.bind();
-            unsafe { T::set_uniform(value.borrow(), location); }
+        self.set_uniform_with_offset(uniform_name, 0, value);
+    }
+
+    /// Sets the uniform at the given offset from the given name to the given value. When a uniform
+    /// is an array this can be used to set a specific element of that array. For example, if the
+    /// shader contains `uniform vec3 positions[2];`, `set_uniform_with_offset(1, "positions", ...)`
+    /// will modify the second elment of the positions array.  This prints a warning if no uniform 
+    /// with the given name exists.
+    ///
+    /// This binds this shader if the given uniform exists!
+    pub fn set_uniform_with_offset<T, U>(&self, uniform_name: &str, offset: usize, value: U) 
+      where T: UniformValue,
+            U: Borrow<T>,
+    {
+        if let Some(binding) = self.get_uniform_binding(uniform_name) {
+            let value_kind = T::KIND;
+            if binding.kind != value_kind {
+                panic!(
+                    "Tried to set uniform \"{}\" to a `{}`, but the uniform has type `{}`",
+                    binding.name, value_kind, binding.kind,
+                );
+            } else {
+                self.bind();
+                unsafe { T::set_uniform(value.borrow(), binding.location + offset as GLint); }
+            }
         } else {
             // The reason we simply print a error here is because it sometimes is convenient to
             // ignore a uniform while refactoring a shader. panicking or returning some result would
@@ -341,29 +363,22 @@ impl Shader {
     pub fn set_uniform_slice<T>(&self, uniform_name: &str, slice: &[T]) 
       where T: UniformValue,
     {
-        if let Some(location) = self.get_uniform_location(uniform_name) {
-            self.bind();
-            unsafe { T::set_uniform_slice(slice, location); }
+        if let Some(binding) = self.get_uniform_binding(uniform_name) {
+            let value_kind = T::KIND;
+            if binding.kind != value_kind {
+                panic!(
+                    "Tried to set uniform \"{}\" to a `{}`, but the uniform has type `{}`",
+                    binding.name, value_kind, binding.kind,
+                );
+            } else {
+                self.bind();
+                unsafe { T::set_uniform_slice(slice, binding.location); }
+            }
         } else {
-            println!("Invalid uniform name: {}", uniform_name); 
-        }
-    }
-
-    /// Sets the uniform at the given offset from the given name to the given value. When a uniform
-    /// is an array this can be used to set a specific element of that array. For example, if the
-    /// shader contains `uniform vec3 positions[2];`, `set_uniform_with_offset(1, "positions", ...)`
-    /// will modify the second elment of the positions array.  This prints a warning if no uniform 
-    /// with the given name exists.
-    ///
-    /// This binds this shader if the given uniform exists!
-    pub fn set_uniform_with_offset<T, U>(&self, offset: usize, uniform_name: &str, value: U) 
-      where T: UniformValue,
-            U: Borrow<T>,
-    {
-        self.bind();
-        if let Some(location) = self.get_uniform_location(uniform_name) {
-            unsafe { T::set_uniform(value.borrow(), location + offset as GLint); }
-        } else {
+            // The reason we simply print a error here is because it sometimes is convenient to
+            // ignore a uniform while refactoring a shader. panicking or returning some result would
+            // force changing rust code when glsl code is changed, which slows down the development
+            // process.
             println!("Invalid uniform name: {}", uniform_name); 
         }
     }
