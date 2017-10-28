@@ -3,6 +3,12 @@ use gl;
 use gl::types::*;
 use cable_math::{Mat4, Vec2, Vec3, Vec4};
 
+pub struct UniformBinding {
+    pub name: String,
+    pub location: GLint,
+    pub kind: GLenum,
+}
+
 /// Everything which implements this trait can be stured into the uniform value of a shader.
 pub trait UniformValue: Sized {
     unsafe fn set_uniform(data: &Self, location: GLint); 

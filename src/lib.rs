@@ -31,6 +31,8 @@ extern crate rusttype;
 
 extern crate cable_math;
 
+mod util;
+
 mod color;
 mod input;
 mod window;

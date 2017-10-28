@@ -10,19 +10,18 @@ use std::fs::File;
 use std::path::Path;
 use std::io::{BufRead, BufReader};
 use std::ffi::CString;
-use std::cell::RefCell;
 use std::borrow::Borrow;
 
 use gl;
 use gl::types::*;
 
+use util;
 use buffer::Vertex;
 
 mod uniform;
-pub use self::uniform::UniformValue;
+pub use self::uniform::{UniformValue, UniformBinding};
 
 /// A shader that has not yet been fully compiled
-#[derive(Debug)]
 pub struct ShaderPrototype {
     vert_src: String,
     frag_src: String,
@@ -161,10 +160,9 @@ impl ShaderPrototype {
 }
 
 /// A OpenGL shader that is ready for use
-#[derive(Debug)]
 pub struct Shader {
     program: GLuint,
-    uniforms: RefCell<Vec<(String, Option<GLint>)>>,
+    uniforms: Vec<UniformBinding>,
 }
 
 impl Shader {
@@ -176,6 +174,7 @@ impl Shader {
     ) -> Result<Shader, ShaderError> 
     {
         let program;
+        let mut uniforms;
 
         unsafe {
             program = gl::CreateProgram();
@@ -251,11 +250,47 @@ impl Shader {
                 );
                 return Err(ShaderError::Link(message));
             } 
+
+            // Load uniforms
+            let mut uniform_count = 0;
+            gl::GetProgramiv(program, gl::ACTIVE_UNIFORMS, &mut uniform_count);
+
+            uniforms = Vec::with_capacity(uniform_count as usize);
+
+            for index in 0..uniform_count {
+                const MAX_NAME_LENGTH: usize = 512;
+
+                let mut name_length = 0;
+                let mut name_buffer = [0u8; MAX_NAME_LENGTH];
+
+                let mut size = 0;
+                let mut kind = 0;
+
+                gl::GetActiveUniform(
+                    program, index as u32,
+                    MAX_NAME_LENGTH as i32,
+                    &mut name_length,
+                    &mut size,
+                    &mut kind,
+                    name_buffer.as_mut_ptr() as *mut i8,
+                );
+
+                let location = gl::GetUniformLocation(
+                    program,
+                    name_buffer.as_ptr() as *const i8
+                );
+
+                // As far as i can tell, glsl identifiers are only allowed to contain a..z, A..Z,
+                // 0..9 and underscores. Therefore, this conversion is just fine
+                let name = util::ascii_to_string(&name_buffer[.. (name_length as usize)]);
+
+                uniforms.push(UniformBinding { name, location, kind });
+            }
         }
 
         Ok(Shader {
             program,
-            uniforms: RefCell::new(Vec::with_capacity(20)),
+            uniforms,
         })
     }
 
@@ -268,37 +303,26 @@ impl Shader {
         }
     }
 
-    /// Note: Shader needs to be bound before call to this! 
-    fn get_uniform_location(&self, uniform_name: &str) -> Option<GLint> {
-        for &(ref name, location) in self.uniforms.borrow_mut().iter() {
-            if name == uniform_name {
-                return location;
+    fn get_uniform_location(&self, name: &str) -> Option<GLint> {
+        for binding in self.uniforms.iter() {
+            if binding.name == name {
+                return Some(binding.location);
             }
         }
 
-        let location = unsafe {
-            let c_str = CString::new(uniform_name.as_bytes()).unwrap();
-            let location = gl::GetUniformLocation(self.program, c_str.as_ptr());
-
-            if location == -1 {
-                None
-            } else {
-                Some(location)
-            }
-        };
-
-        self.uniforms.borrow_mut().push((uniform_name.to_owned(), location));
-        return location;
+        return None;
     }
 
     /// Sets the uniform with the given name to the given value. This prints a warning if no
     /// uniform with the given name exists.
+    ///
+    /// This binds this shader if the given uniform exists!
     pub fn set_uniform<T, U>(&self, uniform_name: &str, value: U) 
       where T: UniformValue,
             U: Borrow<T>,
     {
-        self.bind();
         if let Some(location) = self.get_uniform_location(uniform_name) {
+            self.bind();
             unsafe { T::set_uniform(value.borrow(), location); }
         } else {
             // The reason we simply print a error here is because it sometimes is convenient to
@@ -312,11 +336,13 @@ impl Shader {
     /// Sets the uniform with the given name to the given slice of values. Note that this expects
     /// the uniform with the given name to be a array. This prints a warning if no uniform with the 
     /// given name exists.
+    ///
+    /// This binds this shader if the given uniform exists!
     pub fn set_uniform_slice<T>(&self, uniform_name: &str, slice: &[T]) 
       where T: UniformValue,
     {
-        self.bind();
         if let Some(location) = self.get_uniform_location(uniform_name) {
+            self.bind();
             unsafe { T::set_uniform_slice(slice, location); }
         } else {
             println!("Invalid uniform name: {}", uniform_name); 
@@ -328,6 +354,8 @@ impl Shader {
     /// shader contains `uniform vec3 positions[2];`, `set_uniform_with_offset(1, "positions", ...)`
     /// will modify the second elment of the positions array.  This prints a warning if no uniform 
     /// with the given name exists.
+    ///
+    /// This binds this shader if the given uniform exists!
     pub fn set_uniform_with_offset<T, U>(&self, offset: usize, uniform_name: &str, value: U) 
       where T: UniformValue,
             U: Borrow<T>,
