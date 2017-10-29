@@ -206,7 +206,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
             self.changed = false;
 
             self.buffer.clear();
-            self.buffer.ensure_allocated(total_vert_count);
+            self.buffer.ensure_allocated(total_vert_count, false);
             for layer in 0..LAYER_COUNT {
                 self.buffer.put(layer_offsets_in_buffer[layer], &self.layers[layer].vertices);
             }

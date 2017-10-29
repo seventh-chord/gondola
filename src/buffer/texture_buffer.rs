@@ -1,4 +1,8 @@
 
+// NB (Morten, 29.10.17) I don't know how much I trust this code. I wrote it once really long ago
+// because I needed to do some sick particle system thing with gpu acceleration. I have not used it
+// since, so it might very well be completly broken or buggy.
+
 use super::*;
 use gl;
 use gl::types::*;
@@ -23,7 +27,7 @@ pub struct TextureBuffer<T: VertexData> {
 impl<T: VertexData> TextureBuffer<T> {
     /// Creates a new texture buffer, preallocating space for 100 vertices.
     pub fn new(access_primitives: usize, usage: BufferUsage) -> TextureBuffer<T> {
-        TextureBuffer::with_capacity(access_primitives, usage, DEFAULT_SIZE)
+        TextureBuffer::from_buffer(access_primitives, PrimitiveBuffer::new(BufferTarget::Array, usage))
     }
 
     /// Creates a new texture buffer, preallocating space for the given number of vertices.

@@ -1,14 +1,11 @@
 
-// TODO buch of improvements:
-// new() should not allocate, just create a blank buffer. We figure out allocation later
-// ensure_allocated() should avoid copies if we overwrite all the data! (e.g. if we clear first)
-// Don't do Deref polymorphism for `IndexedVertexBuffer`! That is just asking for a bad time!
+use std;
+use std::ops::Range;
 
-use super::*;
 use gl;
 use gl::types::*;
-use std;
-use std::ops::{Range, Deref, DerefMut};
+
+use super::*;
 
 /// A GPU buffer which holds a list of a custom vertex type. This struct also has utility methods
 /// for rendering the vertices as primitives.
@@ -122,84 +119,74 @@ pub struct VertexBuffer<T: Vertex> {
 /// [`VertexBuffer`]:        struct.VertexBuffer.html
 /// [`GlIndex`]:             trait.GlIndex.html
 pub struct IndexedVertexBuffer<T: Vertex, E: VertexData> where E::Primitive: GlIndex {
-    data: VertexBuffer<T>,
+    vertices: VertexBuffer<T>,
     indices: PrimitiveBuffer<E>,
 }
 
 impl<T: Vertex> VertexBuffer<T> {
-    /// Creates a new vertex buffer, preallocating space for 100 vertices.
+    /// Creates a new vertex buffer without allocating
     pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> VertexBuffer<T> {
-        VertexBuffer::with_capacity(primitive_mode, usage, DEFAULT_SIZE)
+        let vbo = 0; // Not set yet
+        let mut vao = 0;
+
+        unsafe { gl::GenVertexArrays(1, &mut vao) };
+
+        VertexBuffer {
+            phantom: std::marker::PhantomData,
+            vertex_count: 0,
+            allocated: 0,
+
+            primitive_mode, usage,
+            vbo, vao,
+        }
     }
 
     /// Creates a new vertex buffer, preallocating space for the given number of vertices.
     pub fn with_capacity(primitive_mode: PrimitiveMode, usage: BufferUsage, initial_capacity: usize) -> VertexBuffer<T> {
+        let mut buffer = VertexBuffer::new(primitive_mode, usage);
         let bytes = T::bytes_per_vertex() * initial_capacity;
 
-        let mut vbo = 0;
-        let mut vao = 0;
-
         unsafe {
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(BufferTarget::Array as GLenum, vbo);
+            gl::GenBuffers(1, &mut buffer.vbo);
+            gl::BindBuffer(BufferTarget::Array as GLenum, buffer.vbo);
             gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), usage as GLenum);
 
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-
+            gl::BindVertexArray(buffer.vao);
             T::setup_attrib_pointers();
         }
 
-        VertexBuffer {
-            phantom: std::marker::PhantomData,
+        buffer.vertex_count = 0;
+        buffer.allocated = initial_capacity;
 
-            vertex_count: 0,
-            allocated: initial_capacity,
-
-            primitive_mode: primitive_mode,
-            usage: usage,
-
-            vbo: vbo,
-            vao: vao,
-        }
+        return buffer;
     }
 
     /// Creates a new vertex buffer, storing the given vertices on the GPU.
-    pub fn with_data(primitive_mode: PrimitiveMode, data: &[T]) -> VertexBuffer<T> {
-        let vertices = data.len();
-        let bytes = T::bytes_per_vertex() * vertices;
+    pub fn with_data(primitive_mode: PrimitiveMode, vertices: &[T]) -> VertexBuffer<T> {
+        let usage = BufferUsage::StaticDraw;
+        let mut buffer = VertexBuffer::new(primitive_mode, usage);
 
-        let mut vbo = 0;
-        let mut vao = 0;
+        let vertex_count = vertices.len();
+        let bytes = T::bytes_per_vertex() * vertex_count;
 
         unsafe {
-            gl::GenBuffers(1, &mut vbo);
-            gl::BindBuffer(BufferTarget::Array as GLenum, vbo);
+            gl::GenBuffers(1, &mut buffer.vbo);
+            gl::BindBuffer(BufferTarget::Array as GLenum, buffer.vbo);
             gl::BufferData(
                 BufferTarget::Array as GLenum,
                 bytes as GLsizeiptr,
-                std::mem::transmute(&data[0]),
-                BufferUsage::StaticDraw as GLenum
+                std::mem::transmute(&vertices[0]),
+                usage as GLenum
             );
 
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
-
+            gl::BindVertexArray(buffer.vao);
             T::setup_attrib_pointers();
         }
 
-        VertexBuffer {
-            phantom: std::marker::PhantomData,
+        buffer.vertex_count = vertex_count;
+        buffer.allocated    = vertex_count;
 
-            vertex_count: data.len(),
-            allocated: data.len(),
-
-            primitive_mode: primitive_mode,
-            usage: BufferUsage::StaticDraw,
-
-            vbo: vbo,
-            vao: vao,
-        }
+        return buffer;
     }
 
     /// Puts the given vertices at the start of this buffer, replacing any vertices
@@ -226,9 +213,8 @@ impl<T: Vertex> VertexBuffer<T> {
         let start = index;
         let end = index + data.len();
 
-        if end > self.allocated {
-            self.ensure_allocated(end); // This currently does not allocate extra space
-        }
+        let full_override = start == 0 && end >= self.vertex_count;
+        self.ensure_allocated(end, !full_override);
 
         if end > self.vertex_count {
             self.vertex_count = end;
@@ -264,9 +250,9 @@ impl<T: Vertex> VertexBuffer<T> {
 
     /// Ensures that the capacity of this buffer is `new_capacity`. If necessary, this reallocates
     /// the internal buffer. If the internal buffer is allready big enough this function does
-    /// nothing.  `new_capacity` is in units of `T`.
-    pub fn ensure_allocated(&mut self, new_capacity: usize) {
-        // Only reallocate if necessary
+    /// nothing. `new_capacity` is in units of `T`.
+    /// If `retain_old_data` is `false` this will zero out all data if it decides to reallocate
+    pub fn ensure_allocated(&mut self, new_capacity: usize, retain_old_data: bool) {
         if new_capacity > self.allocated {
             let mut new_buffer = 0;
             let bytes = new_capacity * T::bytes_per_vertex();
@@ -280,14 +266,16 @@ impl<T: Vertex> VertexBuffer<T> {
                 T::setup_attrib_pointers();
 
                 // Copy old data
-                gl::BindBuffer(BufferTarget::CopyRead as GLenum, self.vbo);
-                gl::CopyBufferSubData(
-                    BufferTarget::CopyRead as GLenum,
-                    BufferTarget::Array as GLenum,
-                    0, 0,
-                    (self.vertex_count * T::bytes_per_vertex()) as GLsizeiptr
-                );
-                gl::DeleteBuffers(1, &mut self.vbo);
+                if retain_old_data && self.vbo != 0 {
+                    gl::BindBuffer(BufferTarget::CopyRead as GLenum, self.vbo);
+                    gl::CopyBufferSubData(
+                        BufferTarget::CopyRead as GLenum,
+                        BufferTarget::Array as GLenum,
+                        0, 0,
+                        (self.vertex_count * T::bytes_per_vertex()) as GLsizeiptr
+                    );
+                    gl::DeleteBuffers(1, &mut self.vbo);
+                }
             }
 
             self.vbo = new_buffer;
@@ -328,7 +316,7 @@ impl<T: Vertex> VertexBuffer<T> {
     /// buffer. If `rasterization` is set to false the fragment shader will not be run and no data
     /// will be written to the bound framebuffer.
     pub fn transform_feedback_into<U>(&self, target: &mut VertexBuffer<U>, rasterization: bool) 
-        where U: Vertex,
+      where U: Vertex,
     {
         unsafe {
             if !rasterization { gl::Enable(gl::RASTERIZER_DISCARD); }
@@ -345,36 +333,34 @@ impl<T: Vertex> VertexBuffer<T> {
 }
 
 impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E> 
-    where E::Primitive: GlIndex,
+  where E::Primitive: GlIndex,
 {
     /// Creates a new indexed vertex buffer, preallocating space for 100 vertices and 100 indices.
     pub fn new(primitive_mode: PrimitiveMode, usage: BufferUsage) -> IndexedVertexBuffer<T, E> {
-        IndexedVertexBuffer::with_capacity(primitive_mode, usage, DEFAULT_SIZE, DEFAULT_SIZE)
+        IndexedVertexBuffer {
+            vertices: VertexBuffer::new(primitive_mode, usage),
+            indices:  PrimitiveBuffer::new(BufferTarget::ElementArray, usage),
+        }
     }
 
     /// Creates a new indexed vertex buffer, preallocating space for the given number of vertices
     /// and indices.
     pub fn with_capacity(primitive_mode: PrimitiveMode, usage: BufferUsage, 
                          vertex_capacity: usize, index_capacity: usize) -> IndexedVertexBuffer<T, E> {
-        let data = VertexBuffer::with_capacity(primitive_mode, usage, vertex_capacity);
-        let indices = PrimitiveBuffer::with_capacity(BufferTarget::ElementArray, usage, index_capacity);
-
         IndexedVertexBuffer {
-            data: data,
-            indices: indices,
+            vertices: VertexBuffer::with_capacity(primitive_mode, usage, vertex_capacity), 
+            indices:  PrimitiveBuffer::with_capacity(BufferTarget::ElementArray, usage, index_capacity),
         }
     }
 
     /// Creates a new vertex buffer, storing the given vertices and indices on the GPU.
-    pub fn with_data(primitive_mode: PrimitiveMode, data: &[T], indices: &[E]) -> IndexedVertexBuffer<T, E> {
-        let data = VertexBuffer::with_data(primitive_mode, data);
-        let indices = PrimitiveBuffer::with_data(BufferTarget::ElementArray, indices);
-
+    pub fn with_data(primitive_mode: PrimitiveMode, vertices: &[T], indices: &[E]) -> IndexedVertexBuffer<T, E> {
         IndexedVertexBuffer {
-            data: data,
-            indices: indices,
+            vertices: VertexBuffer::with_data(primitive_mode, vertices),
+            indices:  PrimitiveBuffer::with_data(BufferTarget::ElementArray, indices),
         }
     }
+
 
     /// Puts the given indices at the start of this buffer, replacing any indices
     /// which where previously in that location. This resizes the underlying buffer
@@ -382,12 +368,14 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E>
     pub fn put_indices_at_start(&mut self, data: &[E]) {
         self.indices.put_at_start(data);
     }
+
     /// Puts the given indices at the end of this buffer, behind any data which is
     /// already in it. This resizes the underlying buffer if more space is needed
     /// to store the new data.
     pub fn put_indices_at_end(&mut self, data: &[E]) {
         self.indices.put_at_end(data);
     }
+
     /// Puts the given indices at the given index in this buffer, overwriting any
     /// indices which where previously in that location. This resizes the underlying
     /// buffer if more space is needed to store the new data.
@@ -409,24 +397,75 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E>
     /// The number of indices that can be stored in this buffer without
     /// reallocating memory. 
     pub fn index_capacity(&self) -> usize {
-        self.allocated
+        self.indices.capacity()
     }
 
     /// Sets the number of indices that can be stored in this buffer without
     /// reallocating memory. If the buffer already has capacity for the given
     /// number of indices no space will be allocated.
-    pub fn ensure_indices_allocated(&mut self, new_size: usize) {
-        self.indices.ensure_allocated(new_size);
+    pub fn ensure_indices_allocated(&mut self, new_size: usize, retain_old_data: bool) {
+        self.indices.ensure_allocated(new_size, retain_old_data);
     }
+
+
+    /// Puts the given vertices at the start of this buffer, replacing any vertices
+    /// which where previously in that location. This resizes the underlying buffer
+    /// if more space is needed to store the new data.
+    pub fn put_vertices_at_start(&mut self, data: &[T]) {
+        self.vertices.put_at_start(data);
+    }
+
+    /// Puts the given vertices at the end of this buffer, behind any vertices which are already in
+    /// it. This resizes the underlying buffer if more space is needed to store the new vertices.
+    /// If `retain_old_data` is `false` this will zero out all indices if it decides to reallocate
+    pub fn put_vertices_at_end(&mut self, data: &[T]) {
+        self.vertices.put_at_end(data);
+    }
+
+    /// Puts the given vertices at the given vertex in this buffer, overwriting any
+    /// vertices which where previously in that location. This resizes the underlying
+    /// buffer if more space is needed to store the new vertices.
+    pub fn put_vertices(&mut self, vertex: usize, data: &[T]) {
+        self.vertices.put(vertex, data);
+    }
+
+    /// Empties this buffers vertex buffer, setting its length to 0. This does nothing to the data
+    /// stored in the buffer, it simply marks all current data as invalid.
+    pub fn clear_vertices(&mut self) {
+        self.vertices.clear();
+    }
+
+    /// The number of vertices that are stored in GPU memory.
+    pub fn vertex_len(&self) -> usize {
+        self.vertices.len()
+    }
+
+    /// The number of vertices that can be stored in this buffer without
+    /// reallocating memory.
+    pub fn vertex_capacity(&self) -> usize {
+        self.vertices.capacity()
+    }
+
+    /// Sets the number of vertices that can be stored in this buffer without reallocating memory.
+    /// If the buffer already has capacity for the given number of vertices no space will be
+    /// allocated.
+    /// If `retain_old_data` is `false` this will zero out all data if it decides to reallocate
+    pub fn ensure_vertices_allocated(&mut self, new_size: usize, retain_old_data: bool) {
+        self.vertices.ensure_allocated(new_size, retain_old_data);
+    }
+
 
     /// Draws the contents of this vertex buffer with the primitive mode specified
     /// at construction and the index/element buffer.
     pub fn draw(&self) {
         unsafe {
-            gl::BindVertexArray(self.data.vao);
-            gl::DrawElements(self.data.primitive_mode as GLenum, 
-                             (self.indices.len() * E::primitives()) as GLsizei,
-                             E::Primitive::gl_enum(), std::ptr::null());
+            gl::BindVertexArray(self.vertices.vao);
+            gl::DrawElements(
+                self.vertices.primitive_mode as GLenum,
+                (self.indices.len() * E::primitives()) as GLsizei,
+                E::Primitive::gl_enum(),
+                std::ptr::null(),
+            );
         }
     }
 }
@@ -437,21 +476,5 @@ impl <T: Vertex> Drop for VertexBuffer<T> {
             gl::DeleteBuffers(1, &mut self.vbo);
             gl::DeleteVertexArrays(1, &mut self.vao);
         }
-    }
-}
-
-impl<T: Vertex, E: VertexData> Deref for IndexedVertexBuffer<T, E> 
-    where E::Primitive: GlIndex,
-{
-    type Target = VertexBuffer<T>;
-    fn deref(&self) -> &VertexBuffer<T> {
-        &self.data
-    }
-}
-impl<T: Vertex, E: VertexData> DerefMut for IndexedVertexBuffer<T, E> 
-    where E::Primitive: GlIndex,
-{
-    fn deref_mut(&mut self) -> &mut VertexBuffer<T> {
-        &mut self.data
     }
 }

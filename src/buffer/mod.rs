@@ -27,8 +27,6 @@
 //! [`VertexData`]:             trait.VertexData.html 
 //! [`PrimitiveMode`]:          enum.PrimitiveMode.html
 
-const DEFAULT_SIZE: usize = 100;
-
 mod primitives;
 mod vertex_buffer;
 mod primitive_buffer;

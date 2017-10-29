@@ -33,6 +33,7 @@ impl VertexArray {
         unsafe {
             gl::GenVertexArrays(1, &mut array);
         }
+
         VertexArray {
             array: array,
             index_type: None,
@@ -123,7 +124,14 @@ impl VertexArray {
 impl<T: VertexData> PrimitiveBuffer<T> {
     /// Initializes a new, empty, buffer
     pub fn new(target: BufferTarget, usage: BufferUsage) -> PrimitiveBuffer<T> {
-        PrimitiveBuffer::with_capacity(target, usage, DEFAULT_SIZE)
+        PrimitiveBuffer {
+            phantom: std::marker::PhantomData,
+
+            buffer: 0,
+            target, usage,
+            allocated: 0,
+            primitive_count: 0,
+        }
     }
 
     /// Initializes a new, empty, buffer with capacity for the given number of elements of type `T`.
@@ -134,15 +142,20 @@ impl<T: VertexData> PrimitiveBuffer<T> {
         unsafe {
             gl::GenBuffers(1, &mut buffer);
             gl::BindBuffer(target as GLenum, buffer);
-            gl::BufferData(target as GLenum, bytes as GLsizeiptr, std::ptr::null(), usage as GLenum);
+            gl::BufferData(
+                target as GLenum,
+                bytes as GLsizeiptr,
+                std::ptr::null(),
+                usage as GLenum
+            );
         }
 
         PrimitiveBuffer {
             phantom: std::marker::PhantomData,
 
-            buffer: buffer,
-            target: target,
-            usage: usage,
+            buffer,
+            target,
+            usage,
             allocated: initial_capacity,
             primitive_count: 0,
         }
@@ -160,10 +173,12 @@ impl<T: VertexData> PrimitiveBuffer<T> {
         unsafe {
             gl::GenBuffers(1, &mut buffer);
             gl::BindBuffer(target as GLenum, buffer);
-            gl::BufferData(target as GLenum,
-                           bytes as GLsizeiptr,
-                           std::mem::transmute(&data[0]),
-                           BufferUsage::StaticDraw as GLenum);
+            gl::BufferData(
+                target as GLenum,
+                bytes as GLsizeiptr,
+                std::mem::transmute(&data[0]),
+                BufferUsage::StaticDraw as GLenum
+            );
         }
 
         PrimitiveBuffer {
@@ -204,9 +219,8 @@ impl<T: VertexData> PrimitiveBuffer<T> {
         let start = index;
         let end = index + data.len();
 
-        if end > self.allocated {
-            self.ensure_allocated(end); // This currently does not allocate extra space
-        }
+        let full_override = start == 0 && end >= self.primitive_count;
+        self.ensure_allocated(end, !full_override);
 
         if end > self.primitive_count {
             self.primitive_count = end;
@@ -214,17 +228,20 @@ impl<T: VertexData> PrimitiveBuffer<T> {
 
         unsafe {
             gl::BindBuffer(self.target as GLenum, self.buffer);
-            gl::BufferSubData(self.target as GLenum,
-                              (start * T::bytes()) as GLintptr,
-                              (data.len() * T::bytes()) as GLsizeiptr,
-                              std::mem::transmute(&data[0]));
+            gl::BufferSubData(
+                self.target as GLenum,
+                (start * T::bytes()) as GLintptr,
+                (data.len() * T::bytes()) as GLsizeiptr,
+                std::mem::transmute(&data[0])
+            );
         }
     }
     
-    /// Sets the number of vertices that can be stored in this buffer without
-    /// reallocating memory. If the buffer already has capacity for the given
-    /// number of vertices no space will be allocated.
-    pub fn ensure_allocated(&mut self, new_size: usize) {
+    /// Sets the number of vertices that can be stored in this buffer without reallocating memory.
+    /// If the buffer already has capacity for the given number of vertices no space will be
+    /// allocated.
+    /// If `retain_old_data` is `false` this will zero out all data if it decides to reallocate
+    pub fn ensure_allocated(&mut self, new_size: usize, retain_old_data: bool) {
         // Only reallocate if necessary
         if new_size > self.allocated {
             let bytes = new_size * T::bytes();
@@ -237,14 +254,16 @@ impl<T: VertexData> PrimitiveBuffer<T> {
                 gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), self.usage as GLenum);
 
                 // Copy old data
-                gl::BindBuffer(BufferTarget::CopyRead as GLenum, self.buffer);
-                gl::CopyBufferSubData(
-                    BufferTarget::CopyRead as GLenum,
-                    BufferTarget::Array as GLenum,
-                    0, 0,
-                    (self.primitive_count*T::bytes()) as GLsizeiptr
-                );
-                gl::DeleteBuffers(1, &mut self.buffer);
+                if retain_old_data && self.buffer != 0 {
+                    gl::BindBuffer(BufferTarget::CopyRead as GLenum, self.buffer);
+                    gl::CopyBufferSubData(
+                        BufferTarget::CopyRead as GLenum,
+                        BufferTarget::Array as GLenum,
+                        0, 0,
+                        (self.primitive_count*T::bytes()) as GLsizeiptr
+                    );
+                    gl::DeleteBuffers(1, &mut self.buffer);
+                }
             }
 
             self.buffer = new_vbo;
@@ -262,10 +281,15 @@ impl<T: VertexData> PrimitiveBuffer<T> {
         self.primitive_count
     }
     
+    /// The number of whole bytes allocated, divided by the number of bytes per `T`
+    pub fn capacity(&self) -> usize {
+        self.allocated
+    }
+    
     /// The number of primitives stored in this buffer. Note that a single `T` may contain
     /// multiple primitives. For example, a `Vec3<f32>` contains three primitives.
     pub fn primitives(&self) -> usize {
-        self.len() * T::primitives()
+        self.primitive_count * T::primitives()
     }
 
     /// The number of bytes stored in this buffer.
