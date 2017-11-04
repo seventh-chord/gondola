@@ -1,14 +1,17 @@
 
-use super::*;
+use std::{mem, ptr};
+use std::ops::Range;
+use std::marker::PhantomData;
+
 use gl;
 use gl::types::*;
-use std;
-use std::ops::Range;
+
+use super::*;
 
 /// A GPU buffer which holds a set of primitives (floats, bytes or integers). These primitives
 /// can be rendered using a [`VertexArray`](struct.VertexArray.html).
 pub struct PrimitiveBuffer<T: VertexData> {
-    phantom: std::marker::PhantomData<T>,
+    phantom: PhantomData<T>,
 
     pub(super) buffer: GLuint,
     target: BufferTarget,
@@ -42,32 +45,51 @@ impl VertexArray {
 
     /// Adds a buffer from which this vertex array will pull data when drawing
     ///
-    /// # Parameters
-    /// - `index`:  The vertex attribute index to which this data source will be bound. This is
-    ///             used from glsl through `layout(location = index) in ...;`
-    /// - `size`:   The number of primitives per vertex to use. e.g.: `3` means pull sets of three
-    ///             vertices from the source and present them as a `vec3` in glsl.
-    /// - `stride`: The distance from the start of the first vertex to the start of the next
-    ///             vertex. e.g.: If you have a buffer with the contents 
-    ///             `[x, y, z, r, g, b, x, y, z, r, g, b]`, you could use a stride of `6` to
-    ///             indicate that you have to advance 6 primitives to get from one color to the
-    ///             next color.
-    /// - `offset`: The number of primitives at the beginning of the source to skip.
-    pub fn add_data_source<T>(&mut self, source: &PrimitiveBuffer<T>, 
-                              index: usize, size: usize, 
-                              stride: usize, offset: usize) 
-        where T: VertexData
+    /// `index` specifies the vertex attribute index to which this data source will be bound. This
+    /// is used from glsl through `layout(location = index) in ...;`
+    ///
+    /// `size` specifies the number of primitives per vertex to use. e.g.: `3` means pull sets of
+    /// three vertices from the source and present them as a `vec3` in glsl.
+    ///
+    /// `stride` gives the distance from the start of the first vertex to the start of the next
+    /// vertex. e.g.: If you have a buffer with the contents `[x, y, z, r, g, b, x, y, z, r, g,
+    /// b]`, you could use a stride of `6` to indicate that you have to advance 6 primitives to get
+    /// from one color to the next color.
+    ///
+    /// `offset` is the number of primitives at the beginning of the source to skip.
+    ///
+    /// *NB* Both `stride` and `offset` are in units of `T::Primitive`!
+    ///
+    ///
+    /// `divisor` specifis whether to use one value per vertex (`0`), one value for each instance
+    /// (`1`), one value for every two instances (`2`), etc.
+    pub fn add_data_source<T>(
+        &mut self,
+        source: &PrimitiveBuffer<T>,
+        index:   u32, 
+        size:    u32, 
+        stride:  u32,
+        offset:  u32,
+        divisor: u32,
+    ) 
+      where T: VertexData
     {
         source.bind();
-
-        unsafe {
+        unsafe { 
             gl::BindVertexArray(self.array);
-            gl::EnableVertexAttribArray(index as GLuint);
 
-            gl::VertexAttribPointer(index as GLuint, size as GLint,
-                                    T::Primitive::gl_enum(), false as GLboolean,
-                                    (stride * T::bytes()) as GLsizei, 
-                                    (offset * T::bytes()) as *const GLvoid);
+            gl::EnableVertexAttribArray(index);
+
+            let primitive_bytes = mem::size_of::<T::Primitive>() as u32;
+
+            gl::VertexAttribPointer(
+                index, size as GLint,
+                T::Primitive::gl_enum(), false as GLboolean,
+                (stride * primitive_bytes) as GLsizei, 
+                (offset * primitive_bytes) as *const GLvoid
+            );
+
+            gl::VertexAttribDivisor(index, divisor);
         }
     }
 
@@ -80,8 +102,8 @@ impl VertexArray {
     /// [`VertexData::Primitive`]: trait.VertexData.html#associatedtype.Primitive
     /// [`draw_elements`]:         #method.draw_elements
     pub fn set_index_buffer<T>(&mut self, buffer: &PrimitiveBuffer<T>) 
-        where T: VertexData,
-              T::Primitive: GlIndex,
+      where T: VertexData,
+            T::Primitive: GlIndex,
     {
         unsafe {
             gl::BindVertexArray(self.array);
@@ -98,7 +120,23 @@ impl VertexArray {
     pub fn draw(&self, mode: PrimitiveMode, range: Range<usize>) {
         unsafe {
             gl::BindVertexArray(self.array);
-            gl::DrawArrays(mode as GLenum, range.start as GLint, (range.end - range.start) as GLsizei);
+            gl::DrawArrays(
+                mode as GLenum,
+                range.start as GLint,
+                (range.end - range.start) as GLsizei
+            );
+        }
+    }
+
+    pub fn draw_instanced(&self, mode: PrimitiveMode, range: Range<usize>, instances: usize) {
+        unsafe {
+            gl::BindVertexArray(self.array);
+            gl::DrawArraysInstanced(
+                mode as GLenum,
+                range.start as GLint,
+                (range.end - range.start) as GLsizei,
+                instances as GLsizei
+            );
         }
     }
 
@@ -113,7 +151,7 @@ impl VertexArray {
         if let Some(index_type) = self.index_type {
             unsafe {
                 gl::BindVertexArray(self.array);
-                gl::DrawElements(mode as GLenum, count as GLsizei, index_type, std::ptr::null());
+                gl::DrawElements(mode as GLenum, count as GLsizei, index_type, ptr::null());
             }
         } else {
             panic!("VertexArray::draw_elements called without a valid index buffer set!");
@@ -125,7 +163,7 @@ impl<T: VertexData> PrimitiveBuffer<T> {
     /// Initializes a new, empty, buffer
     pub fn new(target: BufferTarget, usage: BufferUsage) -> PrimitiveBuffer<T> {
         PrimitiveBuffer {
-            phantom: std::marker::PhantomData,
+            phantom: PhantomData,
 
             buffer: 0,
             target, usage,
@@ -145,13 +183,13 @@ impl<T: VertexData> PrimitiveBuffer<T> {
             gl::BufferData(
                 target as GLenum,
                 bytes as GLsizeiptr,
-                std::ptr::null(),
+                ptr::null(),
                 usage as GLenum
             );
         }
 
         PrimitiveBuffer {
-            phantom: std::marker::PhantomData,
+            phantom: PhantomData,
 
             buffer,
             target,
@@ -176,13 +214,13 @@ impl<T: VertexData> PrimitiveBuffer<T> {
             gl::BufferData(
                 target as GLenum,
                 bytes as GLsizeiptr,
-                std::mem::transmute(&data[0]),
+                mem::transmute(&data[0]),
                 BufferUsage::StaticDraw as GLenum
             );
         }
 
         PrimitiveBuffer {
-            phantom: std::marker::PhantomData,
+            phantom: PhantomData,
 
             buffer: buffer,
             target: target,
@@ -232,7 +270,7 @@ impl<T: VertexData> PrimitiveBuffer<T> {
                 self.target as GLenum,
                 (start * T::bytes()) as GLintptr,
                 (data.len() * T::bytes()) as GLsizeiptr,
-                std::mem::transmute(&data[0])
+                mem::transmute(&data[0])
             );
         }
     }
@@ -251,7 +289,7 @@ impl<T: VertexData> PrimitiveBuffer<T> {
             unsafe {
                 gl::GenBuffers(1, &mut new_vbo);
                 gl::BindBuffer(BufferTarget::Array as GLenum, new_vbo);
-                gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), self.usage as GLenum);
+                gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, ptr::null(), self.usage as GLenum);
 
                 // Copy old data
                 if retain_old_data && self.buffer != 0 {

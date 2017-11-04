@@ -6,11 +6,7 @@
 // end up overwriting the original data in the texture with new data before rendering. If this
 // happens we can probably solve the problem by simply increasing the cache texture size.
 
-use gl;
-use gl::types::*;
-use rusttype;
-use rusttype::{Scale, point, GlyphId, PositionedGlyph};
-use rusttype::gpu_cache::*;
+use std::mem;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
@@ -18,10 +14,15 @@ use std::fs::File;
 use std::str::Chars;
 use std::ops::Range;
 
+use gl;
+use rusttype;
+use rusttype::{Scale, point, GlyphId, PositionedGlyph};
+use rusttype::gpu_cache::*;
+
 use cable_math::Vec2;
 
 use texture::{Texture, SwizzleComp, TextureFormat};
-use buffer::Vertex;
+use buffer::{AttribBinding, Vertex};
 use color::Color;
 
 const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture size: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_TEXTURE_SIZE
@@ -450,22 +451,39 @@ struct FontVert {
 // We cannot use the custom derive from within this crate
 impl Vertex for FontVert {
     fn bytes_per_vertex() -> usize { ::std::mem::size_of::<FontVert>() }
-    fn setup_attrib_pointers() {
+    fn setup_attrib_pointers(divisor: usize) {
         let stride = Self::bytes_per_vertex();
-        unsafe {
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(0, 2, gl::FLOAT,
-                                    false as GLboolean,
-                                    stride as GLsizei, 0 as *const GLvoid);
-            gl::EnableVertexAttribArray(1);
-            gl::VertexAttribPointer(1, 2, gl::FLOAT,
-                                    false as GLboolean,
-                                    stride as GLsizei, 8 as *const GLvoid);
-            gl::EnableVertexAttribArray(2);
-            gl::VertexAttribPointer(2, 4, gl::FLOAT,
-                                    false as GLboolean,
-                                    stride as GLsizei, 16 as *const GLvoid);
-        }
+        let mut offset = 0;
+
+        AttribBinding {
+            index: 0,
+            primitives: 2,
+            primitive_type: gl::FLOAT,
+            normalized: false,
+            integer: false,
+            stride, offset, divisor,
+        }.enable();
+        offset += mem::size_of::<Vec2<f32>>();
+
+        AttribBinding {
+            index: 1,
+            primitives: 2,
+            primitive_type: gl::FLOAT,
+            normalized: false,
+            integer: false,
+            stride, offset, divisor,
+        }.enable();
+        offset += mem::size_of::<Vec2<f32>>();
+
+        AttribBinding {
+            index: 2,
+            primitives: 4,
+            primitive_type: gl::FLOAT,
+            normalized: false,
+            integer: false,
+            stride, offset, divisor,
+        }.enable();
+
     }
     // Not used, we manualy declare inputs in the shader
     fn gen_shader_input_decl(_name_prefix: &str) -> String { String::new() }

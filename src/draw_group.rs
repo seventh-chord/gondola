@@ -14,7 +14,7 @@ use graphics;
 use Region;
 use shader::{ShaderPrototype, Shader};
 use texture::{Texture, TextureFormat};
-use buffer::{Vertex, PrimitiveMode, BufferUsage, VertexBuffer};
+use buffer::{AttribBinding, Vertex, PrimitiveMode, BufferUsage, VertexBuffer};
 use font::{Font, AsFontVert};
 
 // This could be a const generic in the future, but that is not implemented in rust yet
@@ -921,33 +921,44 @@ impl Vertex for Vert {
         mem::size_of::<Vert>() 
     }
 
-    fn setup_attrib_pointers() {
+    fn setup_attrib_pointers(divisor: usize) {
         use std::mem;
 
         use gl;
-        use gl::types::*; 
 
         let stride = <Vert as Vertex>::bytes_per_vertex();
         let mut offset = 0;
-        unsafe {
-            gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(0, 2, gl::FLOAT,
-                                    false as GLboolean,
-                                    stride as GLsizei, offset as *const GLvoid);
-            offset += mem::size_of::<Vec2<f32>>();
 
-            gl::EnableVertexAttribArray(1);
-            gl::VertexAttribPointer(1, 2, gl::FLOAT,
-                                    false as GLboolean,
-                                    stride as GLsizei, offset as *const GLvoid);
-            offset += mem::size_of::<Vec2<f32>>();
+        AttribBinding {
+            index: 0,
+            primitives: 2,
+            primitive_type: gl::FLOAT,
+            normalized: false,
+            integer: false,
+            stride, offset, divisor,
+        }.enable();
+        offset += mem::size_of::<Vec2<f32>>();
 
-            gl::EnableVertexAttribArray(2);
-            gl::VertexAttribPointer(2, 4, gl::FLOAT,
-                                    false as GLboolean,
-                                    stride as GLsizei, offset as *const GLvoid);
-        }
+        AttribBinding {
+            index: 1,
+            primitives: 2,
+            primitive_type: gl::FLOAT,
+            normalized: false,
+            integer: false,
+            stride, offset, divisor,
+        }.enable();
+        offset += mem::size_of::<Vec2<f32>>();
+
+        AttribBinding {
+            index: 2,
+            primitives: 4,
+            primitive_type: gl::FLOAT,
+            normalized: false,
+            integer: false,
+            stride, offset, divisor,
+        }.enable();
     }
+
     // Not used, we manualy declare inputs in the shader
     fn gen_shader_input_decl(_name_prefix: &str) -> String { String::new() }
     fn gen_transform_feedback_decl(_name_prefix: &str) -> String { String::new() }

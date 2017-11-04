@@ -2,7 +2,7 @@
 use std::ops::{Add, Sub, Mul, Div};
 use std::ops::{MulAssign, DivAssign};
 
-use vec::Vec3;
+use vec::{Vec3, Vec4};
 use mat::{Mat4, Mat3};
 use traits::{Number, Float};
 
@@ -265,6 +265,12 @@ impl<T: Number + Float> From<Quaternion<T>> for Mat4<T> {
 impl<T: Number + Float> From<Quaternion<T>> for Mat3<T> {
     fn from(quat: Quaternion<T>) -> Mat3<T> {
         Mat3::from_quaternion(quat.x, quat.y, quat.z, quat.w)
+    }
+}
+
+impl<T: Number + Float> From<Quaternion<T>> for Vec4<T> {
+    fn from(quat: Quaternion<T>) -> Vec4<T> {
+        Vec4::new(quat.x, quat.y, quat.z, quat.w)
     }
 }
 

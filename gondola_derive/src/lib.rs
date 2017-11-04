@@ -45,7 +45,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                             integer: <<#ty as ::gondola::buffer::VertexData>::Primitive as ::gondola::buffer::GlPrimitive>::is_integer(),
                             stride: stride,
                             offset: offset,
-                            divisor: 0,
+                            divisor,
                         }.enable();
 
                         index += 1;
@@ -138,7 +138,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                         #bytes_per_vertex_impl
                     }
 
-                    fn setup_attrib_pointers() {
+                    fn setup_attrib_pointers(divisor: usize) {
                         #setup_attrib_pointers_impl
                     }
 

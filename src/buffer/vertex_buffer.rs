@@ -152,7 +152,7 @@ impl<T: Vertex> VertexBuffer<T> {
             gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), usage as GLenum);
 
             gl::BindVertexArray(buffer.vao);
-            T::setup_attrib_pointers();
+            T::setup_attrib_pointers(0);
         }
 
         buffer.vertex_count = 0;
@@ -180,7 +180,7 @@ impl<T: Vertex> VertexBuffer<T> {
             );
 
             gl::BindVertexArray(buffer.vao);
-            T::setup_attrib_pointers();
+            T::setup_attrib_pointers(0);
         }
 
         buffer.vertex_count = vertex_count;
@@ -263,7 +263,7 @@ impl<T: Vertex> VertexBuffer<T> {
                 gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), self.usage as GLenum);
 
                 gl::BindVertexArray(self.vao);
-                T::setup_attrib_pointers();
+                T::setup_attrib_pointers(0);
 
                 // Copy old data
                 if retain_old_data && self.vbo != 0 {
