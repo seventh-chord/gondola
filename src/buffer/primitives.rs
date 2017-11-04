@@ -102,69 +102,77 @@ pub enum BufferTarget {
 /// [`Vertex`]:          trait.Vertex.html
 /// [`VertexData`]:      trait.VertexData.html
 pub trait GlPrimitive: Sized {
-    fn glsl_scalar_name() -> &'static str;
-    fn glsl_vec_name() -> &'static str;
-    fn rust_name() -> &'static str;
-    fn gl_name() -> &'static str;
-    fn gl_enum() -> GLenum;
-    fn is_integer() -> bool;
+    const GLSL_SCALAR_NAME: &'static str;
+    const GLSL_VEC_NAME:    &'static str;
+    const RUST_NAME:        &'static str;
+    const GL_NAME:          &'static str;
+
+    const GL_ENUM: GLenum;
+    const IS_INTEGER: bool;
 }
 
 impl GlPrimitive for GLfloat {
-    fn glsl_scalar_name() -> &'static str { "float" }
-    fn glsl_vec_name() -> &'static str    { "vec" }
-    fn rust_name() -> &'static str { "f32" }
-    fn gl_name() -> &'static str   { "GLfloat" }
-    fn gl_enum() -> GLenum { gl::FLOAT }
-    fn is_integer() -> bool { false }
+    const GLSL_SCALAR_NAME: &'static str = "float";
+    const GLSL_VEC_NAME:    &'static str = "vec";
+    const RUST_NAME:        &'static str = "f32";
+    const GL_NAME:          &'static str = "GLfloat";
+
+    const GL_ENUM: GLenum  = gl::FLOAT;
+    const IS_INTEGER: bool = false;
 }
 impl GlPrimitive for GLint {
-    fn glsl_scalar_name() -> &'static str { "int" }
-    fn glsl_vec_name() -> &'static str    { "ivec" }
-    fn rust_name() -> &'static str { "i32" }
-    fn gl_name() -> &'static str   { "GLint" }
-    fn gl_enum() -> GLenum { gl::INT }
-    fn is_integer() -> bool { true }
+    const GLSL_SCALAR_NAME: &'static str = "int";
+    const GLSL_VEC_NAME:    &'static str    = "ivec";
+    const RUST_NAME:        &'static str = "i32";
+    const GL_NAME:          &'static str = "GLint";
+
+    const GL_ENUM: GLenum  = gl::INT;
+    const IS_INTEGER: bool = true;
 }
 impl GlPrimitive for GLshort {
-    fn glsl_scalar_name() -> &'static str { "int" }
-    fn glsl_vec_name() -> &'static str    { "ivec" }
-    fn rust_name() -> &'static str { "i16" }
-    fn gl_name() -> &'static str   { "GLshort" }
-    fn gl_enum() -> GLenum { gl::SHORT }
-    fn is_integer() -> bool { true }
+    const GLSL_SCALAR_NAME: &'static str = "int";
+    const GLSL_VEC_NAME:    &'static str    = "ivec";
+    const RUST_NAME:        &'static str = "i16";
+    const GL_NAME:          &'static str = "GLshort";
+
+    const GL_ENUM: GLenum  = gl::SHORT;
+    const IS_INTEGER: bool = true;
 }
 impl GlPrimitive for GLbyte {
-    fn glsl_scalar_name() -> &'static str { "int" }
-    fn glsl_vec_name() -> &'static str    { "ivec" }
-    fn rust_name() -> &'static str { "i8" }
-    fn gl_name() -> &'static str   { "GLbyte" }
-    fn gl_enum() -> GLenum { gl::BYTE }
-    fn is_integer() -> bool { true }
+    const GLSL_SCALAR_NAME: &'static str = "int";
+    const GLSL_VEC_NAME:    &'static str    = "ivec";
+    const RUST_NAME:        &'static str = "i8";
+    const GL_NAME:          &'static str = "GLbyte";
+
+    const GL_ENUM: GLenum  = gl::BYTE;
+    const IS_INTEGER: bool = true;
 }
 impl GlPrimitive for GLuint {
-    fn glsl_scalar_name() -> &'static str { "uint" }
-    fn glsl_vec_name() -> &'static str    { "uvec" }
-    fn rust_name() -> &'static str { "u32" }
-    fn gl_name() -> &'static str   { "GLuint" }
-    fn gl_enum() -> GLenum { gl::UNSIGNED_INT }
-    fn is_integer() -> bool { true }
+    const GLSL_SCALAR_NAME: &'static str = "uint";
+    const GLSL_VEC_NAME:    &'static str    = "uvec";
+    const RUST_NAME:        &'static str = "u32";
+    const GL_NAME:          &'static str = "GLuint";
+
+    const GL_ENUM: GLenum  = gl::UNSIGNED_INT;
+    const IS_INTEGER: bool = true;
 }
 impl GlPrimitive for GLushort {
-    fn glsl_scalar_name() -> &'static str { "uint" }
-    fn glsl_vec_name() -> &'static str    { "uvec" }
-    fn rust_name() -> &'static str { "u16" }
-    fn gl_name() -> &'static str   { "GLushort" }
-    fn gl_enum() -> GLenum { gl::UNSIGNED_SHORT }
-    fn is_integer() -> bool { true }
+    const GLSL_SCALAR_NAME: &'static str = "uint";
+    const GLSL_VEC_NAME:    &'static str    = "uvec";
+    const RUST_NAME:        &'static str = "u16";
+    const GL_NAME:          &'static str = "GLushort";
+
+    const GL_ENUM: GLenum  = gl::UNSIGNED_SHORT;
+    const IS_INTEGER: bool = true;
 }
 impl GlPrimitive for GLubyte {
-    fn glsl_scalar_name() -> &'static str { "uint" }
-    fn glsl_vec_name() -> &'static str    { "uvec" }
-    fn rust_name() -> &'static str { "u8" }
-    fn gl_name() -> &'static str   { "GLubyte" }
-    fn gl_enum() -> GLenum { gl::UNSIGNED_BYTE }
-    fn is_integer() -> bool { true }
+    const GLSL_SCALAR_NAME: &'static str = "uint";
+    const GLSL_VEC_NAME:    &'static str    = "uvec";
+    const RUST_NAME:        &'static str = "u8";
+    const GL_NAME:          &'static str = "GLubyte";
+
+    const GL_ENUM: GLenum  = gl::UNSIGNED_BYTE;
+    const IS_INTEGER: bool = true;
 }
 
 /// This trait is used to mark types which can be used as indices in e.g. a element/index buffer.
@@ -257,16 +265,16 @@ pub trait VertexData: Sized {
         let mut result = String::with_capacity(6);
 
         if primitives == 1 {
-            result.push_str(Self::Primitive::glsl_scalar_name());
+            result.push_str(Self::Primitive::GLSL_SCALAR_NAME);
         } else if primitives > 1 && primitives <= 4 {
-            result.push_str(Self::Primitive::glsl_vec_name());
+            result.push_str(Self::Primitive::GLSL_VEC_NAME);
             result.push_str(&primitives.to_string());
         }
 
         if result.is_empty() {
             panic!("Invalid VertexData: {} primitives of type {}/{} are not supported for glsl yet (At {}:{})", 
                    primitives,
-                   Self::Primitive::rust_name(), Self::Primitive::gl_name(),
+                   Self::Primitive::RUST_NAME, Self::Primitive::GL_NAME,
                    file!(), line!());
         }
 

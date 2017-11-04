@@ -331,11 +331,11 @@ impl Framebuffer {
             );
         }
 
-        if T::Primitive::gl_enum() != format.gl_primitive_enum() {
+        if T::Primitive::GL_ENUM != format.gl_primitive_enum() {
             panic!(
                 "Invalid call to get_pixel_data. T has a different primitive type than color \
                 attachment {}. ({} vs {})",
-                index, T::Primitive::gl_name(), format.gl_primitive_enum_name(),
+                index, T::Primitive::GL_NAME, format.gl_primitive_enum_name(),
             );
         }
 

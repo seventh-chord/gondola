@@ -463,7 +463,7 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E>
             gl::DrawElements(
                 self.vertices.primitive_mode as GLenum,
                 (self.indices.len() * E::primitives()) as GLsizei,
-                E::Primitive::gl_enum(),
+                E::Primitive::GL_ENUM,
                 std::ptr::null(),
             );
         }

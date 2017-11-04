@@ -57,15 +57,17 @@ impl<T: VertexData> TextureBuffer<T> {
                 T::primitives(), access_primitives);
 
         let mut texture = 0;
-        let format = match (T::Primitive::gl_enum(), access_primitives) {
+        let format = match (T::Primitive::GL_ENUM, access_primitives) {
             (gl::FLOAT, 1) => gl::R32F,
             (gl::FLOAT, 2) => gl::RG32F,
             (gl::FLOAT, 3) => gl::RGB32F,
             (gl::FLOAT, 4) => gl::RGBA32F,
             // I cant be bothered to implement other types as I probably never will use them. This
             // should be trivial to extend if you get a panic.
-            _ => panic!("Invalid vertex data for texture buffer (access_primitives: {}, type: {})",
-                        access_primitives, T::Primitive::rust_name() ),
+            _ => panic!(
+                "Invalid vertex data for texture buffer (access_primitives: {}, type: {})",
+                access_primitives, T::Primitive::RUST_NAME
+            ),
         };
 
         unsafe {

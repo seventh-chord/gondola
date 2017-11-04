@@ -63,6 +63,9 @@ impl VertexArray {
     ///
     /// `divisor` specifis whether to use one value per vertex (`0`), one value for each instance
     /// (`1`), one value for every two instances (`2`), etc.
+    ///
+    /// NB (Morten, 04.11.17) Currently, this does not work for integer primitives! In that case,
+    /// we need to call `glVertexAttribIPointer` instead!
     pub fn add_data_source<T>(
         &mut self,
         source: &PrimitiveBuffer<T>,
@@ -74,6 +77,8 @@ impl VertexArray {
     ) 
       where T: VertexData
     {
+        assert!(!T::Primitive::IS_INTEGER); // See end of doc comment
+
         source.bind();
         unsafe { 
             gl::BindVertexArray(self.array);
@@ -84,7 +89,7 @@ impl VertexArray {
 
             gl::VertexAttribPointer(
                 index, size as GLint,
-                T::Primitive::gl_enum(), false as GLboolean,
+                T::Primitive::GL_ENUM, false as GLboolean,
                 (stride * primitive_bytes) as GLsizei, 
                 (offset * primitive_bytes) as *const GLvoid
             );
@@ -110,7 +115,7 @@ impl VertexArray {
             buffer.bind();
         } 
 
-        self.index_type = Some(T::Primitive::gl_enum());
+        self.index_type = Some(T::Primitive::GL_ENUM);
     }
 
     /// Draws the given type of primitive with the data in the graphics buffers bound to this vertex 
