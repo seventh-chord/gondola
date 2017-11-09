@@ -1,9 +1,11 @@
 
 //! Basic types used in all buffers
 
+use std::mem;
+
 use gl;
 use gl::types::*;
-use std::mem::size_of;
+
 use cable_math::{Vec2, Vec3, Vec4, Mat4};
 
 /// Represents different types of primitives which can be drawn on the GPU.
@@ -247,14 +249,14 @@ pub trait VertexData: Sized {
 
     /// The total number of bytes one of these components takes.
     fn bytes() -> usize {
-        size_of::<Self>()
+        mem::size_of::<Self>()
     }
 
     /// The total number of primitives one of these components provides (e.g. 4 for a `Vec4<T>`).
     fn primitives() -> usize {
-        assert_eq!(size_of::<Self>() % size_of::<Self::Primitive>(), 0);
+        assert_eq!(mem::size_of::<Self>() % mem::size_of::<Self::Primitive>(), 0);
 
-        size_of::<Self>() / size_of::<Self::Primitive>()
+        mem::size_of::<Self>() / mem::size_of::<Self::Primitive>()
     }
 
     /// Generates the type that would be used to represent this component in a
