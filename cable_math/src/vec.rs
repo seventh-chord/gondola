@@ -64,8 +64,12 @@ impl<T: Number> Vec2<T> {
         a.x*b.x + a.y*b.y
     }
 
-    pub fn entrywise(a: Vec2<T>, b: Vec2<T>) -> Vec2<T> {
+    pub fn componentwise_multiply(a: Vec2<T>, b: Vec2<T>) -> Vec2<T> {
         Vec2::new(a.x*b.x, a.y*b.y)
+    }
+
+    pub fn componentwise_divide(a: Vec2<T>, b: Vec2<T>) -> Vec2<T> {
+        Vec2::new(a.x/b.x, a.y/b.y)
     }
 
     /// Calculates the 2D cross product of the given vectors. This is equal
@@ -135,8 +139,12 @@ impl<T: Number> Vec3<T> {
         a.x*b.x + a.y*b.y + a.z*b.z
     }
 
-    pub fn entrywise(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
+    pub fn componentwise_multiply(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
         Vec3::new(a.x*b.x, a.y*b.y, a.z*b.z)
+    }
+
+    pub fn componentwise_divide(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
+        Vec3::new(a.x/b.x, a.y/b.y, a.z/b.z)
     }
 
     pub fn cross(a: Vec3<T>, b: Vec3<T>) -> Vec3<T> {
@@ -168,8 +176,12 @@ impl<T: Number> Vec4<T> {
         a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w
     }
 
-    pub fn entrywise(a: Vec4<T>, b: Vec4<T>) -> Vec4<T> {
+    pub fn componentwise_multiply(a: Vec4<T>, b: Vec4<T>) -> Vec4<T> {
         Vec4::new(a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w)
+    }
+
+    pub fn componentwise_divide(a: Vec4<T>, b: Vec4<T>) -> Vec4<T> {
+        Vec4::new(a.x/b.x, a.y/b.y, a.z/b.z, a.w/b.w)
     }
     
     /// Linearly interpolates between `a` and `b`. Normally `t` should be between 0 and 1 both

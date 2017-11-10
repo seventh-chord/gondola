@@ -143,7 +143,10 @@ impl<T: Number + Float> Quaternion<T> {
 // Quaternion vector multiplication
 impl<T: Number + Float> Mul<Vec3<T>> for Quaternion<T> {
     type Output = Vec3<T>; 
-    fn mul(self, vec: Vec3<T>) -> Vec3<T> {
+    fn mul(self, v: Vec3<T>) -> Vec3<T> {
+        /*
+        // Clunky version. Basically a matrix conversion and multiplication
+
         let one = T::ONE;
         let two = one + one;
 
@@ -160,10 +163,22 @@ impl<T: Number + Float> Mul<Vec3<T>> for Quaternion<T> {
         let a33 = one - two*self.x*self.x - two*self.y*self.y;
 
         Vec3 {
-            x: vec.x*a11 + vec.y*a12 + vec.z*a13,
-            y: vec.x*a21 + vec.y*a22 + vec.z*a23,
-            z: vec.x*a31 + vec.y*a32 + vec.z*a33,
+            x: v.x*a11 + v.y*a12 + v.z*a13,
+            y: v.x*a21 + v.y*a22 + v.z*a23,
+            z: v.x*a31 + v.y*a32 + v.z*a33,
         }
+        */
+
+        let two = T::ONE + T::ONE;
+        let Quaternion { x, y, z, w } = self;
+        let u = Vec3::new(x, y, z);
+
+        let dot = Vec3::dot(u, v);
+        let cross = Vec3::cross(u, v);
+
+        u * (two*dot) +
+        v * (w*w - u.len_sqr()) +
+        cross * (two*w)
     }
 }
 
