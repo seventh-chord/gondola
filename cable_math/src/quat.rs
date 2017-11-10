@@ -274,6 +274,17 @@ impl<T: Number + Float> From<Quaternion<T>> for Vec4<T> {
     }
 }
 
+impl<T: Number + Float> From<Vec4<T>> for Quaternion<T> {
+    fn from(vec: Vec4<T>) -> Quaternion<T> {
+        Quaternion {
+            x: vec.x,
+            y: vec.y,
+            z: vec.z,
+            w: vec.w,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::f32;
