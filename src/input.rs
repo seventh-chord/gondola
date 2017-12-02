@@ -6,41 +6,53 @@ use cable_math::Vec2;
 const MOUSE_KEYS: usize = 5;
 const KEYBOARD_KEYS: usize = 256; // This MUST be `u8::max_value() + 1`
 
-/// Manages keyboard and mouse input. This manager receives events from a
-/// `mpsc::Receiver`. This means it can be created and used in other threads.
-/// Note that [`InputManager::refresh`] should be called once per frame.
-///
-/// `InputManager`s are created by [`GameState::gen_input_manager`]
-///
-/// [`GameState::gen_input_manager`]: ../struct.GameState.html#method.gen_input_manager
-/// [`InputManager::refresh`]:        struct.InputManager.html#method.refresh
-pub struct InputManager {
-    pub(crate) mouse_pos: Vec2<f32>,
-    pub(crate) mouse_delta: Vec2<f32>,
-    pub(crate) raw_mouse_delta: Vec2<f32>,
-    pub(crate) mouse_scroll: f32,
-    pub(crate) mouse_states: [KeyState; MOUSE_KEYS],
-    pub(crate) keyboard_states: [KeyState; KEYBOARD_KEYS],
-    pub(crate) type_buffer: String,
-    pub(crate) focused: bool, 
+/// Passed to `Window::poll_events` each frame to get updated.
+#[derive(Clone)]
+pub struct Input {
+    /// The position of the mouse, in window space
+    pub mouse_pos: Vec2<f32>,
+    /// The amount `mouse_pos` has changed since last frame
+    /// TODO document whether this stays constant if the mouse is grabbed
+    pub mouse_delta: Vec2<f32>,
 
-    pub(crate) changed: bool, 
+    /// The amount of movement directly reported by the mouse sensor. Should be used for e.g. first
+    /// person cameras in games.
+    pub raw_mouse_delta: Vec2<f32>,
+
+    /// Units scrolled in the last frame. 1.0 corresponds to one tick of the wheel
+    pub mouse_scroll: f32,
+
+    /// The state of mouse keys. 0 is left, 1 is right, 2 is middle. 3 and 4 are usually the keys
+    /// for clicking the mousewheel laterally, for mice that have such keys. Sometimes they are
+    /// also placed on the side of the mouse.
+    ///
+    /// On linux, 3 and 4 are always `Up`, because these codes are used for the scroll wheel
+    /// internally.
+    pub mouse_keys: [KeyState; MOUSE_KEYS],
+
+    /// The state of keyboard keys. Can also be accessed more ergonomically throug the
+    /// `Input::key()` method
+    pub keys: [KeyState; KEYBOARD_KEYS],
+
+    /// Cleared each frame. Contains typed characters in the order they where typed
+    pub type_buffer: String,
+
+    pub window_has_keyboard_focus: bool, 
+    pub received_events_this_frame: bool, 
 }
 
-impl InputManager {
-    /// Creates a new input manager. Passed to `Window::poll_events` each frame to get updated.
-    pub fn new() -> InputManager {
-        InputManager {
+impl Input {
+    pub fn new() -> Input {
+        Input {
             mouse_pos: Vec2::ZERO,
             mouse_delta: Vec2::ZERO,
             raw_mouse_delta: Vec2::ZERO,
             mouse_scroll: 0.0,
-            mouse_states: [KeyState::Up; MOUSE_KEYS],
-            keyboard_states: [KeyState::Up; KEYBOARD_KEYS],
+            mouse_keys: [KeyState::Up; MOUSE_KEYS],
+            keys: [KeyState::Up; KEYBOARD_KEYS],
             type_buffer: String::with_capacity(10),
-            focused: false,
-
-            changed: false,
+            window_has_keyboard_focus: false,
+            received_events_this_frame: false,
         }
     }
 
@@ -51,62 +63,25 @@ impl InputManager {
         self.mouse_scroll = 0.0;
         self.type_buffer.clear();
 
-        for state in self.mouse_states.iter_mut() {
-            if *state == KeyState::Released       { *state = KeyState::Up; }
-            if *state == KeyState::Pressed        { *state = KeyState::Down; }
-            if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
-        }
-        for state in self.keyboard_states.iter_mut() {
+        for state in self.mouse_keys.iter_mut() {
             if *state == KeyState::Released       { *state = KeyState::Up; }
             if *state == KeyState::Pressed        { *state = KeyState::Down; }
             if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
         }
 
-        self.changed = false; 
+        for state in self.keys.iter_mut() {
+            if *state == KeyState::Released       { *state = KeyState::Up; }
+            if *state == KeyState::Pressed        { *state = KeyState::Down; }
+            if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
+        }
+
+        self.received_events_this_frame = false; 
     }
     
-    /// Position of the mouse cursor in pixels, relative to the top left corner of the screen
-    pub fn mouse_pos(&self)   -> Vec2<f32> { self.mouse_pos }
-
-    /// The distance on screen the mouse cursor moved in the last frame
-    pub fn mouse_delta(&self) -> Vec2<f32> { self.mouse_delta }
-
-    /// The distance the cursor moved, in unspecified units. This is the value reported directly
-    /// from the mouse, without software acceleartion and simillar. This value should be used for
-    /// e.g. first person cameras.
-    pub fn raw_mouse_delta(&self) -> Vec2<f32> { self.raw_mouse_delta }
-
-    /// The number of units scrolled in the last frame
-    pub fn mouse_scroll(&self) -> f32 { self.mouse_scroll }
-
-    /// The state of the given mouse key. Panics if `key` is greater than 4. The left
-    /// mouse key is 0, the right key is 1 and the middle key is 2.
-    pub fn mouse_key(&self, key: u8) -> KeyState {
-        let key = key as usize;
-        if key >= self.mouse_states.len() {
-            panic!("{} is not a valid index for a mouse key");
-        }
-        self.mouse_states[key]
-    }
     /// The state of the given keyboard key. Note that `Key` represent scancodes.
     /// See [`Key`](enum.Key.html) for more info
     pub fn key(&self, key: Key) -> KeyState {
-        self.keyboard_states[key as usize]
-    }
-    
-    /// Characters that have been typed. This is cleared each frame.
-    pub fn typed(&self) -> &str {
-        &self.type_buffer
-    }
-
-    /// True if new events have been added in the last poll.
-    pub fn changed(&self) -> bool {
-        self.changed
-    }
-
-    /// True if the window is receiving keyboard input
-    pub fn focused(&self) -> bool {
-        self.focused
+        self.keys[key as usize]
     }
 }
 

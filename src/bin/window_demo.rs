@@ -2,7 +2,7 @@
 extern crate gondola;
 extern crate cable_math;
 
-use gondola::{Window, WindowCommon, CursorType, Timer, Time, InputManager, Key};
+use gondola::{Window, WindowCommon, CursorType, Timer, Time, Input, Key};
 use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
@@ -14,7 +14,7 @@ type DrawGroup = draw_group::DrawGroup<(), ()>;
 
 fn main() {
     let mut timer = Timer::new();
-    let mut input = InputManager::new();
+    let mut input = Input::new();
 
     let mut window = Window::new("This is hopefully still a window");
     window.set_vsync(true);
@@ -77,16 +77,16 @@ fn main() {
             window.set_cursor(CursorType::Normal);
         }
 
-        if input.mouse_key(0).pressed() {
-            let tx = input.mouse_pos().x / window.screen_region().width();
-            let ty = input.mouse_pos().y / window.screen_region().height();
+        if input.mouse_keys[0].pressed() {
+            let tx = input.mouse_pos.x / window.screen_region().width();
+            let ty = input.mouse_pos.y / window.screen_region().height();
 
             audio.play(hit_buffer_handle, [1.0 - tx, tx], 0.5 + ty);
         }
 
-        if input.mouse_key(1).pressed() {
-            let tx = input.mouse_pos().x / window.screen_region().width();
-            let ty = input.mouse_pos().y / window.screen_region().height();
+        if input.mouse_keys[1].pressed() {
+            let tx = input.mouse_pos.x / window.screen_region().width();
+            let ty = input.mouse_pos.y / window.screen_region().height();
 
             audio.play(hit_buffer_handle, [1.0 - tx, tx], 1.0 + ty*0.5);
             audio.play(hit_buffer_handle, [tx, 1.0 - tx], 1.0 - ty*0.5);

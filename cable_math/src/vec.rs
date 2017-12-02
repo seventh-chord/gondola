@@ -52,6 +52,8 @@ impl<T> Vec4<T> {
 // General functions
 impl<T: Number> Vec2<T> {
     pub const ZERO: Vec2<T> = Vec2 { x: T::ZERO, y: T::ZERO };
+    pub const X: Vec2<T> = Vec2 { x: T::ONE, y: T::ZERO };
+    pub const Y: Vec2<T> = Vec2 { x: T::ZERO, y: T::ONE };
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -127,6 +129,9 @@ impl<T: Number> Vec2<T> {
 
 impl<T: Number> Vec3<T> {
     pub const ZERO: Vec3<T> = Vec3 { x: T::ZERO, y: T::ZERO, z: T::ZERO };
+    pub const X: Vec3<T> = Vec3 { x: T::ONE, y: T::ZERO, z: T::ZERO };
+    pub const Y: Vec3<T> = Vec3 { x: T::ZERO, y: T::ONE, z: T::ZERO };
+    pub const Z: Vec3<T> = Vec3 { x: T::ZERO, y: T::ZERO, z: T::ONE };
     
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it
@@ -164,6 +169,10 @@ impl<T: Number> Vec3<T> {
 
 impl<T: Number> Vec4<T> {
     pub const ZERO: Vec4<T> = Vec4 { x: T::ZERO, y: T::ZERO, z: T::ZERO, w: T::ZERO };
+    pub const X: Vec4<T> = Vec4 { x: T::ONE, y: T::ZERO, z: T::ZERO, w: T::ZERO };
+    pub const Y: Vec4<T> = Vec4 { x: T::ZERO, y: T::ONE, z: T::ZERO, w: T::ZERO };
+    pub const Z: Vec4<T> = Vec4 { x: T::ZERO, y: T::ZERO, z: T::ONE, w: T::ZERO };
+    pub const W: Vec4<T> = Vec4 { x: T::ZERO, y: T::ZERO, z: T::ZERO, w: T::ONE };
 
     /// Calculates the length of this vector, raised to the power of two.
     /// Note that this is cheaper than computing the actual length, as it

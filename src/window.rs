@@ -2,7 +2,7 @@
 use cable_math::Vec2;
 
 use Region;
-use input::{KeyState, InputManager};
+use input::{KeyState, Input};
 use graphics;
 
 // Since most of the lib is written expecting gl 3.3 we currently don't allow customizing this.
@@ -59,7 +59,7 @@ pub trait WindowCommon: Drop {
     fn new(title: &str) -> Self;
     fn show(&mut self);
 
-    fn poll_events(&mut self, input: &mut InputManager);
+    fn poll_events(&mut self, input: &mut Input);
     fn swap_buffers(&mut self);
 
     fn close_requested(&self) -> bool;
@@ -453,7 +453,7 @@ mod linux {
             unsafe { (self.xlib.XMapWindow)(self.display, self.window); }
         }
 
-        fn poll_events(&mut self, input: &mut InputManager) {
+        fn poll_events(&mut self, input: &mut Input) {
             input.refresh();
 
             self.moved = false;
@@ -481,7 +481,7 @@ mod linux {
                         }
 
                         self.focused = true;
-                        input.focused = self.focused;
+                        input.window_has_keyboard_focus = self.focused;
                     },
 
                     ffi::FocusOut => {
@@ -489,17 +489,17 @@ mod linux {
                         self.internal_set_cursor(CursorType::Normal);
 
                         self.focused = false;
-                        input.focused = self.focused;
+                        input.window_has_keyboard_focus = self.focused;
                     },
 
                     ffi::KeyPress | ffi::KeyRelease => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
                         let mut event: ffi::XKeyEvent = event.into();
 
                         // Normal key input
                         let scancode = event.keycode;
 
-                        let ref mut state = input.keyboard_states[scancode as usize];
+                        let ref mut state = input.keys[scancode as usize];
                         *state = if ty == ffi::KeyPress {
                             if state.down() {
                                 KeyState::PressedRepeat
@@ -543,7 +543,7 @@ mod linux {
 
                     // Mouse buttons
                     ffi::ButtonPress | ffi::ButtonRelease => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
 
                         let event: ffi::XButtonEvent = event.into();
 
@@ -555,9 +555,9 @@ mod linux {
 
                         match event.button {
                             // X11 uses different button indices
-                            1 => input.mouse_states[0] = state,
-                            2 => input.mouse_states[2] = state,
-                            3 => input.mouse_states[1] = state,
+                            1 => input.mouse_keys[0] = state,
+                            2 => input.mouse_keys[2] = state,
+                            3 => input.mouse_keys[1] = state,
                             
                             // Scrolling
                             4 | 5 if state == KeyState::Pressed => {
@@ -571,7 +571,7 @@ mod linux {
 
                     // Mouse movement
                     ffi::MotionNotify => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
 
                         let event: ffi::XMotionEvent = event.into();
 
@@ -1281,21 +1281,21 @@ mod windows {
             unsafe { ffi::ShowWindow(self.window, ffi::SW_SHOW) };
         }
 
-        fn poll_events(&mut self, input: &mut InputManager) {
+        fn poll_events(&mut self, input: &mut Input) {
             let focused = unsafe { ffi::GetFocus() == self.window };
             let focus_changed = self.focused != focused;
             self.focused = focused;
-            input.focused = self.focused;
+            input.window_has_keyboard_focus = self.focused;
 
             // Receive events from windows, dispatch them to `event_callback` and let them get sent
             // back through `raw_event_receiver`.
             let mut msg = unsafe { mem::uninitialized::<ffi::MSG>() };
             loop {
                 let result = unsafe { ffi::PeekMessageW(
-                        &mut msg, self.window, 
-                        0, 0,
-                        ffi::PM_REMOVE,
-                        ) };
+                    &mut msg, self.window, 
+                    0, 0,
+                    ffi::PM_REMOVE,
+                )};
 
                 if result > 0 {
                     unsafe {
@@ -1351,9 +1351,9 @@ mod windows {
                     },
 
                     Key(pressed, code) => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
 
-                        let ref mut state = input.keyboard_states[code];
+                        let ref mut state = input.keys[code];
                         *state = if pressed {
                             if state.down() {
                                 KeyState::PressedRepeat
@@ -1366,7 +1366,7 @@ mod windows {
                     },
 
                     Char(wchar) => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
 
                         for result in char::decode_utf16([wchar].iter().cloned()) {
                             match result {
@@ -1377,13 +1377,13 @@ mod windows {
                     },
 
                     Scroll(delta) => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
                         input.mouse_scroll += delta;
                     },
 
                     MousePos(new_pos) => {
                         if new_pos != input.mouse_pos {
-                            input.changed = true;
+                            input.received_events_this_frame = true;
 
                             input.mouse_delta += new_pos - input.mouse_pos;
                             input.mouse_pos = new_pos;
@@ -1392,19 +1392,19 @@ mod windows {
 
                     MouseDelta(delta) => {
                         if delta != Vec2::ZERO {
-                            input.changed = true;
+                            input.received_events_this_frame = true;
                             input.raw_mouse_delta += delta;
                         }
                     },
 
                     MouseButton(down, code) => {
-                        input.changed = true;
+                        input.received_events_this_frame = true;
 
                         let state = if down { KeyState::Pressed } else { KeyState::Released };
-                        input.mouse_states[code] = state;
+                        input.mouse_keys[code] = state;
 
                         let mut any_down = false;
-                        for state in input.mouse_states.iter() {
+                        for state in input.mouse_keys.iter() {
                             if state.down() {
                                 any_down = true;
                                 break;
