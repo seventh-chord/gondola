@@ -39,6 +39,8 @@ pub struct Input {
 
     pub window_has_keyboard_focus: bool, 
     pub received_events_this_frame: bool, 
+
+    pub gamepads: [Gamepad; 4],
 }
 
 impl Input {
@@ -53,6 +55,7 @@ impl Input {
             type_buffer: String::with_capacity(10),
             window_has_keyboard_focus: false,
             received_events_this_frame: false,
+            gamepads: [Default::default(), Default::default(), Default::default(), Default::default()],
         }
     }
 
@@ -64,9 +67,9 @@ impl Input {
         self.type_buffer.clear();
 
         for state in self.mouse_keys.iter_mut() {
-            if *state == KeyState::Released       { *state = KeyState::Up; }
-            if *state == KeyState::Pressed        { *state = KeyState::Down; }
-            if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
+            if *state == KeyState::Released { *state = KeyState::Up; }
+            if *state == KeyState::Pressed  { *state = KeyState::Down; }
+            assert!(*state != KeyState::PressedRepeat);
         }
 
         for state in self.keys.iter_mut() {
@@ -75,9 +78,25 @@ impl Input {
             if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
         }
 
+        for gamepad in self.gamepads.iter_mut() {
+            if gamepad.connected {
+                for state in gamepad.buttons.iter_mut() {
+                    if *state == KeyState::Released { *state = KeyState::Up; }
+                    if *state == KeyState::Pressed  { *state = KeyState::Down; }
+                    assert!(*state != KeyState::PressedRepeat);
+                }
+            } else {
+                gamepad.buttons = [KeyState::Up; GAMEPAD_BUTTON_COUNT];
+                gamepad.left    = Vec2::ZERO;
+                gamepad.right   = Vec2::ZERO;
+                gamepad.left_trigger = 0.0;
+                gamepad.right_trigger = 0.0;
+            }
+        }
+
         self.received_events_this_frame = false; 
     }
-    
+
     /// The state of the given keyboard key. Note that `Key` represent scancodes.
     /// See [`Key`](enum.Key.html) for more info
     pub fn key(&self, key: Key) -> KeyState {
@@ -98,6 +117,10 @@ pub enum KeyState {
     Down,
     /// The button is not being held down. In the previous frame it was held down.
     Released,
+}
+
+impl Default for KeyState {
+    fn default() -> KeyState { KeyState::Up }
 }
 
 impl KeyState {
@@ -183,15 +206,15 @@ pub enum Key {
     Space = 0x39,
 
     Escape = 0x1, 
-//    Grave  = 0x31, 
+    //    Grave  = 0x31, 
     Tab = 0xf,
-//    CapsLock  = 0x42, 
+    //    CapsLock  = 0x42, 
     LShift = 0x2a,
     LCtrl = 0x1d,
-//    LAlt = 0x40,
-//    RAlt  = 0x6c,
-//    RMeta  = 0x86,
-//    RCtrl = 0x1d, // Same scancode as LCtrl :/
+    //    LAlt = 0x40,
+    //    RAlt  = 0x6c,
+    //    RMeta  = 0x86,
+    //    RCtrl = 0x1d, // Same scancode as LCtrl :/
     RShift = 0x36,
     Return = 0x1c,
     Back = 0xe,
@@ -204,3 +227,56 @@ pub enum Key {
     F7 = 0x41, F8 = 0x42, F9 = 0x43, F10 = 0x44, F11 = 0x57, F12 = 0x58,
 }
 
+
+
+#[derive(Clone, Default)]
+pub struct Gamepad {
+    pub connected: bool,
+
+    pub buttons: [KeyState; GAMEPAD_BUTTON_COUNT],
+
+    pub left:  Vec2<f32>,
+    pub right: Vec2<f32>,
+
+    pub left_trigger:  f32,
+    pub right_trigger: f32,
+}
+
+const GAMEPAD_BUTTON_COUNT: usize = 24;
+#[derive(Debug, Copy, Clone)]
+#[repr(u8)]
+pub enum GamepadButton {
+    DpadUp = 0,
+    DpadDown,
+    DpadLeft,
+    DpadRight,
+
+    LeftUp,
+    LeftDown,
+    LeftRight,
+    LeftLeft,
+
+    RightUp,
+    RightDown,
+    RightRight,
+    RightLeft,
+
+    Start,
+    Back,
+
+    LeftStick,
+    RightStick,
+
+    LeftBumper,
+    RightBumper,
+    LeftTrigger,
+    RightTrigger,
+
+    A, B, X, Y,
+}
+
+impl Gamepad {
+    pub fn button(&self, button: GamepadButton) -> KeyState {
+        self.buttons[button as usize]
+    }
+}

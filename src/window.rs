@@ -2,7 +2,7 @@
 use cable_math::Vec2;
 
 use Region;
-use input::{KeyState, Input};
+use input::{KeyState, Input, Gamepad, GamepadButton};
 use graphics;
 
 // Since most of the lib is written expecting gl 3.3 we currently don't allow customizing this.
@@ -791,6 +791,7 @@ mod windows {
     extern crate kernel32;
     extern crate gdi32;
     extern crate opengl32;
+    extern crate xinput;
 
     use std::ptr;
     use std::mem;
@@ -811,6 +812,7 @@ mod windows {
         pub(super) use super::kernel32::*;
         pub(super) use super::gdi32::*;
         pub(super) use super::opengl32::*;
+        pub(super) use super::xinput::*;
 
         // Stuff not defined in winapi
         pub(super) const ERROR_INVALID_VERSION_ARB: u32 = 0x2095;
@@ -850,7 +852,27 @@ mod windows {
         cursor_captured: bool, // Cursor is dragging something out of the window, don't loose focus on release
         cursor_grabbed: bool, // Cursor cant leave window
         cursor_clip_region: Option<Region>, // Relative to `screen_region.min`!
+
+        gamepad_states: [InternalGamepadState; 4],
     }
+
+    #[derive(Copy, Clone)]
+    struct InternalGamepadState {
+        connected: bool,
+        last_packet_number: u32,
+        xinput_state: ffi::XINPUT_STATE,
+    }
+
+    impl Default for InternalGamepadState {
+        fn default() -> InternalGamepadState {
+            InternalGamepadState {
+                connected: false,
+                last_packet_number: 0,
+                xinput_state: unsafe { mem::zeroed() },
+            }
+        }
+    }
+
 
     fn encode_wide(s: &str) -> Vec<u16> {
         let mut data = Vec::with_capacity(s.len() + 1);
@@ -1274,6 +1296,8 @@ mod windows {
                 cursor_captured: false,
                 cursor_grabbed: false,
                 cursor_clip_region: None,
+
+                gamepad_states: [InternalGamepadState::default(); 4],
             }
         } 
 
@@ -1445,6 +1469,102 @@ mod windows {
             } else if focus_changed {
                 let cursor = self.cursors[CursorType::Normal as usize];
                 unsafe { ffi::SetCursor(cursor) };
+            }
+            
+            // XInput gamepad mess
+            for (index, state) in self.gamepad_states.iter_mut().enumerate() {
+                let result = unsafe { ffi::XInputGetState(index as u32, &mut state.xinput_state) };
+
+                // TODO don't retry connecting all the time, as that lags. I think
+                // casey talked about this at some point, in one of the pubg streams.
+                // It would be a pain in the ass to find though.
+
+                if result == ffi::ERROR_SUCCESS {
+                    state.connected = true;
+                } else if result == ffi::ERROR_DEVICE_NOT_CONNECTED {
+                    state.connected = false;
+                } else {
+                    println!("Unexpected return from `XInputGetState`: {}", result);
+                }
+
+                if !state.connected {
+                    continue;
+                }
+
+                if state.last_packet_number != state.xinput_state.dwPacketNumber {
+                    input.received_events_this_frame = true;
+                }
+                state.last_packet_number = state.xinput_state.dwPacketNumber;
+
+                let ref mut s = state.xinput_state.Gamepad;
+                let ref mut gamepad = input.gamepads[index];
+
+                gamepad.connected = state.connected;
+
+                // We can probably factor out a lot of this stuff to `input.rs`
+                let deadzone = 0.3;
+
+                gamepad.left_trigger  = s.bLeftTrigger  as f32 / 255.0;
+                gamepad.right_trigger = s.bRightTrigger as f32 / 255.0;
+
+                if gamepad.left_trigger < deadzone  { gamepad.left_trigger = 0.0; }
+                if gamepad.right_trigger < deadzone { gamepad.right_trigger = 0.0; }
+
+                gamepad.left = Vec2::new(
+                    (s.sThumbLX as f32 + 0.5) / 32767.5,
+                    (s.sThumbLY as f32 + 0.5) / 32767.5,
+                );
+                if gamepad.left.len_sqr() < deadzone*deadzone {
+                    gamepad.left = Vec2::ZERO;
+                }
+
+                gamepad.right = Vec2::new(
+                    (s.sThumbRX as f32 + 0.5) / 32767.5,
+                    (s.sThumbRY as f32 + 0.5) / 32767.5,
+                );
+                if gamepad.right.len_sqr() < deadzone*deadzone {
+                    gamepad.right = Vec2::ZERO;
+                }
+
+                fn update_state(down: bool, gamepad: &mut Gamepad, button: GamepadButton) {
+                    let ref mut state = gamepad.buttons[button as usize];
+
+                    if down && !state.down() {
+                        *state = KeyState::Pressed;
+                    }
+
+                    if !down && state.down() {
+                        *state = KeyState::Released;
+                    }
+                }
+
+                use GamepadButton::*;
+                update_state(s.wButtons & 0x0001 != 0, gamepad, DpadUp);
+                update_state(s.wButtons & 0x0002 != 0, gamepad, DpadUp);
+                update_state(s.wButtons & 0x0004 != 0, gamepad, DpadUp);
+                update_state(s.wButtons & 0x0008 != 0, gamepad, DpadUp);
+                update_state(s.wButtons & 0x0010 != 0, gamepad, Start);
+                update_state(s.wButtons & 0x0020 != 0, gamepad, Back);
+                update_state(s.wButtons & 0x0040 != 0, gamepad, LeftStick);
+                update_state(s.wButtons & 0x0080 != 0, gamepad, RightStick);
+                update_state(s.wButtons & 0x0100 != 0, gamepad, LeftBumper);
+                update_state(s.wButtons & 0x0200 != 0, gamepad, RightBumper);
+                update_state(s.wButtons & 0x1000 != 0, gamepad, A);
+                update_state(s.wButtons & 0x2000 != 0, gamepad, B);
+                update_state(s.wButtons & 0x4000 != 0, gamepad, X);
+                update_state(s.wButtons & 0x8000 != 0, gamepad, Y);
+
+                let v = 0.8;
+                update_state(gamepad.left.y  > v,  gamepad, LeftUp);
+                update_state(gamepad.left.y  < -v, gamepad, LeftDown);
+                update_state(gamepad.left.x  > v,  gamepad, LeftRight);
+                update_state(gamepad.left.x  < -v, gamepad, LeftLeft);
+                update_state(gamepad.right.y > v,  gamepad, RightUp);
+                update_state(gamepad.right.y < -v, gamepad, RightDown);
+                update_state(gamepad.right.x > v,  gamepad, RightRight);
+                update_state(gamepad.right.x < -v, gamepad, RightLeft);
+                update_state(gamepad.left_trigger  > v, gamepad, LeftTrigger);
+                update_state(gamepad.right_trigger > v, gamepad, RightTrigger); 
             }
         }
 

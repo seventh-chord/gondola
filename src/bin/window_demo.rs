@@ -2,7 +2,7 @@
 extern crate gondola;
 extern crate cable_math;
 
-use gondola::{Window, WindowCommon, CursorType, Timer, Time, Input, Key};
+use gondola::{Window, WindowCommon, CursorType, Timer, Time, Input, Key, GamepadButton};
 use gondola::Color;
 use gondola::draw_group::{self, StateCmd};
 use gondola::graphics;
@@ -38,6 +38,9 @@ fn main() {
 
     window.show();
 
+
+    let mut p = Vec2::ZERO;
+
     loop {
         let (time, _last_frame_time) = timer.tick();
         let delta = Time(Time::NANOSECONDS_PER_SECOND / 60);
@@ -53,12 +56,26 @@ fn main() {
         }
 
         // Update logic
+        if input.gamepads[0].connected {
+            let ref g = input.gamepads[0];
+
+            use GamepadButton::*;
+            if g.button(RightUp).pressed()    { p.y -= 20.0; }
+            if g.button(RightDown).pressed()  { p.y += 20.0; }
+            if g.button(RightRight).pressed() { p.x += 20.0; }
+            if g.button(RightLeft).pressed()  { p.x -= 20.0; }
+
+            let s = delta.to_secs_f32() * 50.0;
+            p.x += g.left.x * s;
+            p.y -= g.left.y * s;
+        }
+
         draw_group.reset();
 
         let bg_color = Color::hex_int(0xc0ffd5);
         draw_group.push_state_cmd(StateCmd::Clear(bg_color));
 
-        draw_group.aabb((10.0, 10.0).into(), (100.0, 100.0).into(), Color::hex_int(0xff0000));
+        draw_group.aabb(p - Vec2::new(10.0, 10.0), p + Vec2::new(10.0, 10.0), 0xff0000.into());
 
         let pos = Vec2::new(200.0, 200.0) + Vec2::polar(100.0, time.to_secs_f32());
         draw_group.circle(pos, 10.0, Color::hex_int(0x00ff00));
