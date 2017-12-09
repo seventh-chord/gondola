@@ -450,9 +450,8 @@ struct FontVert {
 
 // We cannot use the custom derive from within this crate
 impl Vertex for FontVert {
-    fn bytes_per_vertex() -> usize { ::std::mem::size_of::<FontVert>() }
     fn setup_attrib_pointers(divisor: usize) {
-        let stride = Self::bytes_per_vertex();
+        let stride = mem::size_of::<FontVert>();
         let mut offset = 0;
 
         AttribBinding {

@@ -1,7 +1,6 @@
 
 //! A color type, with utility methods for modifying colors and parsing colors from hex integers and strings. 
 
-use std::mem;
 use std::str::FromStr;
 
 use gl;
@@ -185,7 +184,6 @@ fn clamp(value: f32, min: f32, max: f32) -> f32 {
 
 impl VertexData for Color {
     type Primitive = f32;
-    fn bytes() -> usize { mem::size_of::<f32>() * 4 }
     fn primitives() -> usize { 4 }
 }
 

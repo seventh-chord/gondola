@@ -14,7 +14,6 @@ name = "window_demo"
 required-features = ["audio"]
 
 [dependencies]
-gondola_derive = { path = "gondola_derive" }
 cable_math     = { path = "cable_math" }
 
 gl = "*"

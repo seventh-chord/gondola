@@ -1,6 +1,7 @@
 
-use std;
+use std::{mem, ptr};
 use std::ops::Range;
+use std::marker::PhantomData;
 
 use gl;
 use gl::types::*;
@@ -50,7 +51,7 @@ use super::*;
 /// ```
 pub struct VertexBuffer<T: Vertex> {
     // We are generic over the vertex type, but dont actually store any vertices
-    phantom: std::marker::PhantomData<T>,
+    phantom: PhantomData<T>,
 
     vertex_count: usize, // Used space, in number of vertices
     allocated: usize, // Allocated space, in number of vertices
@@ -132,7 +133,7 @@ impl<T: Vertex> VertexBuffer<T> {
         unsafe { gl::GenVertexArrays(1, &mut vao) };
 
         VertexBuffer {
-            phantom: std::marker::PhantomData,
+            phantom: PhantomData,
             vertex_count: 0,
             allocated: 0,
 
@@ -144,12 +145,12 @@ impl<T: Vertex> VertexBuffer<T> {
     /// Creates a new vertex buffer, preallocating space for the given number of vertices.
     pub fn with_capacity(primitive_mode: PrimitiveMode, usage: BufferUsage, initial_capacity: usize) -> VertexBuffer<T> {
         let mut buffer = VertexBuffer::new(primitive_mode, usage);
-        let bytes = T::bytes_per_vertex() * initial_capacity;
+        let bytes = mem::size_of::<T>() * initial_capacity;
 
         unsafe {
             gl::GenBuffers(1, &mut buffer.vbo);
             gl::BindBuffer(BufferTarget::Array as GLenum, buffer.vbo);
-            gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), usage as GLenum);
+            gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, ptr::null(), usage as GLenum);
 
             gl::BindVertexArray(buffer.vao);
             T::setup_attrib_pointers(0);
@@ -167,7 +168,7 @@ impl<T: Vertex> VertexBuffer<T> {
         let mut buffer = VertexBuffer::new(primitive_mode, usage);
 
         let vertex_count = vertices.len();
-        let bytes = T::bytes_per_vertex() * vertex_count;
+        let bytes = mem::size_of::<T>() * vertex_count;
 
         unsafe {
             gl::GenBuffers(1, &mut buffer.vbo);
@@ -175,7 +176,7 @@ impl<T: Vertex> VertexBuffer<T> {
             gl::BufferData(
                 BufferTarget::Array as GLenum,
                 bytes as GLsizeiptr,
-                std::mem::transmute(&vertices[0]),
+                mem::transmute(&vertices[0]),
                 usage as GLenum
             );
 
@@ -224,9 +225,9 @@ impl<T: Vertex> VertexBuffer<T> {
             gl::BindBuffer(BufferTarget::Array as GLenum, self.vbo);
             gl::BufferSubData(
                 BufferTarget::Array as GLenum,
-                (start * T::bytes_per_vertex()) as GLintptr,
-                (data.len() * T::bytes_per_vertex()) as GLsizeiptr,
-                std::mem::transmute(&data[0])
+                (start * mem::size_of::<T>()) as GLintptr,
+                (data.len() * mem::size_of::<T>()) as GLsizeiptr,
+                mem::transmute(&data[0])
             );
         }
     }
@@ -255,12 +256,12 @@ impl<T: Vertex> VertexBuffer<T> {
     pub fn ensure_allocated(&mut self, new_capacity: usize, retain_old_data: bool) {
         if new_capacity > self.allocated {
             let mut new_buffer = 0;
-            let bytes = new_capacity * T::bytes_per_vertex();
+            let bytes = new_capacity * mem::size_of::<T>();
 
             unsafe {
                 gl::GenBuffers(1, &mut new_buffer);
                 gl::BindBuffer(BufferTarget::Array as GLenum, new_buffer);
-                gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, std::ptr::null(), self.usage as GLenum);
+                gl::BufferData(BufferTarget::Array as GLenum, bytes as GLsizeiptr, ptr::null(), self.usage as GLenum);
 
                 gl::BindVertexArray(self.vao);
                 T::setup_attrib_pointers(0);
@@ -272,7 +273,7 @@ impl<T: Vertex> VertexBuffer<T> {
                         BufferTarget::CopyRead as GLenum,
                         BufferTarget::Array as GLenum,
                         0, 0,
-                        (self.vertex_count * T::bytes_per_vertex()) as GLsizeiptr
+                        (self.vertex_count * mem::size_of::<T>()) as GLsizeiptr
                     );
                     gl::DeleteBuffers(1, &mut self.vbo);
                 }
@@ -299,12 +300,16 @@ impl<T: Vertex> VertexBuffer<T> {
     /// The range is in units of the vertex type `T` used with this buffer. For example, in a buffer
     /// with 6 vertices constituting 2 triangles, `draw_range(3..6)` will draw the second triangle.
     pub fn draw_range(&self, range: Range<usize>) {
-        assert!(range.start < range.end, 
-                "Call to draw_range with invalid range {}..{}, start must lie before end!",
-                range.start, range.end);
-        assert!(range.end <= self.vertex_count,
-                "Call to draw_range with invalid range {}..{}, end or range lies beyond end \
-                of buffer (len = {})", range.start, range.end, self.vertex_count);
+        assert!(
+            range.start < range.end, 
+            "Call to draw_range with invalid range {}..{}, start must lie before end!",
+            range.start, range.end
+        );
+        assert!(
+            range.end <= self.vertex_count,
+            "Call to draw_range with invalid range {}..{}, end or range lies beyond end \
+            of buffer (len = {})", range.start, range.end, self.vertex_count
+        );
 
         unsafe {
             gl::BindVertexArray(self.vao);
@@ -464,7 +469,7 @@ impl<T: Vertex, E: VertexData> IndexedVertexBuffer<T, E>
                 self.vertices.primitive_mode as GLenum,
                 (self.indices.len() * E::primitives()) as GLsizei,
                 E::Primitive::GL_ENUM,
-                std::ptr::null(),
+                ptr::null(),
             );
         }
     }

@@ -213,9 +213,7 @@ impl GlIndex for GLubyte {}
 ///
 /// [`VertexData`]: trait.VertexData.html
 pub trait Vertex: Sized {
-    fn bytes_per_vertex() -> usize;
     fn setup_attrib_pointers(divisor: usize);
-
     fn gen_shader_input_decl(name_prefix: &str) -> String;
     fn gen_transform_feedback_outputs(name_prefix: &str) -> Vec<String>;
     fn gen_transform_feedback_decl(name_prefix: &str) -> String;
@@ -244,13 +242,10 @@ pub trait Vertex: Sized {
 ///     type Primitive = f32;
 /// }
 /// ```
+// TODO (Morten, 09.12.17) This trait (and all traits here for that matter) should probably be
+// marked as unsafe, to prevent people from implementing them!
 pub trait VertexData: Sized {
     type Primitive: GlPrimitive;
-
-    /// The total number of bytes one of these components takes.
-    fn bytes() -> usize {
-        mem::size_of::<Self>()
-    }
 
     /// The total number of primitives one of these components provides (e.g. 4 for a `Vec4<T>`).
     fn primitives() -> usize {

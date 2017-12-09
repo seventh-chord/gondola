@@ -916,17 +916,12 @@ impl AsFontVert for Vert {
 
 // We cannot use the custom derive from within this crate :/
 impl Vertex for Vert {
-    fn bytes_per_vertex() -> usize { 
-        use std::mem;
-        mem::size_of::<Vert>() 
-    }
-
     fn setup_attrib_pointers(divisor: usize) {
         use std::mem;
 
         use gl;
 
-        let stride = <Vert as Vertex>::bytes_per_vertex();
+        let stride = mem::size_of::<Vert>();
         let mut offset = 0;
 
         AttribBinding {
