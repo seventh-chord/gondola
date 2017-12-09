@@ -488,6 +488,7 @@ impl Vertex for FontVert {
     fn gen_shader_input_decl(_name_prefix: &str) -> String { String::new() }
     fn gen_transform_feedback_decl(_name_prefix: &str) -> String { String::new() }
     fn gen_transform_feedback_outputs(_name_prefix: &str) -> Vec<String> { Vec::new() }
+    fn set_as_vertex_attrib(&self) {}
 }
 
 impl AsFontVert for FontVert {

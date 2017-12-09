@@ -61,6 +61,7 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
             // Generate setup_attrib_pointers and shader_input_impl for individual fields
             let mut setup_attrib_pointers_impl = Vec::with_capacity(fields.len()); 
             let mut shader_input_impl = Vec::with_capacity(fields.len());
+            let mut single_attrib_impl = Vec::with_capacity(fields.len());
 
             let mut next_location = 0;
             for field in fields.iter() {
@@ -114,6 +115,10 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
 
                     index += 1;
                 });
+
+                single_attrib_impl.push(quote! {
+                    <#ty as ::gondola::buffer::VertexData>::set_as_vertex_attrib(&self.#ident, #location);
+                });
             }
 
             // Join all the attribute pointer setup code
@@ -135,6 +140,11 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                 result.push('\n');
                 #( #shader_input_impl )*
                 result
+            };
+
+            // Join all the single attribute setting code
+            let single_attrib_impl = quote! {
+                #( #single_attrib_impl )*
             };
 
             // Generate list of transform feedback outputs
@@ -192,6 +202,10 @@ fn impl_vertex(ident: Ident, variant_data: VariantData) -> quote::Tokens {
                                 format!("{}{}", name_prefix, stringify!(#field_names))
                             ),*
                         ]
+                    }
+
+                    fn set_as_vertex_attrib(&self) {
+                        #single_attrib_impl
                     }
                 }
             }

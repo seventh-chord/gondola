@@ -111,6 +111,11 @@ pub trait GlPrimitive: Sized {
 
     const GL_ENUM: GLenum;
     const IS_INTEGER: bool;
+
+    /// This sets a constant value to a given vertex attribute
+    fn set_as_vertex_attrib(&self, _location: usize) {
+        panic!("Can't set {}/{} as vertex attributes", Self::RUST_NAME, Self::GLSL_SCALAR_NAME);
+    }
 }
 
 impl GlPrimitive for GLfloat {
@@ -121,6 +126,10 @@ impl GlPrimitive for GLfloat {
 
     const GL_ENUM: GLenum  = gl::FLOAT;
     const IS_INTEGER: bool = false;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttrib1f(location as GLuint, *self) }
+    }
 }
 impl GlPrimitive for GLint {
     const GLSL_SCALAR_NAME: &'static str = "int";
@@ -130,6 +139,10 @@ impl GlPrimitive for GLint {
 
     const GL_ENUM: GLenum  = gl::INT;
     const IS_INTEGER: bool = true;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttribI1i(location as GLuint, *self) }
+    }
 }
 impl GlPrimitive for GLshort {
     const GLSL_SCALAR_NAME: &'static str = "int";
@@ -139,6 +152,10 @@ impl GlPrimitive for GLshort {
 
     const GL_ENUM: GLenum  = gl::SHORT;
     const IS_INTEGER: bool = true;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttrib1s(location as GLuint, *self) }
+    }
 }
 impl GlPrimitive for GLbyte {
     const GLSL_SCALAR_NAME: &'static str = "int";
@@ -157,6 +174,10 @@ impl GlPrimitive for GLuint {
 
     const GL_ENUM: GLenum  = gl::UNSIGNED_INT;
     const IS_INTEGER: bool = true;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttribI1ui(location as GLuint, *self) }
+    }
 }
 impl GlPrimitive for GLushort {
     const GLSL_SCALAR_NAME: &'static str = "uint";
@@ -217,6 +238,7 @@ pub trait Vertex: Sized {
     fn gen_shader_input_decl(name_prefix: &str) -> String;
     fn gen_transform_feedback_outputs(name_prefix: &str) -> Vec<String>;
     fn gen_transform_feedback_decl(name_prefix: &str) -> String;
+    fn set_as_vertex_attrib(&self);
 }
 
 /// This trait marks types which can be stored in a GPU buffer.  All fields of a 
@@ -269,13 +291,22 @@ pub trait VertexData: Sized {
         }
 
         if result.is_empty() {
-            panic!("Invalid VertexData: {} primitives of type {}/{} are not supported for glsl yet (At {}:{})", 
-                   primitives,
-                   Self::Primitive::RUST_NAME, Self::Primitive::GL_NAME,
-                   file!(), line!());
+            panic!(
+                "Invalid VertexData: {} primitives of type {}/{} are not supported for glsl", 
+                primitives,
+                Self::Primitive::RUST_NAME, Self::Primitive::GL_NAME,
+            );
         }
 
         result
+    }
+
+    fn set_as_vertex_attrib(&self, _location: usize) {
+        panic!(
+            "Not implemented. Probably can't set {} primitives of type {}/{} as a vertex attribute",
+            <Self as VertexData>::primitives(),
+            Self::Primitive::RUST_NAME, Self::Primitive::GL_NAME,
+        );
     }
 }
 
@@ -283,20 +314,36 @@ pub trait VertexData: Sized {
 // Implementations for VertexData:
 impl<T: GlPrimitive> VertexData for T {
     type Primitive = T; 
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        T::set_as_vertex_attrib(&self, location);
+    }
 }
 
-impl<T: VertexData> VertexData for Mat4<T> {
-    type Primitive = T::Primitive;
+impl VertexData for Mat4<f32> {
+    type Primitive = f32;
 }
 
-impl<T: VertexData> VertexData for Vec2<T> {
-    type Primitive = T::Primitive;
+impl VertexData for Vec2<f32> {
+    type Primitive = f32;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttrib2f(location as GLuint, self.x, self.y) }
+    }
 }
-impl<T: VertexData> VertexData for Vec3<T> {
-    type Primitive = T::Primitive;
+impl VertexData for Vec3<f32> {
+    type Primitive = f32;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttrib3f(location as GLuint, self.x, self.y, self.z) }
+    }
 }
-impl<T: VertexData> VertexData for Vec4<T> {
-    type Primitive = T::Primitive;
+impl VertexData for Vec4<f32> {
+    type Primitive = f32;
+
+    fn set_as_vertex_attrib(&self, location: usize) {
+        unsafe { gl::VertexAttrib4f(location as GLuint, self.x, self.y, self.z, self.w) }
+    }
 }
 
 impl<T: VertexData> VertexData for (T, T) {
