@@ -6,7 +6,6 @@
 // end up overwriting the original data in the texture with new data before rendering. If this
 // happens we can probably solve the problem by simply increasing the cache texture size.
 
-use std::mem;
 use std::io;
 use std::io::prelude::*;
 use std::path::Path;
@@ -14,7 +13,6 @@ use std::fs::File;
 use std::str::Chars;
 use std::ops::Range;
 
-use gl;
 use rusttype;
 use rusttype::{Scale, point, GlyphId, PositionedGlyph};
 use rusttype::gpu_cache::*;
@@ -22,8 +20,6 @@ use rusttype::gpu_cache::*;
 use cable_math::Vec2;
 
 use texture::{Texture, SwizzleComp, TextureFormat};
-use buffer::{AttribBinding, Vertex};
-use color::Color;
 
 const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture size: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_TEXTURE_SIZE
 
@@ -34,19 +30,19 @@ const TAB_WIDTH: f32 = 1.5;
 /// A single font style. This is not used directly for text rendering, but rather specifies how
 /// text should be layed out according to a given font. It also provides rasterized glyphs that are
 /// needed when drawing text.
-pub struct Font {
+pub struct TruetypeFont {
     font: rusttype::Font<'static>,
     gpu_cache: Cache,
     cache_texture: Texture,
 }
 
-impl Font {
+impl TruetypeFont {
     /// Constructs a new font from the given font file. The file should be in either trutype
     /// (`.ttf`) or opentype (`.otf`) format. See [rusttype documentation][1] for a complete 
     /// overview of font support. 
     /// 
     /// [1]: https://docs.rs/rusttype
-    pub fn from_file<P>(p: P) -> io::Result<Font> where P: AsRef<Path> {
+    pub fn from_file<P>(p: P) -> io::Result<TruetypeFont> where P: AsRef<Path> {
         let mut file = File::open(p)?;
         
         let mut data = Vec::new();
@@ -55,27 +51,27 @@ impl Font {
         let font_collection = rusttype::FontCollection::from_bytes(data);
         let font = font_collection.font_at(0).unwrap();
 
-        Ok(Font::with_rusttype_font(font))
+        Ok(TruetypeFont::with_rusttype_font(font))
     }
 
     /// Constructs a font from raw data bytes. This can be used in conjunction with the
     /// `include_bytes!(...)` macro. This function expects fonts in the same format as
-    /// `Font::from_file`.
-    pub fn from_bytes(bytes: &'static [u8]) -> Font {
+    /// `TruetypeFont::from_file`.
+    pub fn from_bytes(bytes: &'static [u8]) -> TruetypeFont {
         let font_collection = rusttype::FontCollection::from_bytes(bytes);
         let font = font_collection.font_at(0).unwrap();
 
-        Font::with_rusttype_font(font)
+        TruetypeFont::with_rusttype_font(font)
     }
 
-    fn with_rusttype_font(font: rusttype::Font<'static>) -> Font {
+    fn with_rusttype_font(font: rusttype::Font<'static>) -> TruetypeFont {
         let gpu_cache = Cache::new(CACHE_TEX_SIZE, CACHE_TEX_SIZE, 0.5, 0.5);
 
         let mut cache_texture = Texture::new();
         cache_texture.initialize(CACHE_TEX_SIZE, CACHE_TEX_SIZE, TextureFormat::R_8);
         cache_texture.set_swizzle_mask((SwizzleComp::One, SwizzleComp::One, SwizzleComp::One, SwizzleComp::Red));
 
-        Font { font, gpu_cache, cache_texture }
+        TruetypeFont { font, gpu_cache, cache_texture }
     }
 
     /// Calculates the width in pixels of the given string if it where to be rendered at the given
@@ -359,28 +355,21 @@ impl Font {
         v_metrics.line_gap
     }
 
-    /// Retrieves the texture in which glyphs for this font are cached. This texture can change
-    /// from frame to frame.
     pub fn texture(&self) -> &Texture {
         &self.cache_texture
     }
 
-    /// Writes data needed to render the given text into the given buffer. Multiple pieces of
-    /// text can be written into a single buffer before rendering it. This allows for efficient
-    /// rendering of large sets of text.
-    ///
-    /// Returns the number of vertices that where added to the buffer. 
-    pub fn cache<T>(
+    pub fn cache<F>(
         &mut self,
-        buf:        &mut Vec<T>,
         text:       &str,
         text_size:  f32,
         scale:      f32,
         offset:     Vec2<f32>,
         wrap_width: Option<f32>,
-        color: Color,
-    ) -> usize
-        where T: AsFontVert,
+
+        mut callback: F,
+    )
+      where F: FnMut(Vec2<f32>, Vec2<f32>),
     {
         let mut iter = PlacementIter::new(text, &self.font, Scale::uniform(text_size), offset);
         iter.wrap_width = wrap_width;
@@ -399,7 +388,6 @@ impl Font {
         }).unwrap();
 
         // Output vertices
-        let mut vertices = 0;
         for PlacementInfo { ref glyph, .. } in iter {
             if let Ok(Some((uv, pos))) = self.gpu_cache.rect_for(0, glyph) {
                 let x1 = (pos.min.x as f32 - offset.x)*scale + offset.x;
@@ -407,93 +395,24 @@ impl Font {
                 let y1 = (pos.min.y as f32 - offset.y)*scale + offset.y;
                 let y2 = (pos.max.y as f32 - offset.y)*scale + offset.y;
 
-                buf.push(T::gen(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y), color));
-                buf.push(T::gen(Vec2::new(x2, y1), Vec2::new(uv.max.x, uv.min.y), color));
-                buf.push(T::gen(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y), color));
+                callback(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y));
+                callback(Vec2::new(x2, y1), Vec2::new(uv.max.x, uv.min.y));
+                callback(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y));
 
-                buf.push(T::gen(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y), color));
-                buf.push(T::gen(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y), color));
-                buf.push(T::gen(Vec2::new(x1, y2), Vec2::new(uv.min.x, uv.max.y), color));
-
-                vertices += 6;
+                callback(Vec2::new(x1, y1), Vec2::new(uv.min.x, uv.min.y));
+                callback(Vec2::new(x2, y2), Vec2::new(uv.max.x, uv.max.y));
+                callback(Vec2::new(x1, y2), Vec2::new(uv.min.x, uv.max.y));
             }
         }
-
-        vertices 
     }
 }
 
-impl Clone for Font {
+impl Clone for TruetypeFont {
     /// Produces a copy of this font. Note that this creates a new internal glyph cache
-    fn clone(&self) -> Font {
+    fn clone(&self) -> TruetypeFont {
         // Cloning a rusttype font is cheap as data is internally stored in a
         // `Arc<Box<&[u8]>>`, which is cheap to clone.
-        Font::with_rusttype_font(self.font.clone())
-    }
-}
-
-/// This trait can be used to allow drawing fonts into buffers with a custom vertex type.
-/// This is primarily used in [`Font::cache`].
-///
-/// [`Font::cache`]: struct.Font.html#method.cache
-pub trait AsFontVert: Vertex {
-    fn gen(pos: Vec2<f32>, uv: Vec2<f32>, color: Color) -> Self;
-}
-
-#[derive(Debug)]
-#[repr(C)]
-struct FontVert {
-    pos: Vec2<f32>,
-    uv: Vec2<f32>,
-    color: Color,
-}
-
-// We cannot use the custom derive from within this crate
-impl Vertex for FontVert {
-    fn setup_attrib_pointers(divisor: usize) {
-        let stride = mem::size_of::<FontVert>();
-        let mut offset = 0;
-
-        AttribBinding {
-            index: 0,
-            primitives: 2,
-            primitive_type: gl::FLOAT,
-            normalized: false,
-            integer: false,
-            stride, offset, divisor,
-        }.enable();
-        offset += mem::size_of::<Vec2<f32>>();
-
-        AttribBinding {
-            index: 1,
-            primitives: 2,
-            primitive_type: gl::FLOAT,
-            normalized: false,
-            integer: false,
-            stride, offset, divisor,
-        }.enable();
-        offset += mem::size_of::<Vec2<f32>>();
-
-        AttribBinding {
-            index: 2,
-            primitives: 4,
-            primitive_type: gl::FLOAT,
-            normalized: false,
-            integer: false,
-            stride, offset, divisor,
-        }.enable();
-
-    }
-    // Not used, we manualy declare inputs in the shader
-    fn gen_shader_input_decl(_name_prefix: &str) -> String { String::new() }
-    fn gen_transform_feedback_decl(_name_prefix: &str) -> String { String::new() }
-    fn gen_transform_feedback_outputs(_name_prefix: &str) -> Vec<String> { Vec::new() }
-    fn set_as_vertex_attrib(&self) {}
-}
-
-impl AsFontVert for FontVert {
-    fn gen(pos: Vec2<f32>, uv: Vec2<f32>, color: Color) -> FontVert {
-        FontVert { pos, uv, color }
+        TruetypeFont::with_rusttype_font(self.font.clone())
     }
 }
 

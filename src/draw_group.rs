@@ -15,7 +15,7 @@ use Region;
 use shader::{ShaderPrototype, Shader};
 use texture::{Texture, TextureFormat};
 use buffer::{AttribBinding, Vertex, PrimitiveMode, BufferUsage, VertexBuffer};
-use font::{Font, AsFontVert};
+use font::TruetypeFont;
 
 // This could be a const generic in the future, but that is not implemented in rust yet
 pub const LAYER_COUNT: usize = 2;
@@ -23,15 +23,15 @@ pub const LAYER_COUNT: usize = 2;
 /// Batches drawcalls for 2d primitive and text rendering. Things can be rendered with transparency
 /// and in various layers. 
 ///
-/// `FontKey` is some type used to identify fonts. Typically you would want to use some enum with a
+/// `TruetypeFontKey` is some type used to identify fonts. Typically you would want to use some enum with a
 /// unique value for each font you are planning to use.
 ///
 /// `TexKey` is some type used to identify fonts. Depending on how many unique textures you plan to
 /// have it might be more reasonable to use something like a string type here. Internally, a hash
 /// map is used to map from `TexKey`s to actual textures.
-pub struct DrawGroup<FontKey, TexKey> {
+pub struct DrawGroup<TruetypeFontKey, TexKey> {
     current_layer: usize,
-    layers: [Layer<FontKey, TexKey>; LAYER_COUNT],
+    layers: [Layer<TruetypeFontKey, TexKey>; LAYER_COUNT],
 
     // This contains all pushed clip regions that have not yet been popped. 
     // This stack is built up while pushing state commands into the draw group.
@@ -45,7 +45,7 @@ pub struct DrawGroup<FontKey, TexKey> {
     pub current_transform: Option<Mat3<f32>>,
 
     shader: Shader,
-    fonts: HashMap<FontKey, Font>,
+    fonts: HashMap<TruetypeFontKey, TruetypeFont>,
     textures: HashMap<TexKey, Texture>,
     white_texture: Texture,
 
@@ -54,15 +54,15 @@ pub struct DrawGroup<FontKey, TexKey> {
 }
 
 #[derive(Debug, Clone)]
-struct Layer<FontKey, TexKey> {
+struct Layer<TruetypeFontKey, TexKey> {
     vertices: Vec<Vert>,
-    state_changes: Vec<StateChange<FontKey, TexKey>>,
+    state_changes: Vec<StateChange<TruetypeFontKey, TexKey>>,
 }
 
 #[derive(Debug, Copy, Clone)]
-struct StateChange<FontKey, TexKey> {
+struct StateChange<TruetypeFontKey, TexKey> {
     at_vertex: usize,
-    cmd: StateCmd<FontKey, TexKey>,
+    cmd: StateCmd<TruetypeFontKey, TexKey>,
 }
 
 /// Different commands which change drawing state. Commands can be added to a draw group with
@@ -72,10 +72,10 @@ struct StateChange<FontKey, TexKey> {
 ///
 /// [`DrawGroup::push_state_cmd`]: struct.DrawGroup.html#method.push_state_cmd
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StateCmd<FontKey, TexKey> {
+pub enum StateCmd<TruetypeFontKey, TexKey> {
     /// Changes to the given texture. This command is invoked whenever primitives are added to the
     /// draw group with any of the convenience functions (e.g. `line(...)`).
-    TextureChange(SamplerId<FontKey, TexKey>),
+    TextureChange(SamplerId<TruetypeFontKey, TexKey>),
 
     /// Adds a new item to the clip region stack. 
     PushClip(Region),
@@ -89,14 +89,14 @@ pub enum StateCmd<FontKey, TexKey> {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum SamplerId<FontKey, TexKey> {
+pub enum SamplerId<TruetypeFontKey, TexKey> {
     Solid, 
     Texture(TexKey),
-    Font(FontKey),
+    TruetypeFont(TruetypeFontKey),
 }
 
-impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
-  where FontKey: Eq + Hash + Copy,
+impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
+  where TruetypeFontKey: Eq + Hash + Copy,
         TexKey: Eq + Hash + Copy,
 {
     pub fn new() -> Self {
@@ -107,7 +107,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
 
         // Rust hates me, yada yada. It is not possible to use the [Layer { ... }; 2] syntax though
         let layers = unsafe {
-            let layer: Layer<FontKey, TexKey> = Layer {
+            let layer: Layer<TruetypeFontKey, TexKey> = Layer {
                 vertices: Vec::with_capacity(2048),
                 state_changes: Vec::with_capacity(256),
             };
@@ -115,7 +115,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
             use std::mem;
             use std::ptr;
 
-            let mut layers: [Layer<FontKey, TexKey>; LAYER_COUNT] = mem::uninitialized();
+            let mut layers: [Layer<TruetypeFontKey, TexKey>; LAYER_COUNT] = mem::uninitialized();
             for i in 1..LAYER_COUNT {
                 ptr::write((&mut layers[i..]).as_mut_ptr(), layer.clone());
             }
@@ -144,9 +144,9 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     }
 
     /// Loads a `.ttf` font from the given path and associates it with the given key.
-    pub fn load_font<P: AsRef<Path>>(&mut self, key: FontKey, path: P) -> io::Result<()> {
+    pub fn load_truetype_font<P: AsRef<Path>>(&mut self, key: TruetypeFontKey, path: P) -> io::Result<()> {
         let path = path.as_ref();
-        let font = Font::from_file(path)?;
+        let font = TruetypeFont::from_file(path)?;
 
         self.fonts.insert(key, font);
 
@@ -164,7 +164,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     }
 
     /// Associates the given font with the given key.
-    pub fn include_font(&mut self, key: FontKey, font: Font) { 
+    pub fn include_truetype_font(&mut self, key: TruetypeFontKey, font: TruetypeFont) { 
         self.fonts.insert(key, font);
     }
 
@@ -247,9 +247,9 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
 
                             current_tex = new_tex;
                             match current_tex {
-                                SamplerId::Solid         => self.white_texture.bind(0),
-                                SamplerId::Font(key)     => self.fonts[&key].texture().bind(0),
-                                SamplerId::Texture(key)  => self.textures[&key].bind(0),
+                                SamplerId::Solid             => self.white_texture.bind(0),
+                                SamplerId::TruetypeFont(key) => self.fonts[&key].texture().bind(0),
+                                SamplerId::Texture(key)      => self.textures[&key].bind(0),
                             }
                         }
                     },
@@ -292,7 +292,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
         graphics::set_scissor(None, win_size);
     }
 
-    pub fn push_state_cmd(&mut self, cmd: StateCmd<FontKey, TexKey>) {
+    pub fn push_state_cmd(&mut self, cmd: StateCmd<TruetypeFontKey, TexKey>) {
         let ref mut layer = self.layers[self.current_layer];
 
         // Slight optimization. This is not necessary, as the `draw` function also checks for
@@ -339,7 +339,7 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
 
     /// Retrieves a reference to the font, or panics if no font has been registered for the given
     /// key.
-    pub fn font(&self, key: FontKey) -> &Font {
+    pub fn truetype_font(&self, key: TruetypeFontKey) -> &TruetypeFont {
         &self.fonts[&key]
     }
     
@@ -858,22 +858,31 @@ impl<FontKey, TexKey> DrawGroup<FontKey, TexKey>
     pub fn text(
         &mut self,
         text: &str,
-        font: FontKey,
+        font: TruetypeFontKey,
         size: f32,
         pos: Vec2<f32>,
         wrap_width: Option<f32>,
         color: Color
     ) {
-        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Font(font)));
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::TruetypeFont(font)));
 
-        let count = self.fonts.get_mut(&font).unwrap().cache(
-            &mut self.layers[self.current_layer].vertices,
-            text,
-            size, 1.0, 
-            pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
-            wrap_width,
-            color,
-        ); 
+        let mut count = 0;
+
+        {
+            let ref mut vertices = self.layers[self.current_layer].vertices;
+            let callback = |pos, uv| {
+                count += 1;
+                vertices.push(Vert { pos, uv, color });
+            };
+
+            self.fonts.get_mut(&font).unwrap().cache(
+                text,
+                size, 1.0, 
+                pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
+                wrap_width,
+                callback,
+            ); 
+        }
 
         // Transform all the vertices that where just inserted
         if let Some(transform) = self.current_transform {
@@ -907,11 +916,6 @@ pub struct Vert {
     pub pos: Vec2<f32>,
     pub uv: Vec2<f32>,
     pub color: Color,
-}
-
-// This allows us to draw text straight into the draw group
-impl AsFontVert for Vert {
-    fn gen(pos: Vec2<f32>, uv: Vec2<f32>, color: Color) -> Vert{ Vert { pos, uv, color } }
 }
 
 // We cannot use the custom derive from within this crate :/
