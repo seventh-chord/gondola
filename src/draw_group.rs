@@ -15,7 +15,7 @@ use Region;
 use shader::{ShaderPrototype, Shader};
 use texture::{Texture, TextureFormat};
 use buffer::{AttribBinding, Vertex, PrimitiveMode, BufferUsage, VertexBuffer};
-use font::TruetypeFont;
+use font::{BitmapFont, TruetypeFont};
 
 // This could be a const generic in the future, but that is not implemented in rust yet
 pub const LAYER_COUNT: usize = 2;
@@ -23,15 +23,16 @@ pub const LAYER_COUNT: usize = 2;
 /// Batches drawcalls for 2d primitive and text rendering. Things can be rendered with transparency
 /// and in various layers. 
 ///
-/// `TruetypeFontKey` is some type used to identify fonts. Typically you would want to use some enum with a
-/// unique value for each font you are planning to use.
+/// `TruetypeFontKey` is some type used to identify truetype fonts. Typically you would want to 
+/// use some enum with a unique value for each font you are planning to use.  `BitmapFontKey` work
+/// similarly, but for bitmap fonts.
 ///
-/// `TexKey` is some type used to identify fonts. Depending on how many unique textures you plan to
+/// `TexKey` is some type used to identify truetype_fonts. Depending on how many unique textures you plan to
 /// have it might be more reasonable to use something like a string type here. Internally, a hash
 /// map is used to map from `TexKey`s to actual textures.
-pub struct DrawGroup<TruetypeFontKey, TexKey> {
+pub struct DrawGroup<TruetypeFontKey, BitmapFontKey, TexKey> {
     current_layer: usize,
-    layers: [Layer<TruetypeFontKey, TexKey>; LAYER_COUNT],
+    layers: [Layer<TruetypeFontKey, BitmapFontKey, TexKey>; LAYER_COUNT],
 
     // This contains all pushed clip regions that have not yet been popped. 
     // This stack is built up while pushing state commands into the draw group.
@@ -45,7 +46,8 @@ pub struct DrawGroup<TruetypeFontKey, TexKey> {
     pub current_transform: Option<Mat3<f32>>,
 
     shader: Shader,
-    fonts: HashMap<TruetypeFontKey, TruetypeFont>,
+    truetype_fonts: HashMap<TruetypeFontKey, TruetypeFont>,
+    bitmap_fonts: HashMap<BitmapFontKey, BitmapFont>,
     textures: HashMap<TexKey, Texture>,
     white_texture: Texture,
 
@@ -54,15 +56,15 @@ pub struct DrawGroup<TruetypeFontKey, TexKey> {
 }
 
 #[derive(Debug, Clone)]
-struct Layer<TruetypeFontKey, TexKey> {
+struct Layer<TruetypeFontKey, BitmapFontKey, TexKey> {
     vertices: Vec<Vert>,
-    state_changes: Vec<StateChange<TruetypeFontKey, TexKey>>,
+    state_changes: Vec<StateChange<TruetypeFontKey, BitmapFontKey, TexKey>>,
 }
 
 #[derive(Debug, Copy, Clone)]
-struct StateChange<TruetypeFontKey, TexKey> {
+struct StateChange<TruetypeFontKey, BitmapFontKey, TexKey> {
     at_vertex: usize,
-    cmd: StateCmd<TruetypeFontKey, TexKey>,
+    cmd: StateCmd<TruetypeFontKey, BitmapFontKey, TexKey>,
 }
 
 /// Different commands which change drawing state. Commands can be added to a draw group with
@@ -72,10 +74,10 @@ struct StateChange<TruetypeFontKey, TexKey> {
 ///
 /// [`DrawGroup::push_state_cmd`]: struct.DrawGroup.html#method.push_state_cmd
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum StateCmd<TruetypeFontKey, TexKey> {
+pub enum StateCmd<TruetypeFontKey, BitmapFontKey, TexKey> {
     /// Changes to the given texture. This command is invoked whenever primitives are added to the
     /// draw group with any of the convenience functions (e.g. `line(...)`).
-    TextureChange(SamplerId<TruetypeFontKey, TexKey>),
+    TextureChange(SamplerId<TruetypeFontKey, BitmapFontKey, TexKey>),
 
     /// Adds a new item to the clip region stack. 
     PushClip(Region),
@@ -89,14 +91,16 @@ pub enum StateCmd<TruetypeFontKey, TexKey> {
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub enum SamplerId<TruetypeFontKey, TexKey> {
+pub enum SamplerId<TruetypeFontKey, BitmapFontKey, TexKey> {
     Solid, 
     Texture(TexKey),
     TruetypeFont(TruetypeFontKey),
+    BitmapFont(BitmapFontKey),
 }
 
-impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
+impl<TruetypeFontKey, BitmapFontKey, TexKey> DrawGroup<TruetypeFontKey, BitmapFontKey, TexKey>
   where TruetypeFontKey: Eq + Hash + Copy,
+        BitmapFontKey: Eq + Hash + Copy,
         TexKey: Eq + Hash + Copy,
 {
     pub fn new() -> Self {
@@ -107,7 +111,7 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
 
         // Rust hates me, yada yada. It is not possible to use the [Layer { ... }; 2] syntax though
         let layers = unsafe {
-            let layer: Layer<TruetypeFontKey, TexKey> = Layer {
+            let layer: Layer<TruetypeFontKey, BitmapFontKey, TexKey> = Layer {
                 vertices: Vec::with_capacity(2048),
                 state_changes: Vec::with_capacity(256),
             };
@@ -115,7 +119,7 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
             use std::mem;
             use std::ptr;
 
-            let mut layers: [Layer<TruetypeFontKey, TexKey>; LAYER_COUNT] = mem::uninitialized();
+            let mut layers: [Layer<TruetypeFontKey, BitmapFontKey, TexKey>; LAYER_COUNT] = mem::uninitialized();
             for i in 1..LAYER_COUNT {
                 ptr::write((&mut layers[i..]).as_mut_ptr(), layer.clone());
             }
@@ -135,7 +139,8 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
 
             shader,
             white_texture, 
-            fonts: HashMap::new(),
+            truetype_fonts: HashMap::new(),
+            bitmap_fonts: HashMap::new(),
             textures: HashMap::new(),
 
             changed: false,
@@ -148,7 +153,7 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
         let path = path.as_ref();
         let font = TruetypeFont::from_file(path)?;
 
-        self.fonts.insert(key, font);
+        self.truetype_fonts.insert(key, font);
 
         Ok(())
     }
@@ -165,7 +170,12 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
 
     /// Associates the given font with the given key.
     pub fn include_truetype_font(&mut self, key: TruetypeFontKey, font: TruetypeFont) { 
-        self.fonts.insert(key, font);
+        self.truetype_fonts.insert(key, font);
+    }
+
+    /// Associates the given font with the given key.
+    pub fn include_bitmap_font(&mut self, key: BitmapFontKey, font: BitmapFont) { 
+        self.bitmap_fonts.insert(key, font);
     }
 
     /// Associates the given texture with the given key.
@@ -248,7 +258,8 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
                             current_tex = new_tex;
                             match current_tex {
                                 SamplerId::Solid             => self.white_texture.bind(0),
-                                SamplerId::TruetypeFont(key) => self.fonts[&key].texture().bind(0),
+                                SamplerId::TruetypeFont(key) => self.truetype_fonts[&key].texture().bind(0),
+                                SamplerId::BitmapFont(key)   => self.bitmap_fonts[&key].texture.bind(0),
                                 SamplerId::Texture(key)      => self.textures[&key].bind(0),
                             }
                         }
@@ -292,7 +303,7 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
         graphics::set_scissor(None, win_size);
     }
 
-    pub fn push_state_cmd(&mut self, cmd: StateCmd<TruetypeFontKey, TexKey>) {
+    pub fn push_state_cmd(&mut self, cmd: StateCmd<TruetypeFontKey, BitmapFontKey, TexKey>) {
         let ref mut layer = self.layers[self.current_layer];
 
         // Slight optimization. This is not necessary, as the `draw` function also checks for
@@ -337,10 +348,14 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
         self.current_layer = layer;
     }
 
-    /// Retrieves a reference to the font, or panics if no font has been registered for the given
-    /// key.
+    /// Retrieves a reference to the font, or panics if no font has been registered for the given key.
     pub fn truetype_font(&self, key: TruetypeFontKey) -> &TruetypeFont {
-        &self.fonts[&key]
+        &self.truetype_fonts[&key]
+    }
+
+    /// Retrieves a reference to the font, or panics if no font has been registered for the given key.
+    pub fn bitmap_font(&self, key: BitmapFontKey) -> &BitmapFont {
+        &self.bitmap_fonts[&key]
     }
     
     /// Retrieves a reference to the texture, or panics if no texture has been registered for the 
@@ -855,7 +870,7 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
         ]);
     }
 
-    pub fn text(
+    pub fn truetype_text(
         &mut self,
         text: &str,
         font: TruetypeFontKey,
@@ -875,7 +890,7 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
                 vertices.push(Vert { pos, uv, color });
             };
 
-            self.fonts.get_mut(&font).unwrap().cache(
+            self.truetype_fonts.get_mut(&font).unwrap().cache(
                 text,
                 size, 1.0, 
                 pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
@@ -892,6 +907,36 @@ impl<TruetypeFontKey, TexKey> DrawGroup<TruetypeFontKey, TexKey>
                 vertices[i].pos = transform.apply(vertices[i].pos);
             }
         }
+    }
+
+    pub fn bitmap_text(&mut self, text: &str, font: BitmapFontKey, pos: Vec2<f32>, color: Color) {
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::BitmapFont(font)));
+
+        let mut count = 0;
+
+        {
+            let ref mut vertices = self.layers[self.current_layer].vertices;
+            let callback = |pos, uv| {
+                count += 1;
+                vertices.push(Vert { pos, uv, color });
+            };
+
+            self.bitmap_fonts.get_mut(&font).unwrap().cache(
+                text,
+                pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
+                callback,
+            ); 
+        }
+
+        // Transform all the vertices that where just inserted
+        if let Some(transform) = self.current_transform {
+            let ref mut vertices = self.layers[self.current_layer].vertices;
+
+            for i in vertices.len()-count-1 .. vertices.len() {
+                vertices[i].pos = transform.apply(vertices[i].pos);
+            }
+        }
+
     }
 }
 

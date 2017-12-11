@@ -1,6 +1,6 @@
 
 mod truetype;
-//mod bitmap;
+mod bitmap;
 
 pub use self::truetype::*;
-//pub use self::bitmap::*;
+pub use self::bitmap::*;

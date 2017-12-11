@@ -23,7 +23,7 @@ use texture::{Texture, SwizzleComp, TextureFormat};
 
 const CACHE_TEX_SIZE: u32 = 1024; // More than 99% of GPUs support this texture size: http://feedback.wildfiregames.com/report/opengl/feature/GL_MAX_TEXTURE_SIZE
 
-// There might be some official sepc for how tabs should work. Note that this is multiplied by the
+// There might be some official spec for how tabs should work. Note that this is multiplied by the
 // current font size.
 const TAB_WIDTH: f32 = 1.5;
 
@@ -359,6 +359,8 @@ impl TruetypeFont {
         &self.cache_texture
     }
 
+    /// Passes pairs of positions and uv coordinates to the callback. Three pairs are one triangle,
+    /// two triangles form one glyph.
     pub fn cache<F>(
         &mut self,
         text:       &str,

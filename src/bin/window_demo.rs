@@ -10,7 +10,7 @@ use gondola::framebuffer::FramebufferProperties;
 use gondola::audio::{AudioSystem, wav};
 use cable_math::{Vec2, Mat4};
 
-type DrawGroup = draw_group::DrawGroup<(), ()>;
+type DrawGroup = draw_group::DrawGroup<(), (), ()>;
 
 fn main() {
     let mut timer = Timer::new();
