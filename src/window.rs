@@ -2,7 +2,9 @@
 use cable_math::Vec2;
 
 use Region;
-use input::{KeyState, Input, Gamepad, GamepadButton};
+use input::{KeyState, Input};
+#[cfg(feature = "gamepad")]
+use input::{Gamepad, GamepadButton};
 use graphics;
 
 // Since most of the lib is written expecting gl 3.3 we currently don't allow customizing this.
@@ -791,6 +793,7 @@ mod windows {
     extern crate kernel32;
     extern crate gdi32;
     extern crate opengl32;
+    #[cfg(feature = "gamepad")]
     extern crate xinput;
 
     use std::ptr;
@@ -812,6 +815,7 @@ mod windows {
         pub(super) use super::kernel32::*;
         pub(super) use super::gdi32::*;
         pub(super) use super::opengl32::*;
+        #[cfg(feature = "gamepad")]
         pub(super) use super::xinput::*;
 
         // Stuff not defined in winapi
@@ -853,9 +857,11 @@ mod windows {
         cursor_grabbed: bool, // Cursor cant leave window
         cursor_clip_region: Option<Region>, // Relative to `screen_region.min`!
 
+        #[cfg(feature = "gamepad")]
         gamepad_states: [InternalGamepadState; 4],
     }
 
+    #[cfg(feature = "gamepad")]
     #[derive(Copy, Clone)]
     struct InternalGamepadState {
         connected: bool,
@@ -863,6 +869,7 @@ mod windows {
         xinput_state: ffi::XINPUT_STATE,
     }
 
+    #[cfg(feature = "gamepad")]
     impl Default for InternalGamepadState {
         fn default() -> InternalGamepadState {
             InternalGamepadState {
@@ -1297,6 +1304,7 @@ mod windows {
                 cursor_grabbed: false,
                 cursor_clip_region: None,
 
+                #[cfg(feature = "gamepad")]
                 gamepad_states: [InternalGamepadState::default(); 4],
             }
         } 
@@ -1472,6 +1480,7 @@ mod windows {
             }
             
             // XInput gamepad mess
+            #[cfg(feature = "gamepad")]
             for (index, state) in self.gamepad_states.iter_mut().enumerate() {
                 let result = unsafe { ffi::XInputGetState(index as u32, &mut state.xinput_state) };
 

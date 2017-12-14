@@ -40,6 +40,7 @@ pub struct Input {
     pub window_has_keyboard_focus: bool, 
     pub received_events_this_frame: bool, 
 
+    #[cfg(feature = "gamepad")]
     pub gamepads: [Gamepad; 4],
 }
 
@@ -55,6 +56,8 @@ impl Input {
             type_buffer: String::with_capacity(10),
             window_has_keyboard_focus: false,
             received_events_this_frame: false,
+
+            #[cfg(feature = "gamepad")]
             gamepads: [Default::default(), Default::default(), Default::default(), Default::default()],
         }
     }
@@ -78,6 +81,7 @@ impl Input {
             if *state == KeyState::PressedRepeat  { *state = KeyState::Down; }
         }
 
+        #[cfg(feature = "gamepad")]
         for gamepad in self.gamepads.iter_mut() {
             if gamepad.connected {
                 for state in gamepad.buttons.iter_mut() {
@@ -229,6 +233,7 @@ pub enum Key {
 
 
 
+#[cfg(feature = "gamepad")]
 #[derive(Clone, Default)]
 pub struct Gamepad {
     pub connected: bool,
@@ -242,7 +247,10 @@ pub struct Gamepad {
     pub right_trigger: f32,
 }
 
+#[cfg(feature = "gamepad")]
 const GAMEPAD_BUTTON_COUNT: usize = 24;
+
+#[cfg(feature = "gamepad")]
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)]
 pub enum GamepadButton {
@@ -275,6 +283,7 @@ pub enum GamepadButton {
     A, B, X, Y,
 }
 
+#[cfg(feature = "gamepad")]
 impl Gamepad {
     pub fn button(&self, button: GamepadButton) -> KeyState {
         self.buttons[button as usize]
