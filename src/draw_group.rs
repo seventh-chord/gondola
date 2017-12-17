@@ -7,7 +7,7 @@ use std::path::Path;
 use std::hash::Hash;
 use std::collections::HashMap;
 
-use cable_math::{Vec2, Mat3, Mat4};
+use cable_math::{Vec2, Mat4};
 
 use Color;
 use graphics; 
@@ -40,10 +40,6 @@ pub struct DrawGroup<TruetypeFontKey, BitmapFontKey, TexKey> {
     // This stack is only used when drawing, and will go through the same series of transformations
     // as `working_clip_stack` while state commands are played back.
     draw_clip_stack: Vec<Region>,
-
-    /// If set to some transformation matrix, that transform will be applied to all vertices when
-    /// they are added to this draw group. 
-    pub current_transform: Option<Mat3<f32>>,
 
     shader: Shader,
     truetype_fonts: HashMap<TruetypeFontKey, TruetypeFont>,
@@ -134,8 +130,6 @@ impl<TruetypeFontKey, BitmapFontKey, TexKey> DrawGroup<TruetypeFontKey, BitmapFo
 
             working_clip_stack: Vec::with_capacity(10), 
             draw_clip_stack:    Vec::with_capacity(10),
-
-            current_transform: None,
 
             shader,
             white_texture, 
@@ -378,18 +372,7 @@ impl<TruetypeFontKey, BitmapFontKey, TexKey> DrawGroup<TruetypeFontKey, BitmapFo
     }
 
     fn add_vertices(&mut self, new: &[Vert]) {
-        let ref mut vertices = self.layers[self.current_layer].vertices;
-
-        if let Some(transform) = self.current_transform {
-            for v in new.into_iter() {
-                vertices.push(Vert {
-                    pos: transform.apply(v.pos),
-                    .. *v
-                });
-            } 
-        } else {
-            vertices.extend_from_slice(new);
-        }
+        self.layers[self.current_layer].vertices.extend_from_slice(new);
     }
 
     /// Draws a thick line.
@@ -486,11 +469,68 @@ impl<TruetypeFontKey, BitmapFontKey, TexKey> DrawGroup<TruetypeFontKey, BitmapFo
     /// Generate the vertices for a stippled line
     pub fn stippled_line(
         &mut self,
-        a: Vec2<f32>, b: Vec2<f32>, 
+        mut a: Vec2<f32>, mut b: Vec2<f32>, 
         width: f32, stipple_length: f32, stipple_spacing: f32, 
         color: Color
-    ) {
-        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid));
+    ) { 
+        // If we try to draw a very long stippled line this will take up a lot of memory, as each
+        // small segment is a separate line. I often accidentally draw a very long line, where the
+        // vast majority of it lies offscreen. This is fixed by clipping the line so we only render
+        // the minimum required segments to be visible on screen.
+        // This might change the apperance of the line slightly because it will shift its segments...
+        if let Some(region) = self.working_clip_stack.last() {
+            let hit = |pos: Vec2<f32>, dir: Vec2<f32>| -> Option<f32> {
+                if region.contains(pos) {
+                    return Some(0.0); 
+                }
+
+                if pos.x <= region.min.x && dir.x > 0.0 {
+                    let t = (region.min.x - pos.x) / dir.x;
+                    let y = pos.y + dir.y*t;
+                    if t >= 0.0 && t <= 1.0 && y >= region.min.y && y <= region.max.y {
+                        return Some(t);
+                    }
+                }
+                if pos.x >= region.max.x && dir.x < 0.0 {
+                    let t = (region.max.x - pos.x) / dir.x;
+                    let y = pos.y + dir.y*t;
+                    if t >= 0.0 && t <= 1.0 && y >= region.min.y && y <= region.max.y {
+                        return Some(t);
+                    }
+                }
+
+                if pos.y <= region.min.y && dir.y > 0.0 {
+                    let t = (region.min.y - pos.y) / dir.y;
+                    let x = pos.y + dir.y*t;
+                    if t >= 0.0 && t <= 1.0 && x >= region.min.x && x <= region.max.x {
+                        return Some(t);
+                    }
+                }
+                if pos.y >= region.max.y && dir.y < 0.0 {
+                    let t = (region.max.y - pos.y) / dir.y;
+                    let x = pos.x + dir.x*t;
+                    if t >= 0.0 && t <= 1.0 && x >= region.min.x && x <= region.max.x {
+                        return Some(t);
+                    }
+                }
+
+                return None;
+            };
+
+            if let Some(t) = hit(a, b - a) {
+                a = Vec2::lerp(a, b, t);
+            } else {
+                return;
+            }
+
+            if let Some(t) = hit(b, a - b) {
+                b = Vec2::lerp(b, a, t);
+            } else {
+                return;
+            }
+        }
+
+        self.push_state_cmd(StateCmd::TextureChange(SamplerId::Solid)); 
 
         let len = (b - a).len(); // The length of the line
         let dir = (b - a) / len; // Unit vector from a to b
@@ -881,62 +921,29 @@ impl<TruetypeFontKey, BitmapFontKey, TexKey> DrawGroup<TruetypeFontKey, BitmapFo
     ) {
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::TruetypeFont(font)));
 
-        let mut count = 0;
+        let ref mut vertices = self.layers[self.current_layer].vertices;
+        let callback = |pos, uv| vertices.push(Vert { pos, uv, color });
 
-        {
-            let ref mut vertices = self.layers[self.current_layer].vertices;
-            let callback = |pos, uv| {
-                count += 1;
-                vertices.push(Vert { pos, uv, color });
-            };
-
-            self.truetype_fonts.get_mut(&font).unwrap().cache(
-                text,
-                size, 1.0, 
-                pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
-                wrap_width,
-                callback,
-            ); 
-        }
-
-        // Transform all the vertices that where just inserted
-        if let Some(transform) = self.current_transform {
-            let ref mut vertices = self.layers[self.current_layer].vertices;
-
-            for i in vertices.len()-count-1 .. vertices.len() {
-                vertices[i].pos = transform.apply(vertices[i].pos);
-            }
-        }
+        self.truetype_fonts.get_mut(&font).unwrap().cache(
+            text,
+            size, 1.0, 
+            pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
+            wrap_width,
+            callback,
+        ); 
     }
 
     pub fn bitmap_text(&mut self, text: &str, font: BitmapFontKey, pos: Vec2<f32>, color: Color) {
         self.push_state_cmd(StateCmd::TextureChange(SamplerId::BitmapFont(font)));
 
-        let mut count = 0;
+        let ref mut vertices = self.layers[self.current_layer].vertices;
+        let callback = |pos, uv| vertices.push(Vert { pos, uv, color });
 
-        {
-            let ref mut vertices = self.layers[self.current_layer].vertices;
-            let callback = |pos, uv| {
-                count += 1;
-                vertices.push(Vert { pos, uv, color });
-            };
-
-            self.bitmap_fonts.get_mut(&font).unwrap().cache(
-                text,
-                pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
-                callback,
-            ); 
-        }
-
-        // Transform all the vertices that where just inserted
-        if let Some(transform) = self.current_transform {
-            let ref mut vertices = self.layers[self.current_layer].vertices;
-
-            for i in vertices.len()-count-1 .. vertices.len() {
-                vertices[i].pos = transform.apply(vertices[i].pos);
-            }
-        }
-
+        self.bitmap_fonts.get_mut(&font).unwrap().cache(
+            text,
+            pos.round(), // By rounding we avoid a lot of nasty subpixel issues.
+            callback,
+        ); 
     }
 }
 
